@@ -1,0 +1,35 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Java
+target/
+*.class
+.mvn/wrapper/maven-wrapper.jar
+.m2/
+
+# Node
+node_modules/
+dist/
+.vite/
+.npm-cache/
+
+# Env
+.env
+.env.*
+application-local.yml
+!.env.example
+!backend/.env.example
+!frontend/.env.example
+
+# Logs
+*.log
+
+# Uploaded media
+backend/uploads/
+uploads/

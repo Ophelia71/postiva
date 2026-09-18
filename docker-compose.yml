@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: postiva-postgres
+    environment:
+      POSTGRES_DB: postiva
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postiva_pgdata:/var/lib/postgresql/data
+
+volumes:
+  postiva_pgdata:
+
