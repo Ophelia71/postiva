@@ -1,65 +1,175 @@
 package com.postiva.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.postiva.auth.security.CustomUserDetailsService;
 import com.postiva.auth.security.JwtAuthenticationFilter;
-import com.postiva.common.ApiResponse;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.security.config.Customizer;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.AuthenticationProvider;
+import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 @Configuration
+@EnableMethodSecurity
 public class SecurityConfig {
+
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final CustomUserDetailsService userDetailsService;
+
+    public SecurityConfig(
+            JwtAuthenticationFilter jwtAuthenticationFilter,
+            CustomUserDetailsService userDetailsService
+    ) {
+        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.userDetailsService = userDetailsService;
+    }
+
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http,
-                                            JwtAuthenticationFilter jwtFilter,
-                                            ObjectMapper objectMapper) throws Exception {
+    public SecurityFilterChain securityFilterChain(
+            HttpSecurity http
+    ) throws Exception {
         return http
-                .csrf(AbstractHttpConfigurer::disable)
-                .cors(Customizer.withDefaults())
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .exceptionHandling(exceptions -> exceptions
-                        .authenticationEntryPoint((request, response, exception) ->
-                                writeApiError(response, objectMapper, HttpStatus.UNAUTHORIZED, "Bạn cần đăng nhập"))
-                        .accessDeniedHandler((request, response, exception) ->
-                                writeApiError(response, objectMapper, HttpStatus.FORBIDDEN, "Bạn không có quyền truy cập tài nguyên này"))
+                .csrf(csrf -> csrf.disable())
+                .cors(cors -> cors.configurationSource(
+                        corsConfigurationSource()
+                ))
+                .sessionManagement(session ->
+                        session.sessionCreationPolicy(
+                                SessionCreationPolicy.STATELESS
+                        )
                 )
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .requestMatchers("/error").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/templates/**", "/api/files/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/social/meta/callback").permitAll()
-                        .anyRequest().authenticated())
-                .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
+                        .requestMatchers(HttpMethod.OPTIONS, "/**")
+                        .permitAll()
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/auth/register",
+                                "/api/auth/login"
+                        )
+                        .permitAll()
+                        .requestMatchers(
+                                "/api/social/meta/callback",
+                                "/error"
+                        )
+                        .permitAll()
+                        .anyRequest()
+                        .authenticated()
+                )
+                .authenticationProvider(authenticationProvider())
+                .exceptionHandling(exception -> exception
+                        .authenticationEntryPoint(
+                                (request, response, authException) -> {
+                                    response.setStatus(
+                                            HttpServletResponse.SC_UNAUTHORIZED
+                                    );
+                                    response.setContentType(
+                                            "application/json;charset=UTF-8"
+                                    );
+                                    response.getWriter().write(
+                                            """
+                                            {
+                                              "status": 401,
+                                              "message": "Bạn cần đăng nhập hoặc JWT không hợp lệ"
+                                            }
+                                            """
+                                    );
+                                }
+                        )
+                        .accessDeniedHandler(
+                                (request, response, accessDeniedException) -> {
+                                    response.setStatus(
+                                            HttpServletResponse.SC_FORBIDDEN
+                                    );
+                                    response.setContentType(
+                                            "application/json;charset=UTF-8"
+                                    );
+                                    response.getWriter().write(
+                                            """
+                                            {
+                                              "status": 403,
+                                              "message": "Bạn không có quyền truy cập"
+                                            }
+                                            """
+                                    );
+                                }
+                        )
+                )
+                .addFilterBefore(
+                        jwtAuthenticationFilter,
+                        UsernamePasswordAuthenticationFilter.class
+                )
                 .build();
     }
 
     @Bean
-    PasswordEncoder passwordEncoder() {
+    public AuthenticationProvider authenticationProvider() {
+        DaoAuthenticationProvider provider =
+                new DaoAuthenticationProvider();
+
+        provider.setUserDetailsService(userDetailsService);
+        provider.setPasswordEncoder(passwordEncoder());
+
+        return provider;
+    }
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
-    private void writeApiError(HttpServletResponse response,
-                               ObjectMapper objectMapper,
-                               HttpStatus status,
-                               String message) throws IOException {
-        response.setStatus(status.value());
-        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
-        objectMapper.writeValue(response.getOutputStream(), ApiResponse.fail(message));
+    @Bean
+    public AuthenticationManager authenticationManager(
+            AuthenticationConfiguration configuration
+    ) throws Exception {
+        return configuration.getAuthenticationManager();
+    }
+
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+
+        configuration.setAllowedOrigins(List.of(
+                "http://localhost:3000",
+                "http://localhost:5173"
+        ));
+
+        configuration.setAllowedMethods(List.of(
+                "GET",
+                "POST",
+                "PUT",
+                "PATCH",
+                "DELETE",
+                "OPTIONS"
+        ));
+
+        configuration.setAllowedHeaders(List.of(
+                "Authorization",
+                "Content-Type",
+                "Accept"
+        ));
+
+        configuration.setAllowCredentials(true);
+        configuration.setMaxAge(3600L);
+
+        UrlBasedCorsConfigurationSource source =
+                new UrlBasedCorsConfigurationSource();
+
+        source.registerCorsConfiguration("/**", configuration);
+
+        return source;
     }
 }

@@ -4,12 +4,15 @@ server:
 spring:
   config:
     import: optional:file:.env[.properties]
+
   application:
     name: postiva-backend
+
   datasource:
     url: ${POSTIVA_DB_URL:jdbc:postgresql://localhost:5432/postiva}
     username: ${POSTIVA_DB_USERNAME:postgres}
     password: ${POSTIVA_DB_PASSWORD:postgres}
+
   jpa:
     hibernate:
       ddl-auto: update
@@ -17,28 +20,55 @@ spring:
     properties:
       hibernate:
         format_sql: true
+
   jackson:
     default-property-inclusion: non_null
+
   servlet:
     multipart:
       max-file-size: 10MB
       max-request-size: 10MB
 
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+
 postiva:
   frontend-origin: ${POSTIVA_FRONTEND_ORIGIN:http://localhost:5173}
+
   openai:
     api-key: ${OPENAI_API_KEY:}
     model: ${OPENAI_MODEL:gpt-4o-mini}
+
   meta:
     app-id: ${META_APP_ID:}
     app-secret: ${META_APP_SECRET:}
     api-version: ${META_API_VERSION:v26.0}
     redirect-uri: ${META_REDIRECT_URI:http://localhost:8080/api/social/meta/callback}
+
   security:
     jwt-secret: ${POSTIVA_JWT_SECRET:change-this-development-jwt-secret-before-deploying}
     jwt-expiration-seconds: ${POSTIVA_JWT_EXPIRATION_SECONDS:604800}
     token-encryption-key: ${POSTIVA_TOKEN_ENCRYPTION_KEY:}
+
   storage:
     upload-dir: ${POSTIVA_UPLOAD_DIR:uploads/images}
+
   scheduler:
     publish-delay-ms: ${POSTIVA_PUBLISH_DELAY_MS:10000}
+
+  mail:
+    enabled: ${POSTIVA_MAIL_ENABLED:true}
+    from: ${MAIL_FROM:${MAIL_USERNAME}}
