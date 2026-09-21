@@ -31,6 +31,13 @@ const navItems = [
   { to: '/app/connections', label: 'Kết nối', icon: Link2 },
 ]
 
+type UserResponse = {
+  id: string
+  fullName: string
+  email: string
+  role: AuthSession['role']
+}
+
 function App() {
   const [session, setSession] = useState<AuthSession | null>(() => getAuthSession())
   const [isSessionReady, setIsSessionReady] = useState(false)
@@ -49,13 +56,21 @@ function App() {
       }
 
       try {
-        const response = await api.get<AuthSession>('/auth/me')
-        if (!isAuthSession(response.data)) {
+        const response = await api.get<UserResponse>('/auth/me')
+        const refreshedSession: AuthSession = {
+          ...storedSession,
+          userId: response.data.id,
+          email: response.data.email,
+          fullName: response.data.fullName,
+          role: response.data.role,
+        }
+
+        if (!isAuthSession(refreshedSession)) {
           throw new Error('Phiên đăng nhập không hợp lệ')
         }
-        saveAuthSession(response.data)
+        saveAuthSession(refreshedSession)
         if (!ignore) {
-          setSession(response.data)
+          setSession(refreshedSession)
         }
       } catch {
         if (!ignore && !getAuthSession()) {

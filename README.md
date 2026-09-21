@@ -95,6 +95,19 @@ mvn spring-boot:run
 Backend tự đọc file `backend/.env` khi được chạy với working directory là `backend`.
 Nếu chưa có `OPENAI_API_KEY`, API tạo bài sẽ trả lỗi cấu hình rõ ràng; hệ thống không sinh nội dung mẫu giả.
 
+Đăng ký tài khoản dùng xác thực email bằng mã OTP, nên cần cấu hình SMTP trong `backend/.env`:
+
+```txt
+POSTIVA_MAIL_ENABLED=true
+MAIL_HOST=smtp.gmail.com
+MAIL_PORT=587
+MAIL_USERNAME=your-email@gmail.com
+MAIL_PASSWORD=your-google-app-password
+MAIL_FROM=your-email@gmail.com
+```
+
+Với Gmail, `MAIL_PASSWORD` phải là App Password, không phải mật khẩu Gmail thường.
+
 ## Chạy frontend
 
 ```bash

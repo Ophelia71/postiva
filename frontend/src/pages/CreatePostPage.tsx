@@ -57,6 +57,13 @@ type SocialPostResponse = {
   targets: SocialPostTargetResponse[]
 }
 
+type GeneratePostResponse = {
+  platformContents: Partial<Record<Platform, PlatformContent>>
+  hashtags: string[]
+  cta: string
+  imageSuggestion: string
+}
+
 type MediaType = 'NONE' | 'IMAGE' | 'VIDEO' | 'MIXED'
 type PublishMode = 'NOW' | 'SCHEDULE'
 const EMPTY_CHANNELS: AppChannel[] = []
@@ -118,6 +125,7 @@ export function CreatePostPage() {
   })
   const [statusTone, setStatusTone] = useState<'info' | 'success' | 'error'>('info')
   const [isUploadingMedia, setIsUploadingMedia] = useState(false)
+  const [isGeneratingContent, setIsGeneratingContent] = useState(false)
   const [isPublishing, setIsPublishing] = useState(false)
 
   useEffect(() => {
@@ -351,38 +359,58 @@ export function CreatePostPage() {
     setUploadedMedia((current) => current.filter((media) => media.id !== mediaId))
   }
 
-  function applyPlatformTemplates() {
-    if (selectedPlatforms.length === 0) {
-      setError(t('Chọn ít nhất một nền tảng.', 'Choose at least one platform.'))
-      return
-    }
-    if (!sourceContent.trim()) {
-      setError(t('Nhập nội dung gốc trước.', 'Enter source content first.'))
+  async function applyPlatformTemplates() {
+    if (!validateProductInput()) {
       return
     }
 
-    const nextCaptions: Partial<Record<Platform, string>> = {}
-    const nextCtas: Partial<Record<Platform, string>> = {}
-    const nextHashtags: Partial<Record<Platform, string>> = {}
-    selectedPlatforms.forEach((platform) => {
-      const draft = buildPlatformDraft(platform, {
-        sourceContent,
-        productName,
-        price,
-        highlights,
-        goal,
+    setIsGeneratingContent(true)
+    setStatusTone('info')
+    setStatus(t('Đang tự gen bài cho từng nền tảng...', 'Generating platform-specific posts...'))
+
+    try {
+      const response = await api.post<GeneratePostResponse>('/posts/generate', {
+        productName: productName.trim(),
+        productDescription: productDescription.trim(),
+        price: price.trim() || undefined,
+        industryCode: undefined,
+        targetAudience: targetAudience.trim(),
+        highlights: highlights.trim(),
+        goal: goal.trim() || 'Tăng tương tác và khuyến khích khách hàng nhắn tin đặt hàng',
+        tone: 'Thân thiện, tự nhiên, phù hợp bán hàng online',
+        platforms: selectedPlatforms,
+        additionalInfo: sourceContent.trim() || undefined,
+        imageIds: uploadedMedia.map((media) => media.id),
       })
-      nextCaptions[platform] = draft.content
-      nextCtas[platform] = draft.cta
-      nextHashtags[platform] = draft.hashtags
-    })
 
-    setPlatformCaptions((current) => ({ ...current, ...nextCaptions }))
-    setPlatformCtas((current) => ({ ...current, ...nextCtas }))
-    setPlatformHashtags((current) => ({ ...current, ...nextHashtags }))
-    setActivePreviewPlatform(selectedPlatforms[0] ?? 'FACEBOOK')
-    setStatusTone('success')
-    setStatus(t('Đã tạo nội dung theo từng nền tảng.', 'Platform-specific content generated.'))
+      const nextCaptions: Partial<Record<Platform, string>> = {}
+      const nextCtas: Partial<Record<Platform, string>> = {}
+      const nextHashtags: Partial<Record<Platform, string>> = {}
+      const sharedHashtags = (response.data.hashtags ?? []).join(' ')
+
+      selectedPlatforms.forEach((platform) => {
+        const platformContent = response.data.platformContents?.[platform]
+        nextCaptions[platform] = platform === 'INSTAGRAM'
+          ? platformContent?.caption ?? platformContent?.content ?? ''
+          : platformContent?.content ?? platformContent?.caption ?? ''
+        nextCtas[platform] = platform === 'THREADS' ? '' : response.data.cta ?? ''
+        nextHashtags[platform] = sharedHashtags
+          .split(/[\s,]+/)
+          .slice(0, getPlatformHashtagLimit(platform))
+          .join(' ')
+      })
+
+      setPlatformCaptions((current) => ({ ...current, ...nextCaptions }))
+      setPlatformCtas((current) => ({ ...current, ...nextCtas }))
+      setPlatformHashtags((current) => ({ ...current, ...nextHashtags }))
+      setActivePreviewPlatform(selectedPlatforms[0] ?? 'FACEBOOK')
+      setStatusTone('success')
+      setStatus(t('Đã tự gen bài riêng cho từng nền tảng.', 'Generated separate posts for each platform.'))
+    } catch (error) {
+      setError(getErrorMessage(error, t('Không thể tự gen bài. Kiểm tra OPENAI_API_KEY và thử lại.', 'Could not generate posts. Check OPENAI_API_KEY and try again.')))
+    } finally {
+      setIsGeneratingContent(false)
+    }
   }
 
   function togglePlatform(platform: Platform) {
@@ -582,11 +610,12 @@ export function CreatePostPage() {
               <div className="mt-3 flex justify-end">
                 <button
                   type="button"
-                  onClick={applyPlatformTemplates}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-[6px] bg-violet-600 px-4 text-sm font-bold text-white hover:bg-violet-700"
+                  onClick={() => void applyPlatformTemplates()}
+                  disabled={isGeneratingContent}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-[6px] bg-violet-600 px-4 text-sm font-bold text-white hover:bg-violet-700 disabled:bg-slate-300"
                 >
                   <Sparkles size={16} />
-                  {t('Tự tối ưu', 'Optimize')}
+                  {isGeneratingContent ? t('Đang gen...', 'Generating...') : t('Tự gen bài', 'Generate')}
                 </button>
               </div>
               <div className="my-4 border-t border-slate-100" />
@@ -1034,96 +1063,6 @@ function composeMessage(caption: string, cta: string, hashtagsText: string, plat
     parts.push(hashtags.join(' '))
   }
   return parts.filter(Boolean).join('\n\n')
-}
-
-type PlatformDraftInput = {
-  sourceContent: string
-  productName: string
-  price: string
-  highlights: string
-  goal: string
-}
-
-function buildPlatformDraft(platform: Platform, input: PlatformDraftInput) {
-  const source = normalizeMultiline(input.sourceContent)
-  const highlight = normalizeMultiline(input.highlights)
-  const price = input.price.trim()
-  const goal = input.goal.trim()
-  const product = input.productName.trim()
-  const hashtags = buildPlatformHashtags(platform, input)
-
-  if (platform === 'FACEBOOK') {
-    return {
-      content: compactBlocks([
-        source,
-        highlight ? `Điểm nổi bật: ${highlight}` : '',
-        price ? `Giá: ${price}` : '',
-      ]),
-      cta: goal || 'Nhắn tin để được tư vấn thêm.',
-      hashtags,
-    }
-  }
-
-  if (platform === 'INSTAGRAM') {
-    return {
-      content: compactBlocks([
-        product ? `${product}` : '',
-        source,
-        highlight,
-      ]),
-      cta: goal || 'Lưu lại hoặc nhắn tin để biết thêm chi tiết.',
-      hashtags,
-    }
-  }
-
-  return {
-    content: compactBlocks([
-      source,
-      product ? `Bạn nghĩ sao về ${product}?` : 'Bạn nghĩ sao?',
-    ]),
-    cta: '',
-    hashtags,
-  }
-}
-
-function buildPlatformHashtags(platform: Platform, input: PlatformDraftInput) {
-  const limit = getPlatformHashtagLimit(platform)
-  const candidates = [
-    input.productName,
-    ...input.highlights.split(/[,;\n]+/),
-    ...input.sourceContent.split(/\s+/).filter((word) => word.length >= 5).slice(0, 4),
-  ]
-  return uniqueHashtags(candidates
-    .map(toHashtag)
-    .filter(Boolean))
-    .slice(0, limit)
-    .join(' ')
-}
-
-function toHashtag(value: string) {
-  const normalized = value
-    .trim()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/đ/g, 'd')
-    .replace(/Đ/g, 'D')
-    .replace(/[^a-zA-Z0-9]+/g, '')
-  return normalized ? `#${normalized}` : ''
-}
-
-function compactBlocks(values: string[]) {
-  return values
-    .map(normalizeMultiline)
-    .filter(Boolean)
-    .join('\n\n')
-}
-
-function normalizeMultiline(value: string) {
-  return value
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .join('\n')
 }
 
 function parseHashtags(value: string) {

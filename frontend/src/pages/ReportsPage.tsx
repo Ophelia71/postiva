@@ -1,4 +1,4 @@
-import { Eye, Heart, MessageCircle, Share2, X } from 'lucide-react'
+import { Eye, X } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
 import { EditPostModal } from '../components/EditPostModal'
 import { DeletePostConfirmModal } from '../components/DeletePostConfirmModal'
@@ -9,14 +9,12 @@ import { api } from '../lib/api'
 import { normalizeAppOverview, type AppOverview, type AppPost, useAppDataResource } from '../lib/appDataApi'
 import { addDays, toDateKey } from '../lib/dates'
 import { getErrorMessage } from '../lib/errors'
-import { formatNumber } from '../lib/format'
 import { sortPostsNewestFirst } from '../lib/posts'
 import { usePreferences } from '../lib/preferences'
 import { useFacebookRealtimeRefetch } from '../lib/realtime'
-import { PageHeader, PageState, PlatformBadge, StatCard, StatusBadge } from '../components/PageUi'
+import { PageHeader, PageState, PlatformBadge, StatusBadge } from '../components/PageUi'
 
 const reportPageSize = 5
-type ReportRange = '7D' | '30D' | 'ALL'
 type ChartPeriod = 'DAY' | 'WEEK' | 'MONTH'
 type DeletePostResponse = {
   deleted: boolean
@@ -42,7 +40,6 @@ export function ReportsPage() {
   const [deleteCandidate, setDeleteCandidate] = useState<AppPost | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [repostingPost, setRepostingPost] = useState<AppPost | null>(null)
-  const [range, setRange] = useState<ReportRange>('30D')
   const [chartPeriod, setChartPeriod] = useState<ChartPeriod>('DAY')
   const [selectedChartBucket, setSelectedChartBucket] = useState<string | null>(null)
 
@@ -59,10 +56,8 @@ export function ReportsPage() {
   }
 
   const normalizedOverview = normalizeAppOverview(overview)
-  const connectedChannels = normalizedOverview.channels.filter((channel) => channel.active)
   const reportPosts = sortPostsNewestFirst(postsState.data
-    .filter((post) => post.status === 'Published' || post.status === 'Failed')
-    .filter((post) => isInsideRange(post, range)))
+    .filter((post) => post.status === 'Published' || post.status === 'Failed'))
   const paginatedReports = getPaginatedItems(reportPosts, reportPage, reportPageSize)
   const publishedPosts = sortPostsNewestFirst(postsState.data.filter((post) => post.status === 'Published'))
   const chartBuckets = getChartBuckets(publishedPosts, chartPeriod)
@@ -76,37 +71,6 @@ export function ReportsPage() {
   return (
     <section className="space-y-6">
       <PageHeader title={t('Báo cáo & Phân tích', 'Reports & Analytics')} />
-
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] px-4 py-3 shadow-sm">
-        <p className="text-sm font-semibold text-[var(--muted-text)]">
-          {connectedChannels.length > 0 ? `${connectedChannels.length} ${t('tài khoản mạng xã hội đang kết nối', 'connected social accounts')}` : t('Chưa có tài khoản mạng xã hội đang kết nối', 'No connected social accounts')}
-        </p>
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex rounded-full border border-[var(--app-border)] p-1">
-            {([
-              ['7D', '7D'],
-              ['30D', '30D'],
-              ['ALL', t('Tất cả', 'All')],
-            ] as const).map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setRange(value)}
-                className={`flex h-8 w-8 items-center justify-center rounded-full p-0 text-[11px] font-bold ${range === value ? 'bg-blue-600 text-white' : 'text-[var(--muted-text)] hover:bg-[var(--soft-bg)]'}`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-4">
-        <StatCard icon={<Eye size={18} />} value={formatNumber(normalizedOverview.views)} label={t('Người xem', 'Views')} tone="blue" />
-        <StatCard icon={<Heart size={18} />} value={formatNumber(normalizedOverview.likes)} label={t('Tương tác thả icon', 'Reactions')} tone="rose" />
-        <StatCard icon={<MessageCircle size={18} />} value={formatNumber(normalizedOverview.comments)} label={t('Bình luận', 'Comments')} tone="emerald" />
-        <StatCard icon={<Share2 size={18} />} value={formatNumber(normalizedOverview.shares)} label={t('Chia sẻ', 'Shares')} tone="violet" />
-      </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] p-5 shadow-sm">
@@ -385,18 +349,6 @@ export function ReportsPage() {
     }
   }
 
-}
-
-function isInsideRange(post: AppPost, range: ReportRange) {
-  if (range === 'ALL' || !post.scheduledTime) {
-    return true
-  }
-  const createdAt = new Date(post.scheduledTime).getTime()
-  if (Number.isNaN(createdAt)) {
-    return false
-  }
-  const days = range === '7D' ? 7 : 30
-  return createdAt >= Date.now() - days * 24 * 60 * 60 * 1000
 }
 
 function canEditReportedPost(post: AppPost) {

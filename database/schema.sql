@@ -15,6 +15,7 @@ DROP TABLE IF EXISTS product_briefs CASCADE;
 DROP TABLE IF EXISTS industry_templates CASCADE;
 DROP TABLE IF EXISTS business_profiles CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
+DROP TABLE IF EXISTS pending_registrations CASCADE;
 
 
 -- 1. USERS
@@ -30,6 +31,17 @@ CREATE TABLE users (
 
                        CONSTRAINT chk_users_role
                            CHECK (role IN ('USER', 'ADMIN'))
+);
+
+CREATE TABLE pending_registrations (
+                                       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                                       full_name VARCHAR(150) NOT NULL,
+                                       email VARCHAR(255) NOT NULL UNIQUE,
+                                       password_hash TEXT NOT NULL,
+                                       otp_hash TEXT NOT NULL,
+                                       otp_expires_at TIMESTAMP NOT NULL,
+                                       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                                       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- =========================================================
@@ -407,6 +419,10 @@ CREATE TRIGGER trg_users_updated_at
     BEFORE UPDATE ON users
     FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
+CREATE TRIGGER trg_pending_registrations_updated_at
+    BEFORE UPDATE ON pending_registrations
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
 CREATE TRIGGER trg_business_profiles_updated_at
     BEFORE UPDATE ON business_profiles
     FOR EACH ROW EXECUTE FUNCTION set_updated_at();
@@ -544,9 +560,12 @@ INSERT INTO industry_templates (
           '["rõ ràng", "truyền cảm hứng", "chuyên nghiệp"]'::jsonb
       );
 
+-- NOTE ABOUT TABLE OWNERSHIP
+-- Spring/Hibernate can only ALTER existing tables when the configured
+-- POSTIVA_DB_USERNAME owns those tables, or has enough privileges.
+-- If you see: "must be owner of table ...", connect as a PostgreSQL superuser
+-- and transfer ownership to the same role used by the backend, for example:
 --
--- GRANT USAGE ON SCHEMA public TO "userName";
+--   REASSIGN OWNED BY old_owner TO postgres;
 --
--- GRANT SELECT, INSERT, UPDATE, DELETE
---       ON TABLE public.industry_templates, public.scheduled_posts
---           TO "userName";
+-- Or recreate the database/schema while connected as POSTIVA_DB_USERNAME.

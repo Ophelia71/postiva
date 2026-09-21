@@ -32,8 +32,8 @@ spring:
   mail:
     host: ${MAIL_HOST:smtp.gmail.com}
     port: ${MAIL_PORT:587}
-    username: ${MAIL_USERNAME}
-    password: ${MAIL_PASSWORD}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
     properties:
       mail:
         smtp:
@@ -58,6 +58,17 @@ postiva:
     api-version: ${META_API_VERSION:v26.0}
     redirect-uri: ${META_REDIRECT_URI:http://localhost:8080/api/social/meta/callback}
 
+  instagram:
+    app-id: ${INSTAGRAM_APP_ID:}
+    app-secret: ${INSTAGRAM_APP_SECRET:}
+    api-version: ${INSTAGRAM_API_VERSION:v26.0}
+    redirect-uri: ${INSTAGRAM_REDIRECT_URI:http://localhost:8080/api/social/instagram/callback}
+
+  threads:
+    app-id: ${THREADS_APP_ID:}
+    app-secret: ${THREADS_APP_SECRET:}
+    redirect-uri: ${THREADS_REDIRECT_URI:http://localhost:8080/api/social/threads/callback}
+
   security:
     jwt-secret: ${POSTIVA_JWT_SECRET:change-this-development-jwt-secret-before-deploying}
     jwt-expiration-seconds: ${POSTIVA_JWT_EXPIRATION_SECONDS:604800}
@@ -65,10 +76,17 @@ postiva:
 
   storage:
     upload-dir: ${POSTIVA_UPLOAD_DIR:uploads/images}
+    public-base-url: ${POSTIVA_PUBLIC_BASE_URL:}
 
   scheduler:
     publish-delay-ms: ${POSTIVA_PUBLISH_DELAY_MS:10000}
 
   mail:
-    enabled: ${POSTIVA_MAIL_ENABLED:true}
-    from: ${MAIL_FROM:${MAIL_USERNAME}}
+    enabled: ${POSTIVA_MAIL_ENABLED:false}
+    from: ${MAIL_FROM:no-reply@postiva.local}
+
+
+app:
+  jwt:
+    secret: 404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
+    expiration: 86400000 

@@ -9,8 +9,8 @@ export type AuthSession = {
   email: string
   fullName: string
   role: UserRole
-  workspaceId: string
-  workspaceName: string
+  workspaceId?: string | null
+  workspaceName?: string | null
 }
 
 export function getAuthSession(): AuthSession | null {
@@ -58,8 +58,6 @@ export function isAuthSession(value: unknown): value is AuthSession {
     && isNonBlankString(session.email)
     && isNonBlankString(session.fullName)
     && (session.role === 'USER' || session.role === 'ADMIN')
-    && isNonBlankString(session.workspaceId)
-    && isNonBlankString(session.workspaceName)
 }
 
 function isNonBlankString(value: unknown): value is string {

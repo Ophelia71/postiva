@@ -2,7 +2,6 @@ package com.postiva.config;
 
 import com.postiva.auth.security.CustomUserDetailsService;
 import com.postiva.auth.security.JwtAuthenticationFilter;
-import com.postiva.common.ApiResponse;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -13,21 +12,32 @@ import org.springframework.security.authentication.dao.DaoAuthenticationProvider
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
-import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
-
-import java.util.List;
 
 @Configuration
 @EnableMethodSecurity
 public class SecurityConfig {
+
+    // Bổ sung khai báo 2 biến còn thiếu
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final CustomUserDetailsService userDetailsService;
+    private final CorsConfigurationSource corsConfigurationSource;
+
+    public SecurityConfig(
+            JwtAuthenticationFilter jwtAuthenticationFilter,
+            CustomUserDetailsService userDetailsService,
+            CorsConfigurationSource corsConfigurationSource
+    ) {
+        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.userDetailsService = userDetailsService;
+        this.corsConfigurationSource = corsConfigurationSource;
+    }
+
     @Bean
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http
@@ -35,7 +45,7 @@ public class SecurityConfig {
         return http
                 .csrf(csrf -> csrf.disable())
                 .cors(cors -> cors.configurationSource(
-                        corsConfigurationSource()
+                        corsConfigurationSource
                 ))
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(
@@ -48,7 +58,18 @@ public class SecurityConfig {
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/api/auth/register",
+                                "/api/auth/register/verify",
                                 "/api/auth/login"
+                        )
+                        .permitAll()
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/files/**"
+                        )
+                        .permitAll()
+                        .requestMatchers(
+                                HttpMethod.HEAD,
+                                "/api/files/**"
                         )
                         .permitAll()
                         .requestMatchers(
@@ -128,38 +149,38 @@ public class SecurityConfig {
         return configuration.getAuthenticationManager();
     }
 
-    @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration configuration = new CorsConfiguration();
-
-        configuration.setAllowedOrigins(List.of(
-                "http://localhost:3000",
-                "http://localhost:5173"
-        ));
-
-        configuration.setAllowedMethods(List.of(
-                "GET",
-                "POST",
-                "PUT",
-                "PATCH",
-                "DELETE",
-                "OPTIONS"
-        ));
-
-        configuration.setAllowedHeaders(List.of(
-                "Authorization",
-                "Content-Type",
-                "Accept"
-        ));
-
-        configuration.setAllowCredentials(true);
-        configuration.setMaxAge(3600L);
-
-        UrlBasedCorsConfigurationSource source =
-                new UrlBasedCorsConfigurationSource();
-
-        source.registerCorsConfiguration("/**", configuration);
-
-        return source;
-    }
+//    @Bean
+//    public CorsConfigurationSource corsConfigurationSource() {
+//        CorsConfiguration configuration = new CorsConfiguration();
+//
+//        configuration.setAllowedOrigins(List.of(
+//                "http://localhost:3000",
+//                "http://localhost:5173"
+//        ));
+//
+//        configuration.setAllowedMethods(List.of(
+//                "GET",
+//                "POST",
+//                "PUT",
+//                "PATCH",
+//                "DELETE",
+//                "OPTIONS"
+//        ));
+//
+//        configuration.setAllowedHeaders(List.of(
+//                "Authorization",
+//                "Content-Type",
+//                "Accept"
+//        ));
+//
+//        configuration.setAllowCredentials(true);
+//        configuration.setMaxAge(3600L);
+//
+//        UrlBasedCorsConfigurationSource source =
+//                new UrlBasedCorsConfigurationSource();
+//
+//        source.registerCorsConfiguration("/**", configuration);
+//
+//        return source;
+//    }
 }
