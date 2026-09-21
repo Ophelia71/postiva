@@ -1,6 +1,7 @@
 import { Eye, Heart, MessageCircle, Share2, X } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
 import { EditPostModal } from '../components/EditPostModal'
+import { DeletePostConfirmModal } from '../components/DeletePostConfirmModal'
 import { getPaginatedItems, PaginationControls } from '../components/PaginationControls'
 import { PostDetailModal, PostThumbnail } from '../components/PostDetails'
 import { RepostPostModal } from '../components/RepostPostModal'
@@ -12,11 +13,17 @@ import { formatNumber } from '../lib/format'
 import { sortPostsNewestFirst } from '../lib/posts'
 import { usePreferences } from '../lib/preferences'
 import { useFacebookRealtimeRefetch } from '../lib/realtime'
-import { PageHeader, PageState, StatCard, StatusBadge } from '../components/PageUi'
+import { PageHeader, PageState, PlatformBadge, StatCard, StatusBadge } from '../components/PageUi'
 
-const reportPageSize = 6
+const reportPageSize = 5
 type ReportRange = '7D' | '30D' | 'ALL'
 type ChartPeriod = 'DAY' | 'WEEK' | 'MONTH'
+type DeletePostResponse = {
+  deleted: boolean
+  facebookDeleted: boolean
+  facebookMessage: string
+  message?: string
+}
 
 export function ReportsPage() {
   const { t } = usePreferences()
@@ -32,6 +39,8 @@ export function ReportsPage() {
   const [editError, setEditError] = useState('')
   const [isSavingEdit, setIsSavingEdit] = useState(false)
   const [detailPost, setDetailPost] = useState<AppPost | null>(null)
+  const [deleteCandidate, setDeleteCandidate] = useState<AppPost | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [repostingPost, setRepostingPost] = useState<AppPost | null>(null)
   const [range, setRange] = useState<ReportRange>('30D')
   const [chartPeriod, setChartPeriod] = useState<ChartPeriod>('DAY')
@@ -50,7 +59,7 @@ export function ReportsPage() {
   }
 
   const normalizedOverview = normalizeAppOverview(overview)
-  const facebookChannels = normalizedOverview.channels.filter((channel) => channel.badge === 'Facebook' && channel.active)
+  const connectedChannels = normalizedOverview.channels.filter((channel) => channel.active)
   const reportPosts = sortPostsNewestFirst(postsState.data
     .filter((post) => post.status === 'Published' || post.status === 'Failed')
     .filter((post) => isInsideRange(post, range)))
@@ -70,7 +79,7 @@ export function ReportsPage() {
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] px-4 py-3 shadow-sm">
         <p className="text-sm font-semibold text-[var(--muted-text)]">
-          {facebookChannels.length > 0 ? `${facebookChannels.length} Facebook Page ${t('đang kết nối', 'connected')}` : t('Chưa có Facebook Page đang kết nối', 'No connected Facebook Page')}
+          {connectedChannels.length > 0 ? `${connectedChannels.length} ${t('tài khoản mạng xã hội đang kết nối', 'connected social accounts')}` : t('Chưa có tài khoản mạng xã hội đang kết nối', 'No connected social accounts')}
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex rounded-full border border-[var(--app-border)] p-1">
@@ -165,7 +174,7 @@ export function ReportsPage() {
                 <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
                   {selectedBucket.posts.map((post) => (
                     <button
-                      key={post.id}
+                      key={postRowKey(post)}
                       type="button"
                       onClick={() => setDetailPost(post)}
                       className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-lg border border-[var(--app-border)] px-3 py-2 text-left hover:bg-[var(--soft-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
@@ -174,7 +183,7 @@ export function ReportsPage() {
                         <PostThumbnail post={post} className="h-10 w-10" />
                         <span className="min-w-0">
                           <span className="block truncate text-sm text-slate-700">{post.content || t('Không có nội dung chữ.', 'No text content.')}</span>
-                          <span className="mt-1 block text-xs text-[var(--muted-text)]">{post.platform} · {post.time}</span>
+                          <span className="mt-1 block text-xs text-[var(--muted-text)]">{post.platform} · {formatPostDateTime(post.time)}</span>
                         </span>
                       </span>
                       <span className="inline-flex items-center gap-1 text-xs font-bold text-blue-600">
@@ -239,21 +248,17 @@ export function ReportsPage() {
           ) : (
             paginatedReports.pageItems.map((post) => (
               <button
-                key={post.id}
+                key={postRowKey(post)}
                 type="button"
                 onClick={() => setDetailPost(post)}
-                className="grid w-full grid-cols-[86px_minmax(0,1fr)_92px_110px_76px] items-center gap-3 px-5 py-3 text-left text-sm hover:bg-[var(--soft-bg)]"
+                className="grid w-full grid-cols-[90px_minmax(0,1fr)_110px_90px_32px] items-center gap-4 px-5 py-4 text-left text-sm hover:bg-[var(--soft-bg)]"
               >
-                <span className="text-xs font-bold text-slate-600">{post.platform}</span>
-                <span className="flex min-w-0 items-center gap-3 text-slate-700" title={post.content}>
-                  <PostThumbnail post={post} className="h-12 w-12" />
-                  <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{post.content || 'Không có nội dung chữ.'}</span>
-                </span>
+                <PlatformBadge platform={post.platform} />
+                <span className="truncate text-slate-700" title={post.content}>{post.content || 'Không có nội dung chữ.'}</span>
                 <StatusBadge status={post.status} />
-                <span className="whitespace-nowrap text-xs text-slate-400">{post.time}</span>
-                <span className="inline-flex items-center justify-end gap-1 text-xs font-bold text-blue-600">
-                  <Eye size={14} />
-                  {t('Chi tiết', 'Details')}
+                <span className="text-xs leading-5 text-[var(--muted-text)]">{formatPostDateTime(post.time)}</span>
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400">
+                  <Eye size={15} />
                 </span>
               </button>
             ))
@@ -285,17 +290,16 @@ export function ReportsPage() {
       {detailPost && (
         <PostDetailModal
           post={detailPost}
+          showMediaGallery
           onClose={() => setDetailPost(null)}
-          onEdit={() => {
+          onEdit={canEditReportedPost(detailPost) ? () => {
             openEditPost(detailPost)
             setDetailPost(null)
-          }}
-          onDelete={() => {
-            const post = detailPost
-            setDetailPost(null)
-            void deletePost(post)
-          }}
-          onRepost={detailPost.status === 'Published' ? () => {
+          } : undefined}
+          onDelete={canDeleteReportedPost(detailPost) ? () => {
+            setDeleteCandidate(detailPost)
+          } : undefined}
+          onRepost={detailPost.status === 'Published' && detailPost.platform.toLowerCase() === 'facebook' ? () => {
             setRepostingPost(detailPost)
             setDetailPost(null)
           } : undefined}
@@ -310,6 +314,15 @@ export function ReportsPage() {
             reload()
             postsState.reload()
           }}
+        />
+      )}
+
+      {deleteCandidate && (
+        <DeletePostConfirmModal
+          post={deleteCandidate}
+          deleting={isDeleting}
+          onCancel={() => setDeleteCandidate(null)}
+          onConfirm={() => void deletePost(deleteCandidate)}
         />
       )}
     </section>
@@ -338,8 +351,10 @@ export function ReportsPage() {
     setEditError('')
 
     try {
-      await api.put(`/facebook-business/posts/${editingPost.id}`, {
+      await api.put(`/app-data/posts/${editingPost.id}`, {
         message: editingMessage.trim(),
+        platform: editingPost.platform.toUpperCase(),
+        scheduleId: editingPost.scheduleId || undefined,
       })
       closeEditPost()
       reload()
@@ -352,16 +367,21 @@ export function ReportsPage() {
   }
 
   async function deletePost(post: AppPost) {
-    if (!window.confirm(t('Xóa bài này khỏi Facebook và lịch sử?', 'Delete this post from Facebook and its history?'))) {
-      return
-    }
-
+    setIsDeleting(true)
     try {
-      await api.delete(`/facebook-business/posts/${post.id}`)
+      const response = await api.delete<DeletePostResponse>(`/app-data/posts/${post.id}`)
+      if (!response.data.deleted) {
+        window.alert(response.data.message || response.data.facebookMessage || 'Không thể xóa bài viết.')
+        return
+      }
+      setDeleteCandidate(null)
+      setDetailPost((current) => current?.id === post.id ? null : current)
       reload()
       postsState.reload()
     } catch (error) {
       window.alert(getErrorMessage(error, 'Không thể xóa bài viết.'))
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -377,6 +397,18 @@ function isInsideRange(post: AppPost, range: ReportRange) {
   }
   const days = range === '7D' ? 7 : 30
   return createdAt >= Date.now() - days * 24 * 60 * 60 * 1000
+}
+
+function canEditReportedPost(post: AppPost) {
+  return post.status !== 'Published' || post.platform.toLowerCase() === 'facebook'
+}
+
+function canDeleteReportedPost(post: AppPost) {
+  return post.status !== 'Published' || post.platform.toLowerCase() === 'facebook'
+}
+
+function postRowKey(post: AppPost) {
+  return post.scheduleId || `${post.id}:${post.platform}`
 }
 
 function getChartBuckets(posts: AppPost[], period: ChartPeriod) {
@@ -444,6 +476,26 @@ function startOfWeek(date: Date) {
 
 function formatShortDate(date: Date, locale: string) {
   return new Intl.DateTimeFormat(locale, { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date)
+}
+
+function formatPostDateTime(value: string) {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/)
+  if (match) {
+    return `${match[3]}/${match[2]}/${match[1]} ${match[4]}:${match[5]}`
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return new Intl.DateTimeFormat('vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date)
 }
 
 function getPlatformCounts(posts: AppPost[]) {

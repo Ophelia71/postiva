@@ -60,16 +60,20 @@ public class MetaOAuthService {
     public int complete(String code, String state) {
         requireConfiguration();
         UUID userId = stateService.consume(state);
-        FacebookGraphClient.OAuthToken token = graphClient.exchangeCode(appId, appSecret, redirectUri, code);
+        FacebookGraphClient.OAuthToken shortToken = graphClient.exchangeCode(appId, appSecret, redirectUri, code);
+        FacebookGraphClient.OAuthToken token = graphClient.exchangeLongLivedUserToken(
+                appId, appSecret, shortToken.accessToken());
         if (token.accessToken() == null || token.accessToken().isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Meta không trả về access token");
         }
         LocalDateTime expiresAt = token.expiresInSeconds() <= 0
                 ? null : LocalDateTime.now().plusSeconds(token.expiresInSeconds());
+        String oauthUserId = graphClient.getCurrentUserId(token.accessToken());
         var pages = graphClient.getManagedPages(token.accessToken());
         for (FacebookGraphClient.FacebookPage page : pages) {
             if (page.accessToken() != null && !page.accessToken().isBlank()) {
-                accountService.saveFacebookPage(userId, page.id(), page.name(), page.accessToken(), expiresAt);
+                accountService.saveFacebookPage(
+                        userId, page.id(), page.name(), page.accessToken(), expiresAt, oauthUserId);
             }
         }
         return pages.size();

@@ -15,5 +15,7 @@ public interface PublishLogRepository extends JpaRepository<PublishLog, UUID> {
 
     Optional<PublishLog> findFirstByScheduledPostId(UUID scheduledPostId);
 
+    Optional<PublishLog> findFirstByScheduledPostIdAndStatusOrderByPublishedAtDesc(UUID scheduledPostId, String status);
+
     void deleteByScheduledPostId(UUID scheduledPostId);
 }

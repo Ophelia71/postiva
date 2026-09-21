@@ -1,6 +1,7 @@
 import { CalendarDays, ChevronLeft, ChevronRight, Eye, Pencil, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { EditPostModal } from '../components/EditPostModal'
+import { DeletePostConfirmModal } from '../components/DeletePostConfirmModal'
 import { getPaginatedItems, PaginationControls } from '../components/PaginationControls'
 import { PostDetailModal, PostSummary } from '../components/PostDetails'
 import { api } from '../lib/api'
@@ -18,6 +19,12 @@ type CalendarDay = {
 }
 
 const schedulePageSize = 8
+type DeletePostResponse = {
+  deleted: boolean
+  facebookDeleted: boolean
+  facebookMessage: string
+  message?: string
+}
 
 export function SchedulePage() {
   const { t } = usePreferences()
@@ -31,6 +38,8 @@ export function SchedulePage() {
   const [editError, setEditError] = useState('')
   const [isSavingEdit, setIsSavingEdit] = useState(false)
   const [detailPost, setDetailPost] = useState<AppPost | null>(null)
+  const [deleteCandidate, setDeleteCandidate] = useState<AppPost | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const calendarDays = useMemo(() => buildCalendarDays(visibleMonth), [visibleMonth])
 
@@ -124,7 +133,7 @@ export function SchedulePage() {
               </p>
             ) : (
               selectedPosts.map((post) => (
-                <PostCard key={post.id} post={post} />
+                <PostCard key={postRowKey(post)} post={post} />
               ))
             )}
           </div>
@@ -138,7 +147,7 @@ export function SchedulePage() {
             <div className="px-5 py-6 text-sm text-[var(--muted-text)]">{t('Chưa có bài nào đang chờ đăng.')}</div>
           ) : (
             paginatedSchedule.pageItems.map((post) => (
-              <div key={post.id} className="grid grid-cols-[90px_1fr_110px_90px_32px_32px_32px] items-center gap-4 px-5 py-4 text-sm">
+              <div key={postRowKey(post)} className="grid grid-cols-[90px_1fr_110px_90px_32px_32px_32px] items-center gap-4 px-5 py-4 text-sm">
                 <PlatformBadge platform={post.platform} />
                 {post.permalinkUrl ? (
                   <a href={post.permalinkUrl} target="_blank" rel="noreferrer" className="truncate hover:text-violet-700">
@@ -148,7 +157,7 @@ export function SchedulePage() {
                   <p className="truncate">{post.content}</p>
                 )}
                 <StatusBadge status={post.status} />
-                <span className="text-xs text-[var(--muted-text)]">{post.time}</span>
+                <span className="text-xs text-[var(--muted-text)]">{formatPostDateTime(post.time)}</span>
                 <button
                   type="button"
                   onClick={() => setDetailPost(post)}
@@ -167,7 +176,7 @@ export function SchedulePage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => void deletePost(post)}
+                  onClick={() => setDeleteCandidate(post)}
                   className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-300 hover:bg-rose-50 hover:text-rose-500"
                 >
                   <Trash2 size={15} />
@@ -209,10 +218,17 @@ export function SchedulePage() {
             setDetailPost(null)
           } : undefined}
           onDelete={() => {
-            const post = detailPost
-            setDetailPost(null)
-            void deletePost(post)
+            setDeleteCandidate(detailPost)
           }}
+        />
+      )}
+
+      {deleteCandidate && (
+        <DeletePostConfirmModal
+          post={deleteCandidate}
+          deleting={isDeleting}
+          onCancel={() => setDeleteCandidate(null)}
+          onConfirm={() => void deletePost(deleteCandidate)}
         />
       )}
     </section>
@@ -243,6 +259,8 @@ export function SchedulePage() {
     try {
       await api.put(`/app-data/posts/${editingPost.id}`, {
         message: editingMessage.trim(),
+        platform: editingPost.platform.toUpperCase(),
+        scheduleId: editingPost.scheduleId || undefined,
       })
       closeEditPost()
       reload()
@@ -254,15 +272,20 @@ export function SchedulePage() {
   }
 
   async function deletePost(post: AppPost) {
-    if (!window.confirm(t('Xóa bài này khỏi lịch đăng?'))) {
-      return
-    }
-
+    setIsDeleting(true)
     try {
-      await api.delete(`/app-data/posts/${post.id}`)
+      const response = await api.delete<DeletePostResponse>(`/app-data/posts/${post.id}`)
+      if (!response.data.deleted) {
+        window.alert(response.data.message || response.data.facebookMessage || 'Không thể xóa bài viết.')
+        return
+      }
+      setDeleteCandidate(null)
+      setDetailPost((current) => current?.id === post.id ? null : current)
       reload()
     } catch (error) {
       window.alert(getErrorMessage(error, 'Không thể xóa bài viết.'))
+    } finally {
+      setIsDeleting(false)
     }
   }
 }
@@ -273,11 +296,15 @@ function PostCard({ post }: { post: AppPost }) {
       <div className="mb-2 flex items-center gap-2">
         <PlatformBadge platform={post.platform} />
         <StatusBadge status={post.status} />
-        <span className="ml-auto text-xs text-slate-400">{post.time.split(' ')[1] ?? ''}</span>
+        <span className="ml-auto text-xs text-slate-400">{formatPostDateTime(post.time)}</span>
       </div>
       <PostSummary post={post} showEngagement={false} showMediaBadge={false} />
     </div>
   )
+}
+
+function postRowKey(post: AppPost) {
+  return post.scheduleId || `${post.id}:${post.platform}`
 }
 
 function buildCalendarDays(month: Date) {
@@ -335,5 +362,25 @@ function formatDate(date: Date) {
     weekday: 'long',
     day: '2-digit',
     month: '2-digit',
+  }).format(date)
+}
+
+function formatPostDateTime(value: string) {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/)
+  if (match) {
+    return `${match[3]}/${match[2]}/${match[1]} ${match[4]}:${match[5]}`
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return new Intl.DateTimeFormat('vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
   }).format(date)
 }

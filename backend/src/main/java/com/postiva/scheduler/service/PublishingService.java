@@ -15,8 +15,8 @@ import com.postiva.scheduler.entity.PublishLog;
 import com.postiva.scheduler.entity.ScheduledPost;
 import com.postiva.scheduler.repository.PublishLogRepository;
 import com.postiva.scheduler.repository.ScheduledPostRepository;
-import com.postiva.social.client.FacebookGraphClient;
 import com.postiva.social.entity.SocialAccount;
+import com.postiva.social.publishing.PlatformPublisher;
 import com.postiva.social.service.SocialAccountService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -24,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -35,23 +36,29 @@ public class PublishingService {
     private final GeneratedPostRepository postRepository;
     private final SocialAccountService accountService;
     private final CurrentUserService currentUserService;
-    private final FacebookGraphClient facebookClient;
     private final FileService fileService;
+    private final Map<Platform, PlatformPublisher> publishers;
 
     public PublishingService(ScheduledPostRepository scheduledRepository,
                              PublishLogRepository logRepository,
                              GeneratedPostRepository postRepository,
                              SocialAccountService accountService,
                              CurrentUserService currentUserService,
-                             FacebookGraphClient facebookClient,
-                             FileService fileService) {
+                             FileService fileService,
+                             List<PlatformPublisher> platformPublishers) {
         this.scheduledRepository = scheduledRepository;
         this.logRepository = logRepository;
         this.postRepository = postRepository;
         this.accountService = accountService;
         this.currentUserService = currentUserService;
-        this.facebookClient = facebookClient;
         this.fileService = fileService;
+        EnumMap<Platform, PlatformPublisher> publisherMap = new EnumMap<>(Platform.class);
+        for (PlatformPublisher publisher : platformPublishers) {
+            if (publisherMap.put(publisher.platform(), publisher) != null) {
+                throw new IllegalStateException("Có nhiều publisher cho " + publisher.platform());
+            }
+        }
+        this.publishers = Map.copyOf(publisherMap);
     }
 
     @Transactional
@@ -64,21 +71,22 @@ public class PublishingService {
 
     @Transactional
     public ScheduledPostResponse publishNow(PublishNowRequest request) {
-        ScheduledPost scheduled = create(request.postId(), request.socialAccountId(), request.platform(), LocalDateTime.now());
+        ScheduledPost scheduled = create(
+                request.postId(), request.socialAccountId(), request.platform(), LocalDateTime.now());
         publishOne(scheduled);
         return response(scheduled);
     }
 
     private ScheduledPost create(UUID postId, UUID accountId, Platform platform, LocalDateTime time) {
-        if (platform != Platform.FACEBOOK) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "MVP hiện chỉ hỗ trợ đăng Facebook");
-        }
         UUID userId = currentUserService.requireCurrentUserId();
-        postRepository.findByIdAndUserId(postId, userId)
+        GeneratedPost post = postRepository.findByIdAndUserId(postId, userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy bài viết"));
         SocialAccount account = accountService.requireCurrentUserAccount(accountId);
         if (account.getProvider() != platform) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tài khoản không đúng nền tảng");
+        }
+        if (!publishers.containsKey(platform)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Nền tảng chưa có bộ publish");
         }
 
         ScheduledPost scheduled = new ScheduledPost();
@@ -87,6 +95,8 @@ public class PublishingService {
         scheduled.setPlatform(platform);
         scheduled.setScheduledTime(time);
         scheduled.setStatus(ScheduledPostStatus.SCHEDULED);
+        post.setStatus(PostStatus.SCHEDULED);
+        postRepository.save(post);
         return scheduledRepository.save(scheduled);
     }
 
@@ -107,7 +117,9 @@ public class PublishingService {
         scheduled.setStatus(ScheduledPostStatus.SCHEDULED);
         scheduled.setScheduledTime(LocalDateTime.now());
         scheduled.setLastError(null);
-        return response(scheduledRepository.save(scheduled));
+        ScheduledPost saved = scheduledRepository.save(scheduled);
+        refreshPostStatus(saved.getPostId());
+        return response(saved);
     }
 
     @Transactional
@@ -122,7 +134,8 @@ public class PublishingService {
 
     private void publishOne(ScheduledPost scheduled) {
         scheduled.setStatus(ScheduledPostStatus.PUBLISHING);
-        scheduled.setAttemptCount(scheduled.getAttemptCount() + 1);
+        int currentAttempts = scheduled.getAttemptCount() == null ? 0 : scheduled.getAttemptCount();
+        scheduled.setAttemptCount(currentAttempts + 1);
         scheduledRepository.save(scheduled);
 
         PublishLog log = new PublishLog();
@@ -131,34 +144,23 @@ public class PublishingService {
         try {
             GeneratedPost post = postRepository.findById(scheduled.getPostId())
                     .orElseThrow(() -> new IllegalStateException("Bài viết không còn tồn tại"));
-            SocialAccount account = accountService.requireActiveAccount(scheduled.getSocialAccountId());
-            if (account.getTokenExpiresAt() != null && account.getTokenExpiresAt().isBefore(LocalDateTime.now())) {
-                throw new IllegalStateException("Meta token đã hết hạn, hãy kết nối lại Page");
-            }
+            SocialAccount account = accountService.prepareForPublishing(scheduled.getSocialAccountId());
+            validateAccount(account, scheduled.getPlatform());
 
-            String message = facebookContent(post);
-            String token = accountService.decryptToken(account);
-            UploadedFile image = fileService.firstImageForPost(post.getId());
-            String externalId;
-            if (image != null) {
-                externalId = facebookClient.publishPhoto(account.getPageId(), token, message, fileService.resource(image));
-            } else if (isExternalImage(post)) {
-                externalId = facebookClient.publishPhotoUrl(account.getPageId(), token, message, post.getImageUrl());
-            } else {
-                externalId = facebookClient.publishText(account.getPageId(), token, message);
-            }
+            String accessToken = accountService.decryptToken(account);
+            List<UploadedFile> mediaFiles = fileService.allMediaForPost(post.getId());
+            PlatformPublisher publisher = publishers.get(scheduled.getPlatform());
+            String externalId = publisher.publish(post, account, accessToken, mediaFiles);
 
             LocalDateTime publishedAt = LocalDateTime.now();
             scheduled.setStatus(ScheduledPostStatus.PUBLISHED);
             scheduled.setPublishedAt(publishedAt);
             scheduled.setLastError(null);
-            post.setStatus(PostStatus.PUBLISHED);
-            postRepository.save(post);
             log.setStatus("SUCCESS");
             log.setExternalPostId(externalId);
             log.setPublishedAt(publishedAt);
         } catch (RuntimeException exception) {
-            String error = truncate(exception.getMessage());
+            String error = truncate(errorMessage(exception));
             scheduled.setStatus(ScheduledPostStatus.FAILED);
             scheduled.setLastError(error);
             log.setStatus("FAILED");
@@ -166,28 +168,49 @@ public class PublishingService {
         }
         scheduledRepository.save(scheduled);
         logRepository.save(log);
+        refreshPostStatus(scheduled.getPostId());
     }
 
-    private String facebookContent(GeneratedPost post) {
-        Object facebook = post.getPlatformContents().get("FACEBOOK");
-        if (facebook instanceof Map<?, ?> values) {
-            Object content = values.get("content");
-            if (content != null && !content.toString().isBlank()) {
-                return content.toString();
-            }
+    private void validateAccount(SocialAccount account, Platform platform) {
+        if (account.getProvider() != platform) {
+            throw new IllegalStateException("Tài khoản kết nối không đúng nền tảng " + platform.name());
         }
-        throw new IllegalStateException("Bài viết chưa có nội dung Facebook");
+        if (account.getTokenExpiresAt() != null && account.getTokenExpiresAt().isBefore(LocalDateTime.now())) {
+            throw new IllegalStateException(platformLabel(platform) + " access token đã hết hạn, hãy kết nối lại tài khoản");
+        }
+        if (account.getAccessTokenEncrypted() == null || account.getAccessTokenEncrypted().isBlank()) {
+            throw new IllegalStateException(platformLabel(platform) + " chưa có access token");
+        }
     }
 
-    private boolean isExternalImage(GeneratedPost post) {
-        Object facebook = post.getPlatformContents().get("FACEBOOK");
-        if (!(facebook instanceof Map<?, ?> values)) {
-            return false;
+    private void refreshPostStatus(UUID postId) {
+        GeneratedPost post = postRepository.findById(postId).orElse(null);
+        if (post == null) {
+            return;
         }
-        Object mediaType = values.get("mediaType");
-        return mediaType != null && "IMAGE".equalsIgnoreCase(mediaType.toString())
-                && post.getImageUrl() != null
-                && (post.getImageUrl().startsWith("https://") || post.getImageUrl().startsWith("http://"));
+        List<ScheduledPost> schedules = scheduledRepository.findByPostId(postId);
+        boolean hasPending = schedules.stream().anyMatch(item ->
+                item.getStatus() == ScheduledPostStatus.SCHEDULED
+                        || item.getStatus() == ScheduledPostStatus.PUBLISHING);
+        boolean hasPublished = schedules.stream().anyMatch(item ->
+                item.getStatus() == ScheduledPostStatus.PUBLISHED);
+        if (hasPending) {
+            post.setStatus(PostStatus.SCHEDULED);
+        } else if (hasPublished) {
+            post.setStatus(PostStatus.PUBLISHED);
+        } else if (!schedules.isEmpty()) {
+            post.setStatus(PostStatus.FAILED);
+        }
+        postRepository.save(post);
+    }
+
+    private String errorMessage(RuntimeException exception) {
+        if (exception instanceof ResponseStatusException statusException
+                && statusException.getReason() != null
+                && !statusException.getReason().isBlank()) {
+            return statusException.getReason();
+        }
+        return exception.getMessage();
     }
 
     private String truncate(String message) {
@@ -195,6 +218,14 @@ public class PublishingService {
             return "Đăng bài thất bại";
         }
         return message.length() <= 1000 ? message : message.substring(0, 1000);
+    }
+
+    private String platformLabel(Platform platform) {
+        return switch (platform) {
+            case FACEBOOK -> "Facebook";
+            case INSTAGRAM -> "Instagram";
+            case THREADS -> "Threads";
+        };
     }
 
     private ScheduledPostResponse response(ScheduledPost scheduled) {

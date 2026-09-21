@@ -55,7 +55,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(WebClientException.class)
     public ResponseEntity<ApiResponse<Void>> handleMetaError(WebClientException exception) {
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
-                .body(ApiResponse.fail("Meta từ chối yêu cầu. Kiểm tra Page Access Token và quyền pages_manage_posts/pages_read_engagement."));
+                .body(ApiResponse.fail("Meta từ chối yêu cầu. Kiểm tra access token và quyền của tài khoản."));
     }
 
     @ExceptionHandler(ResponseStatusException.class)

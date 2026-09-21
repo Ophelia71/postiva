@@ -14,6 +14,7 @@ export type AppChannel = {
 
 export type AppPost = {
   id: string
+  scheduleId: string
   platform: string
   content: string
   status: string
@@ -37,6 +38,7 @@ export type AppPost = {
   mediaThumbnailUrl: string
   mediaTitle: string
   mediaUrls: string[]
+  mediaIds: string[]
 }
 
 export type AppComment = {

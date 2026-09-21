@@ -6,15 +6,17 @@ import { getErrorMessage } from '../lib/errors'
 import { formatFileSize } from '../lib/format'
 import { resolveMediaUrl } from '../lib/media'
 import { usePreferences } from '../lib/preferences'
-import { PostMedia } from './PostDetails'
 
 type UploadedMedia = {
-  mediaId: string
-  mediaType: 'IMAGE' | 'VIDEO'
-  mediaUrl: string
-  originalFilename: string
-  contentType: string
-  size: number
+  id: string
+  fileUrl: string
+  fileName: string
+  mimeType: string
+  fileSize: number
+}
+
+type RepostMedia = UploadedMedia & {
+  source: 'OLD' | 'NEW'
 }
 
 type RepostMediaType = 'NONE' | 'IMAGE' | 'VIDEO'
@@ -35,12 +37,12 @@ export function RepostPostModal({
   const facebookChannels = (channelsState.data ?? EMPTY_CHANNELS).filter((channel) => channel.badge === 'Facebook' && channel.active)
   const [selectedChannelId, setSelectedChannelId] = useState('')
   const [message, setMessage] = useState(post.content)
-  const [selectedMediaType, setSelectedMediaType] = useState<RepostMediaType>('NONE')
+  const [newMediaType, setNewMediaType] = useState<RepostMediaType>('NONE')
   const [mediaUrl, setMediaUrl] = useState('')
-  const [uploadedMedia, setUploadedMedia] = useState<UploadedMedia | null>(null)
+  const [selectedMedia, setSelectedMedia] = useState<RepostMedia[]>(() => getPostMedia(post))
   const [isUploadingMedia, setIsUploadingMedia] = useState(false)
   const [isPublishing, setIsPublishing] = useState(false)
-  const [status, setStatus] = useState(() => t('Chọn media mới nếu muốn thay ảnh/video của bài đăng lại.'))
+  const [status, setStatus] = useState(() => t('Nội dung được sao chép từ bài cũ. Bạn có thể chỉnh sửa trước khi tạo bài mới.'))
   const [statusTone, setStatusTone] = useState<'info' | 'success' | 'error'>('info')
 
   useEffect(() => {
@@ -60,26 +62,40 @@ export function RepostPostModal({
     }
 
     const resolvedMediaUrl = mediaUrl.trim()
-    const resolvedMediaId = uploadedMedia?.mediaType === selectedMediaType ? uploadedMedia.mediaId : ''
-    if (selectedMediaType !== 'NONE' && !resolvedMediaUrl && !resolvedMediaId) {
+    const selectedMediaIds = selectedMedia.map((media) => media.id).filter(Boolean)
+    const hasVideo = selectedMedia.some((media) => media.mimeType.startsWith('video/'))
+    const mediaType: RepostMediaType = selectedMedia.length > 0
+      ? hasVideo ? 'VIDEO' : 'IMAGE'
+      : resolvedMediaUrl ? newMediaType : 'NONE'
+    if (newMediaType !== 'NONE' && selectedMedia.length === 0 && !resolvedMediaUrl) {
       setStatusTone('error')
       setStatus(t('Hãy chọn file từ máy hoặc nhập URL media công khai.'))
+      return
+    }
+    if (selectedMedia.some((media) => !media.id)) {
+      setStatusTone('error')
+      setStatus(t('Một số media cũ không thể tái sử dụng. Hãy xóa media đó rồi chọn lại file từ máy.'))
+      return
+    }
+    if (selectedMedia.length > 0 && resolvedMediaUrl) {
+      setStatusTone('error')
+      setStatus(t('Không thể trộn media đã chọn với URL. Hãy tải URL media về máy rồi chọn file.'))
       return
     }
 
     setIsPublishing(true)
     setStatusTone('info')
-    setStatus(t(`Đang đăng lại lên ${selectedChannel.name}...`))
+    setStatus(t(`Đang tạo bài mới trên ${selectedChannel.name}...`))
     try {
       await api.post<string>('/facebook-business/posts', {
         pageId: selectedChannel.accountId,
         message: message.trim(),
-        mediaType: selectedMediaType,
-        mediaUrl: selectedMediaType === 'NONE' || resolvedMediaId ? undefined : resolvedMediaUrl,
-        mediaId: selectedMediaType === 'NONE' ? undefined : resolvedMediaId || undefined,
+        mediaType,
+        mediaUrl: selectedMediaIds.length > 0 || mediaType === 'NONE' ? undefined : resolvedMediaUrl,
+        mediaIds: selectedMediaIds.length > 0 ? selectedMediaIds : undefined,
       })
       setStatusTone('success')
-      setStatus(t('Đã đăng lại thành công.'))
+      setStatus(t('Đã tạo và đăng bài mới thành công.'))
       console.info('[FacebookPost] Repost completed', {
         channelId: selectedChannel.id,
         channelName: selectedChannel.name,
@@ -95,45 +111,62 @@ export function RepostPostModal({
   }
 
   async function handleMediaFileChange(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]
-    if (!file) {
+    const files = Array.from(event.target.files ?? [])
+    if (files.length === 0) {
       return
     }
 
-    const inferredMediaType = file.type.startsWith('image/') ? 'IMAGE' : file.type.startsWith('video/') ? 'VIDEO' : null
-    if (!inferredMediaType) {
+    const allImages = files.every((file) => file.type.startsWith('image/'))
+    const allVideos = files.every((file) => file.type.startsWith('video/'))
+    if (!allImages && !allVideos) {
       setStatusTone('error')
-      setStatus(t('Chỉ hỗ trợ ảnh JPG/PNG/WebP hoặc video MP4/MOV/WebM.'))
+      setStatus(t('Không thể trộn ảnh và video trong một bài đăng.'))
       event.target.value = ''
       return
     }
 
-    setSelectedMediaType(inferredMediaType)
-    setUploadedMedia(null)
+    if (allVideos && (files.length > 1 || selectedMedia.length > 0)) {
+      setStatusTone('error')
+      setStatus(t('Facebook chỉ hỗ trợ 1 video cho mỗi bài đăng.'))
+      event.target.value = ''
+      return
+    }
+    if (allImages && selectedMedia.some((media) => media.mimeType.startsWith('video/'))) {
+      setStatusTone('error')
+      setStatus(t('Không thể trộn ảnh và video trong một bài đăng.'))
+      event.target.value = ''
+      return
+    }
+    if (allImages && selectedMedia.length + files.length > 10) {
+      setStatusTone('error')
+      setStatus(t('Mỗi bài tối đa 10 ảnh.'))
+      event.target.value = ''
+      return
+    }
+
     setMediaUrl('')
     setIsUploadingMedia(true)
     setStatusTone('info')
+    const inferredMediaType: RepostMediaType = allVideos ? 'VIDEO' : 'IMAGE'
     setStatus(inferredMediaType === 'IMAGE'
       ? t('Đang tải ảnh lên hệ thống...')
       : t('Đang tải video lên hệ thống...'))
 
     try {
-      const formData = new FormData()
-      formData.append('file', file)
-      const response = await api.post<UploadedMedia>('/media/uploads', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
-      setUploadedMedia(response.data)
+      const uploaded = await Promise.all(files.map(async (file) => {
+        const formData = new FormData()
+        formData.append('file', file)
+        const response = await api.post<UploadedMedia>('/files/upload', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        })
+        return { ...response.data, source: 'NEW' as const }
+      }))
+      setSelectedMedia((current) => [...current, ...uploaded])
       setStatusTone('success')
       setStatus(inferredMediaType === 'IMAGE'
         ? t('Ảnh đã tải lên. Có thể đăng lại.')
         : t('Video đã tải lên. Có thể đăng lại.'))
-      console.info('[MediaUpload] Repost media upload completed', {
-        mediaType: inferredMediaType,
-        mediaId: response.data.mediaId,
-      })
     } catch (error) {
-      setUploadedMedia(null)
       setStatusTone('error')
       setStatus(getErrorMessage(error, 'Không thể tải tệp lên.'))
     } finally {
@@ -143,9 +176,12 @@ export function RepostPostModal({
   }
 
   function resetMedia() {
-    setSelectedMediaType('NONE')
+    setNewMediaType('NONE')
     setMediaUrl('')
-    setUploadedMedia(null)
+  }
+
+  function removeMedia(mediaId: string) {
+    setSelectedMedia((current) => current.filter((media) => (media.id || media.fileUrl) !== mediaId))
   }
 
   return (
@@ -153,8 +189,8 @@ export function RepostPostModal({
       <form onSubmit={submitRepost} className="max-h-[90vh] w-full max-w-3xl overflow-auto rounded-2xl bg-white p-5 shadow-xl">
         <div className="mb-5 flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-lg font-bold">Đăng lại bài</h2>
-            <p className="mt-1 text-xs text-slate-400">Bài mới sẽ có permalink và tương tác riêng.</p>
+            <h2 className="text-lg font-bold">Tạo bài mới từ bài này</h2>
+            <p className="mt-1 text-xs text-slate-400">Bài cũ không bị thay đổi. Bài mới sẽ có permalink và tương tác riêng.</p>
           </div>
           <button type="button" onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-slate-100">
             <X size={17} />
@@ -163,7 +199,7 @@ export function RepostPostModal({
 
         <div className="space-y-5">
           <label className="block text-sm font-bold">
-            Facebook Page
+            Facebook Page đăng bài mới
             <select
               value={selectedChannelId}
               onChange={(event) => setSelectedChannelId(event.target.value)}
@@ -190,38 +226,55 @@ export function RepostPostModal({
             />
           </label>
 
-          {(post.mediaUrl || post.mediaThumbnailUrl) && (
-            <div>
-              <p className="mb-2 text-sm font-bold">Media bài cũ để tham khảo</p>
-              <PostMedia post={post} />
-            </div>
-          )}
-
           <div>
-            <p className="text-sm font-bold">Media mới</p>
+            <p className="text-sm font-bold">Media sẽ đăng lại</p>
+            {selectedMedia.length > 0 ? (
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                {selectedMedia.map((media, index) => (
+                  <div key={media.id || media.fileUrl + index} className="relative overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                    {media.mimeType.startsWith('video/') ? (
+                      <video src={resolveMediaUrl(media.fileUrl)} controls className="h-36 w-full bg-slate-950 object-contain" />
+                    ) : (
+                      <img src={resolveMediaUrl(media.fileUrl)} alt={'Media đăng lại ' + (index + 1)} className="h-36 w-full object-contain" />
+                    )}
+                    <div className="flex items-center justify-between gap-2 px-3 py-2 text-xs">
+                      <span className="truncate font-semibold text-slate-600">
+                        {media.source === 'OLD' ? 'Media cũ' : media.fileName + ' (' + formatFileSize(media.fileSize) + ')'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => removeMedia(media.id || media.fileUrl)}
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-rose-50 hover:text-rose-600"
+                        aria-label="Xóa media"
+                      >
+                        <X size={15} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-2 text-xs text-slate-500">Chưa có media. Bạn có thể chọn thêm bên dưới.</p>
+            )}
+
+            <p className="mt-5 text-sm font-bold">Thêm media mới</p>
             <div className="mt-3 grid gap-3 sm:grid-cols-3">
-              <MediaOption active={selectedMediaType === 'NONE'} icon={<LinkIcon size={16} />} label="Không media" onClick={resetMedia} />
+              <MediaOption active={newMediaType === 'NONE'} icon={<LinkIcon size={16} />} label="Không thêm" onClick={resetMedia} />
               <MediaOption
-                active={selectedMediaType === 'IMAGE'}
+                active={newMediaType === 'IMAGE'}
                 icon={<Image size={16} />}
                 label="Ảnh"
-                onClick={() => {
-                  setSelectedMediaType('IMAGE')
-                  setUploadedMedia(null)
-                }}
+                onClick={() => setNewMediaType('IMAGE')}
               />
               <MediaOption
-                active={selectedMediaType === 'VIDEO'}
+                active={newMediaType === 'VIDEO'}
                 icon={<Video size={16} />}
                 label="Video"
-                onClick={() => {
-                  setSelectedMediaType('VIDEO')
-                  setUploadedMedia(null)
-                }}
+                onClick={() => setNewMediaType('VIDEO')}
               />
             </div>
 
-            {selectedMediaType !== 'NONE' && (
+            {newMediaType !== 'NONE' && (
               <div className="mt-4 space-y-3">
                 <label className="flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-center hover:bg-slate-100">
                   <Upload size={20} className="text-violet-700" />
@@ -231,27 +284,13 @@ export function RepostPostModal({
                   <span className="mt-1 text-xs text-slate-500">JPG, PNG, WebP, MP4, MOV hoặc WebM.</span>
                   <input
                     type="file"
-                    accept={selectedMediaType === 'IMAGE' ? 'image/jpeg,image/png,image/webp' : 'video/mp4,video/quicktime,video/webm'}
+                    accept={newMediaType === 'IMAGE' ? 'image/jpeg,image/png,image/webp' : 'video/mp4,video/quicktime,video/webm'}
+                    multiple={newMediaType === 'IMAGE'}
                     onChange={(event) => void handleMediaFileChange(event)}
                     disabled={isUploadingMedia}
                     className="hidden"
                   />
                 </label>
-
-                {uploadedMedia && (
-                  <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-                    <span className="min-w-0 truncate font-semibold">
-                      {uploadedMedia.originalFilename} ({formatFileSize(uploadedMedia.size)})
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setUploadedMedia(null)}
-                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg hover:bg-emerald-100"
-                    >
-                      <X size={15} />
-                    </button>
-                  </div>
-                )}
 
                 <div className="flex items-center gap-3">
                   <div className="h-px flex-1 bg-slate-200" />
@@ -262,12 +301,11 @@ export function RepostPostModal({
                   value={mediaUrl}
                   onChange={(event) => {
                     setMediaUrl(event.target.value)
-                    setUploadedMedia(null)
                   }}
                   className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-violet-500"
-                  placeholder={selectedMediaType === 'IMAGE' ? 'https://.../anh.jpg' : 'https://.../video.mp4'}
+                  placeholder={newMediaType === 'IMAGE' ? 'https://.../anh.jpg' : 'https://.../video.mp4'}
                 />
-                <MediaPreview mediaType={selectedMediaType} mediaUrl={uploadedMedia?.mediaUrl || mediaUrl} />
+                <MediaPreview mediaType={newMediaType} mediaUrl={mediaUrl} />
               </div>
             )}
           </div>
@@ -279,12 +317,30 @@ export function RepostPostModal({
             className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 text-sm font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             {isPublishing ? <CheckCircle2 size={16} /> : <Send size={16} />}
-            {isPublishing ? 'Đang đăng lại...' : 'Đăng lại thành bài mới'}
+            {isPublishing ? 'Đang tạo bài mới...' : 'Tạo bài mới và đăng'}
           </button>
         </div>
       </form>
     </div>
   )
+}
+
+function getPostMedia(post: AppPost): RepostMedia[] {
+  const urls = post.mediaUrls?.length > 0
+    ? post.mediaUrls
+    : post.mediaUrl
+      ? [post.mediaUrl]
+      : []
+  const isVideo = post.mediaType?.toLowerCase().includes('video')
+
+  return urls.map((fileUrl, index) => ({
+    id: post.mediaIds?.[index] ?? '',
+    fileUrl,
+    fileName: 'Media cũ ' + (index + 1),
+    mimeType: isVideo ? 'video/mp4' : 'image/jpeg',
+    fileSize: 0,
+    source: 'OLD' as const,
+  }))
 }
 
 function MediaOption({

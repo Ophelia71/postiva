@@ -13,4 +13,5 @@ public interface SocialAccountRepository extends JpaRepository<SocialAccount, UU
     Optional<SocialAccount> findByIdAndUserIdAndDisconnectedAtIsNull(UUID id, UUID userId);
     Optional<SocialAccount> findByIdAndDisconnectedAtIsNull(UUID id);
     Optional<SocialAccount> findByUserIdAndProviderAndPageId(UUID userId, Platform provider, String pageId);
+    List<SocialAccount> findByProvider(Platform provider);
 }

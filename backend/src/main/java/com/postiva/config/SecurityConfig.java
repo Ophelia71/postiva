@@ -42,7 +42,21 @@ public class SecurityConfig {
                         .requestMatchers("/error").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/templates/**", "/api/files/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/social/meta/callback").permitAll()
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/social/meta/callback",
+                                "/api/social/threads/callback",
+                                "/api/social/instagram/callback").permitAll()
+                        .requestMatchers(HttpMethod.POST,
+                                "/api/social/meta/deauthorize",
+                                "/api/social/meta/delete-data",
+                                "/api/social/instagram/deauthorize",
+                                "/api/social/instagram/delete-data",
+                                "/api/social/threads/deauthorize",
+                                "/api/social/threads/delete-data").permitAll()
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/social/meta/delete-data/status/*",
+                                "/api/social/instagram/delete-data/status/*",
+                                "/api/social/threads/delete-data/status/*").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();

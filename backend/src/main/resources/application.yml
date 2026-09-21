@@ -34,11 +34,21 @@ postiva:
     app-secret: ${META_APP_SECRET:}
     api-version: ${META_API_VERSION:v26.0}
     redirect-uri: ${META_REDIRECT_URI:http://localhost:8080/api/social/meta/callback}
+  threads:
+    app-id: ${THREADS_APP_ID:}
+    app-secret: ${THREADS_APP_SECRET:}
+    redirect-uri: ${THREADS_REDIRECT_URI:https://localhost:8080/api/social/threads/callback}
+  instagram:
+    app-id: ${INSTAGRAM_APP_ID:}
+    app-secret: ${INSTAGRAM_APP_SECRET:}
+    api-version: ${INSTAGRAM_API_VERSION:v26.0}
+    redirect-uri: ${INSTAGRAM_REDIRECT_URI:https://localhost:8080/api/social/instagram/callback}
   security:
     jwt-secret: ${POSTIVA_JWT_SECRET:change-this-development-jwt-secret-before-deploying}
     jwt-expiration-seconds: ${POSTIVA_JWT_EXPIRATION_SECONDS:604800}
     token-encryption-key: ${POSTIVA_TOKEN_ENCRYPTION_KEY:}
   storage:
     upload-dir: ${POSTIVA_UPLOAD_DIR:uploads/images}
+    public-base-url: ${POSTIVA_PUBLIC_BASE_URL:}
   scheduler:
     publish-delay-ms: ${POSTIVA_PUBLISH_DELAY_MS:10000}

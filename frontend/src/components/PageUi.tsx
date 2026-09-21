@@ -80,6 +80,8 @@ export function PlatformBadge({ platform }: { platform: string }) {
   const className =
     platform === 'TikTok'
       ? 'bg-slate-950 text-white'
+      : platform === 'Threads'
+        ? 'bg-slate-900 text-white'
       : platform === 'Instagram'
         ? 'bg-pink-100 text-pink-700'
         : 'bg-blue-100 text-blue-700'

@@ -73,7 +73,7 @@ public class FacebookBusinessPostService {
                 ? publishingService.publishNow(new PublishNowRequest(post.getId(), account.getId(), Platform.FACEBOOK))
                 : publishingService.schedule(new SchedulePostRequest(
                         post.getId(), account.getId(), Platform.FACEBOOK, toLocalTime(request.scheduledTime())));
-        return new FacebookBusinessPostResponse(post.getId(), scheduled.id(), scheduled.status().name());
+        return new FacebookBusinessPostResponse(post.getId(), scheduled.id(), scheduled.status().name(), scheduled.lastError());
     }
 
     private GeneratedPost createPost(UUID userId, FacebookBusinessPostRequest request) {

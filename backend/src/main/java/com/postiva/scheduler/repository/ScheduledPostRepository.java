@@ -18,6 +18,8 @@ public interface ScheduledPostRepository extends JpaRepository<ScheduledPost, UU
 
     List<ScheduledPost> findBySocialAccountIdAndStatus(UUID socialAccountId, ScheduledPostStatus status);
 
+    List<ScheduledPost> findByPostId(UUID postId);
+
     @Query("""
             select scheduled from ScheduledPost scheduled
             where scheduled.socialAccountId in (

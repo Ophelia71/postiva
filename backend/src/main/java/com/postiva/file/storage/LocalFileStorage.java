@@ -17,7 +17,10 @@ import java.util.UUID;
 @Component
 public class LocalFileStorage {
     private static final long MAX_SIZE = 10L * 1024L * 1024L;
-    private static final Set<String> ALLOWED_TYPES = Set.of("image/jpeg", "image/png", "image/webp");
+    private static final Set<String> ALLOWED_TYPES = Set.of(
+            "image/jpeg", "image/png", "image/webp",
+            "video/mp4", "video/quicktime", "video/webm"
+    );
     private final Path uploadRoot;
 
     public LocalFileStorage(@Value("${postiva.storage.upload-dir}") String uploadDir) {
@@ -26,14 +29,14 @@ public class LocalFileStorage {
 
     public StoredImage store(MultipartFile file) {
         if (file == null || file.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Bạn chưa chọn ảnh");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Bạn chưa chọn file media");
         }
         if (file.getSize() > MAX_SIZE) {
-            throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "Ảnh không được vượt quá 10 MB");
+            throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "Ảnh/video không được vượt quá 10 MB");
         }
         String mimeType = normalize(file.getContentType());
         if (!ALLOWED_TYPES.contains(mimeType)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chỉ hỗ trợ ảnh JPG, PNG hoặc WebP");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chỉ hỗ trợ ảnh JPG/PNG/WebP hoặc video MP4/MOV/WebM");
         }
 
         String storedName = UUID.randomUUID() + extension(mimeType);
@@ -42,7 +45,7 @@ public class LocalFileStorage {
             Files.createDirectories(uploadRoot);
             Files.copy(file.getInputStream(), target);
         } catch (IOException exception) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Không thể lưu ảnh", exception);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Không thể lưu file media", exception);
         }
         String originalName = file.getOriginalFilename() == null ? "product-image" : file.getOriginalFilename();
         return new StoredImage(storedName, originalName, mimeType, file.getSize());
@@ -77,6 +80,9 @@ public class LocalFileStorage {
             case "image/jpeg" -> ".jpg";
             case "image/png" -> ".png";
             case "image/webp" -> ".webp";
+            case "video/mp4" -> ".mp4";
+            case "video/quicktime" -> ".mov";
+            case "video/webm" -> ".webm";
             default -> "";
         };
     }

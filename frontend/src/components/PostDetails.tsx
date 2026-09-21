@@ -47,7 +47,7 @@ export function PostThumbnail({ post, className = 'h-20 w-20' }: { post: AppPost
   return (
     <img
       src={thumbnailUrl}
-      alt={post.mediaTitle || (isVideo ? 'Thumbnail video Facebook' : 'Ảnh bài đăng Facebook')}
+      alt={post.mediaTitle || (isVideo ? `Thumbnail video ${post.platform}` : `Ảnh bài đăng ${post.platform}`)}
       className={`${className} shrink-0 rounded-lg border border-slate-200 bg-slate-100 object-cover`}
       referrerPolicy="no-referrer"
     />
@@ -71,7 +71,7 @@ export function PostMedia({ post, showMediaGallery = false }: { post: AppPost; s
       {isVideo ? (
         facebookEmbedUrl ? (
           <iframe
-            title={post.mediaTitle || 'Facebook video'}
+            title={post.mediaTitle || `${post.platform} video`}
             src={facebookEmbedUrl}
             className="h-[405px] w-full bg-slate-950"
             allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
@@ -89,11 +89,11 @@ export function PostMedia({ post, showMediaGallery = false }: { post: AppPost; s
           <div className="relative bg-slate-950">
             <img
               src={thumbnailUrl}
-              alt={post.mediaTitle || 'Thumbnail video Facebook'}
+              alt={post.mediaTitle || `Thumbnail video ${post.platform}`}
               className="mx-auto h-auto max-h-72 max-w-full object-contain opacity-80"
             />
             <div className="absolute inset-x-0 bottom-0 bg-slate-950/75 px-3 py-2 text-xs font-semibold text-white">
-              Video này chưa có nguồn phát từ Facebook. Mở trên Facebook để nghe tiếng.
+              Video này chưa có nguồn phát trực tiếp. Mở trên {post.platform} để xem đầy đủ.
             </div>
           </div>
         )
@@ -222,7 +222,10 @@ export function PostDetailModal({
     error: commentsError,
     reload: reloadComments,
   } = useAppDataResource<AppComment[]>(`/app-data/posts/${post.id}/comments`)
-  useFacebookCommentsRealtimeRefetch(post.platformPostId, reloadComments)
+  useFacebookCommentsRealtimeRefetch(
+    post.platform.toLowerCase() === 'facebook' ? post.platformPostId : '',
+    reloadComments,
+  )
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 px-4">
@@ -239,7 +242,7 @@ export function PostDetailModal({
               </button>
             )}
             {onRepost && post.status === 'Published' && (
-              <button type="button" onClick={onRepost} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-emerald-50 hover:text-emerald-700" title="Đăng lại">
+              <button type="button" onClick={onRepost} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-emerald-50 hover:text-emerald-700" title="Tạo bài mới từ bài này">
                 <CopyPlus size={16} />
               </button>
             )}
@@ -266,7 +269,7 @@ export function PostDetailModal({
                 className="mt-4 inline-flex items-center gap-2 text-sm font-bold text-violet-700 hover:text-violet-800"
               >
                 <ExternalLink size={15} />
-                Mở trên Facebook
+                 Mở trên {post.platform}
               </a>
             )}
           </div>
@@ -282,6 +285,7 @@ export function PostDetailModal({
             <h3 className="mb-3 text-sm font-bold text-slate-700">Bình luận</h3>
             <CommentList
               comments={comments ?? []}
+              platform={post.platform}
               loading={commentsLoading}
               error={commentsError}
               onReplied={reloadComments}
@@ -295,11 +299,13 @@ export function PostDetailModal({
 
 function CommentList({
   comments,
+  platform,
   loading,
   error,
   onReplied,
 }: {
   comments: AppComment[]
+  platform: string
   loading: boolean
   error: string | null
   onReplied: () => void
@@ -315,7 +321,7 @@ function CommentList({
   if (comments.length === 0) {
     return (
       <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">
-        Chưa có bình luận nào được đồng bộ từ Facebook cho bài này.
+        Chưa có bình luận nào được đồng bộ từ {platform} cho bài này.
       </p>
     )
   }

@@ -34,9 +34,10 @@ public class PromptBuilder {
                 </product_input>
 
                 Quy chuẩn nội dung:
-                - Facebook: nội dung rõ ý, dễ đọc, có CTA tự nhiên và phù hợp bài bán hàng.
-                - Instagram: caption cô đọng, giàu hình ảnh/cảm xúc và phù hợp hành vi đọc trên Instagram.
-                - Threads: ngắn, gần gũi, có góc mở đầu giúp kéo tương tác.
+                - Facebook: nội dung rõ ý, dễ đọc, có CTA tự nhiên, có thể dùng đoạn ngắn và phù hợp bài bán hàng.
+                - Instagram: caption cô đọng, giàu hình ảnh/cảm xúc, tối đa 2.200 ký tự và ưu tiên hashtag có chọn lọc.
+                - Threads: tối đa 500 ký tự, gần gũi như một cuộc trò chuyện, mở đầu gợi tò mò hoặc kéo tương tác; không viết theo giọng quảng cáo cứng.
+                - Không sao chép nguyên văn giữa các nền tảng. Giữ cùng thông điệp nhưng điều chỉnh cách mở đầu, độ dài và nhịp câu theo từng nền tảng.
                 - Hashtag phải bắt đầu bằng #, liên quan trực tiếp đến sản phẩm và không chèn khoảng trắng trong một hashtag.
                 - CTA dùng được ngay, bám sát mục tiêu bài viết.
                 - Gợi ý ảnh phải cụ thể, có thể thực hiện với chính sản phẩm đã mô tả.
