@@ -1,16 +1,74 @@
 services:
+
   postgres:
     image: postgres:16
     container_name: postiva-postgres
+    restart: unless-stopped
+
     environment:
-      POSTGRES_DB: postiva
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: ${POSTIVA_DB_USERNAME}
+      POSTGRES_PASSWORD: ${POSTIVA_DB_PASSWORD}
+      POSTGRES_DB: mydatabase
+
     volumes:
-      - postiva_pgdata:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/init.sql:ro
+
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTIVA_DB_USERNAME} -d mydatabase" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    networks:
+      - my_network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+
+    image: postiva-backend:latest
+    container_name: postiva-backend
+    restart: unless-stopped
+
+    env_file:
+      - ./.env
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    volumes:
+      - postiva_uploads:/app/uploads
+
+    networks:
+      - my_network
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: /api
+
+    image: postiva-frontend:latest
+    container_name: postiva-nginx
+    restart: unless-stopped
+
+    ports:
+      - "80:80"
+
+    depends_on:
+      backend:
+        condition: service_started
+
+    networks:
+      - my_network
 
 volumes:
-  postiva_pgdata:
+  postgres_data:
+  postiva_uploads:
 
+networks:
+  my_network:
+    driver: bridge
