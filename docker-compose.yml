@@ -23,6 +23,7 @@ services:
     networks:
       - my_network
 
+
   backend:
     image: devhoa/postiva-backend:latest
     container_name: postiva-backend
@@ -41,6 +42,7 @@ services:
     networks:
       - my_network
 
+
   frontend:
     image: devhoa/postiva-frontend:latest
     container_name: postiva-nginx
@@ -48,6 +50,11 @@ services:
 
     ports:
       - "80:80"
+      - "443:443"
+
+    volumes:
+      - ./certbot/www:/var/www/certbot:ro
+      - ./certbot/conf:/etc/letsencrypt:ro
 
     depends_on:
       backend:
@@ -56,9 +63,11 @@ services:
     networks:
       - my_network
 
+
 volumes:
   postgres_data:
   postiva_uploads:
+
 
 networks:
   my_network:
