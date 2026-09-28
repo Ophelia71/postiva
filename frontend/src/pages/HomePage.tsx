@@ -39,7 +39,7 @@ const features = [
 
 const testimonials = [
   {
-    quote: 'Postiva giúp đội ngũ nhìn thấy toàn bộ nội dung, lịch đăng và phản hồi khách hàng trong cùng một nhịp làm việc.',
+    quote: 'Postiva giúp đội ngũ nhìn thấy HeHE toàn bộ nội dung, lịch đăng và phản hồi khách hàng trong cùng một nhịp làm việc.',
     name: 'Minh Anh',
     role: 'Founder, Lumen Studio',
   },

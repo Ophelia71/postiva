@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/dev.ps1",
+    "dev": "vite",
     "dev:frontend": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
