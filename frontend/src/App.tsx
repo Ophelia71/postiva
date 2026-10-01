@@ -11,6 +11,7 @@ import { Navigate, NavLink, Route, Routes } from 'react-router-dom'
 import { api } from './lib/api'
 import {
   AUTH_EXPIRED_EVENT,
+  AUTH_STORAGE_KEY,
   clearAuthSession,
   getAuthSession,
   isAuthSession,
@@ -56,7 +57,10 @@ function App() {
       }
 
       try {
-        const response = await api.get<UserResponse>('/auth/me')
+        const response = await api.get<UserResponse>('/auth/me', {
+          headers: { Authorization: `Bearer ${storedSession.token}` },
+        })
+        if (ignore || getAuthSession()?.token !== storedSession.token) return
         const refreshedSession: AuthSession = {
           ...storedSession,
           userId: response.data.id,
@@ -92,8 +96,24 @@ function App() {
 
   useEffect(() => {
     const handleExpiredSession = () => setSession(null)
+    // Remount all account-scoped data when another tab changes the shared session.
+    const handleStorage = (event: StorageEvent) => {
+      if (event.storageArea === window.localStorage
+        && (event.key === AUTH_STORAGE_KEY || event.key === null)) {
+        window.location.reload()
+      }
+    }
+    const handlePageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) window.location.reload()
+    }
     window.addEventListener(AUTH_EXPIRED_EVENT, handleExpiredSession)
-    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, handleExpiredSession)
+    window.addEventListener('storage', handleStorage)
+    window.addEventListener('pageshow', handlePageShow)
+    return () => {
+      window.removeEventListener(AUTH_EXPIRED_EVENT, handleExpiredSession)
+      window.removeEventListener('storage', handleStorage)
+      window.removeEventListener('pageshow', handlePageShow)
+    }
   }, [])
 
   function handleAuthenticated(nextSession: AuthSession) {

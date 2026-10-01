@@ -1,4 +1,4 @@
-const AUTH_STORAGE_KEY = 'postiva.auth'
+export const AUTH_STORAGE_KEY = 'postiva.auth'
 export const AUTH_EXPIRED_EVENT = 'postiva:auth-expired'
 
 export type UserRole = 'USER' | 'ADMIN'
@@ -45,6 +45,12 @@ export function saveAuthSession(session: AuthSession) {
 
 export function clearAuthSession() {
   window.localStorage.removeItem(AUTH_STORAGE_KEY)
+}
+
+export function clearAuthSessionIfTokenMatches(token: string) {
+  if (!token || getAuthToken() !== token) return false
+  clearAuthSession()
+  return true
 }
 
 export function isAuthSession(value: unknown): value is AuthSession {

@@ -107,7 +107,8 @@ class SocialOAuthSecurityTest {
         when(threadsOAuthService.createConnectUrl()).thenReturn(new SocialConnectUrlResponse("https://example.test", "Threads"));
 
         mockMvc.perform(get("/api/social/meta/connect-url"))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("no-store")));
         mockMvc.perform(get("/api/social/instagram/connect-url"))
                 .andExpect(status().isOk());
         mockMvc.perform(get("/api/social/threads/connect-url"))

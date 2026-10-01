@@ -19,6 +19,27 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MetaOAuthStateServiceTest {
     @Test
+    void multipleTabsKeepTheirOriginalUserEvenWhenCompletedOutOfOrder() {
+        MetaOAuthStateService service = new MetaOAuthStateService();
+        UUID userA = UUID.randomUUID();
+        UUID userB = UUID.randomUUID();
+        String tabA = service.issue(userA);
+        String tabB = service.issue(userB);
+        String anotherTabA = service.issue(userA);
+
+        assertEquals(userB, service.consume(tabB));
+        assertEquals(userA, service.consume(anotherTabA));
+        assertEquals(userA, service.consume(tabA));
+        assertBadRequest(() -> service.consume(tabA));
+    }
+
+    @Test
+    void stateIsLostWhenServiceInstanceIsReplaced() {
+        String state = new MetaOAuthStateService().issue(UUID.randomUUID());
+        assertBadRequest(() -> new MetaOAuthStateService().consume(state));
+    }
+
+    @Test
     void validStateReturnsBoundUserAndIsOneTimeUse() {
         MutableClock clock = new MutableClock(Instant.parse("2026-01-01T00:00:00Z"));
         MetaOAuthStateService service = new MetaOAuthStateService(clock, new SecureRandom());

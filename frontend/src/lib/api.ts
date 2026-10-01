@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { AUTH_EXPIRED_EVENT, clearAuthSession, getAuthToken } from './auth'
+import { AUTH_EXPIRED_EVENT, clearAuthSessionIfTokenMatches, getAuthToken } from './auth'
 
 export type ApiResponse<T> = {
   success: boolean
@@ -30,7 +30,7 @@ export const FACEBOOK_SYNC_TIMEOUT_MS = 600000
 
 api.interceptors.request.use((config) => {
   const token = getAuthToken()
-  if (token) {
+  if (token && !config.headers.has('Authorization')) {
     config.headers.Authorization = `Bearer ${token}`
   }
   return config
@@ -38,6 +38,10 @@ api.interceptors.request.use((config) => {
 
 api.interceptors.response.use(
   (response) => {
+    const authorization = String(response.config.headers?.Authorization ?? '')
+    if (authorization.startsWith('Bearer ') && authorization.slice(7) !== getAuthToken()) {
+      return Promise.reject(new ApiResponseError('Phiên đăng nhập đã thay đổi. Vui lòng thử lại.'))
+    }
     if (!isApiResponse(response.data)) {
       return response
     }
@@ -54,8 +58,10 @@ api.interceptors.response.use(
     const requestUrl = axios.isAxiosError(error) ? String(error.config?.url ?? '') : ''
     const isAuthRequest = requestUrl.includes('/auth/login') || requestUrl.includes('/auth/register')
 
-    if (status === 401 && !isAuthRequest) {
-      clearAuthSession()
+    const authorization = axios.isAxiosError(error)
+      ? String(error.config?.headers?.Authorization ?? '') : ''
+    if (status === 401 && !isAuthRequest && authorization.startsWith('Bearer ')
+      && clearAuthSessionIfTokenMatches(authorization.slice(7))) {
       window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT))
     }
 

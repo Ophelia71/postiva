@@ -1,0 +1,17 @@
+# Run locally with --spring.profiles.active=dev; credentials stay in root .env.
+spring:
+  datasource:
+    url: ${POSTIVA_LOCAL_DB_URL:jdbc:postgresql://localhost:5432/postiva}
+
+postiva:
+  frontend-origin: http://localhost:5173
+  cors:
+    allowed-origin-patterns: http://localhost:*,http://127.0.0.1:*
+  meta:
+    redirect-uri: http://localhost:8080/api/social/meta/callback
+  instagram:
+    redirect-uri: ${INSTAGRAM_LOCAL_REDIRECT_URI:http://localhost:8080/api/social/instagram/callback}
+  threads:
+    redirect-uri: ${THREADS_LOCAL_REDIRECT_URI:http://localhost:8080/api/social/threads/callback}
+  storage:
+    public-base-url: ${POSTIVA_LOCAL_PUBLIC_BASE_URL:http://localhost:8080}
