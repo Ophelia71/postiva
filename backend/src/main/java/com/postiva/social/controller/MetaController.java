@@ -17,6 +17,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatusCode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -34,6 +37,8 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/social/meta")
 public class MetaController {
+    private static final Logger log = LoggerFactory.getLogger(MetaController.class);
+
     private final MetaOAuthService oauthService;
     private final SocialAccountService accountService;
     private final FacebookPostSyncService facebookPostSyncService;
@@ -60,12 +65,31 @@ public class MetaController {
     }
 
     @GetMapping("/callback")
-    public ResponseEntity<Void> callback(@RequestParam String code, @RequestParam String state) {
-        int pageCount = oauthService.complete(code, state);
-        URI location = connectionsUri("facebook=connected&pages=" + pageCount);
-        return ResponseEntity.status(HttpStatus.FOUND)
-                .header(HttpHeaders.LOCATION, location.toString())
-                .build();
+    public ResponseEntity<Void> callback(
+            @RequestParam(required = false) String code,
+            @RequestParam(required = false) String state,
+            @RequestParam(required = false) String error
+    ) {
+        if (OAuthCallbackRedirects.isBlank(state)) {
+            return redirect(OAuthCallbackRedirects.error(frontendOrigin, "facebook", "missing_state"));
+        }
+        try {
+            if (!OAuthCallbackRedirects.isBlank(error)) {
+                oauthService.consumeFailedCallbackState(state);
+                return redirect(OAuthCallbackRedirects.error(
+                        frontendOrigin, "facebook", OAuthCallbackRedirects.providerErrorReason(error)));
+            }
+            if (OAuthCallbackRedirects.isBlank(code)) {
+                oauthService.consumeFailedCallbackState(state);
+                return redirect(OAuthCallbackRedirects.error(frontendOrigin, "facebook", "missing_code"));
+            }
+            int pageCount = oauthService.complete(code, state);
+            return redirect(OAuthCallbackRedirects.connectedFacebook(frontendOrigin, pageCount));
+        } catch (RuntimeException exception) {
+            logCallbackFailure(exception);
+            return redirect(OAuthCallbackRedirects.error(
+                    frontendOrigin, "facebook", OAuthCallbackRedirects.failureReason(exception)));
+        }
     }
 
     @GetMapping("/accounts")
@@ -133,7 +157,17 @@ public class MetaController {
         return signedRequestService.getDeletionStatus(Platform.FACEBOOK, confirmationCode);
     }
 
-    private URI connectionsUri(String query) {
-        return URI.create(frontendOrigin.replaceAll("/+$", "") + "/app/connections?" + query);
+    private ResponseEntity<Void> redirect(URI location) {
+        return ResponseEntity.status(HttpStatus.FOUND)
+                .header(HttpHeaders.LOCATION, location.toString())
+                .build();
+    }
+
+    private void logCallbackFailure(RuntimeException exception) {
+        HttpStatusCode status = exception instanceof org.springframework.web.server.ResponseStatusException statusException
+                ? statusException.getStatusCode()
+                : HttpStatus.INTERNAL_SERVER_ERROR;
+        log.warn("Facebook OAuth callback failed with status {} ({})",
+                status.value(), exception.getClass().getSimpleName());
     }
 }

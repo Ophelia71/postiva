@@ -1,5 +1,5 @@
 import { Camera, CheckCircle2, Music, RefreshCw, Smartphone, Trash2 } from 'lucide-react'
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState } from 'react'
 import { FacebookBadge } from '../components/FacebookBadge'
 import { api, FACEBOOK_SYNC_TIMEOUT_MS } from '../lib/api'
 import { type AppChannel, useAppDataResource } from '../lib/appDataApi'
@@ -8,17 +8,18 @@ import { usePreferences } from '../lib/preferences'
 import { PageHeader, PageState } from '../components/PageUi'
 
 const channelTypes = [
-  { title: 'Trang Facebook', type: 'Facebook Page', icon: Smartphone, available: true, oauthPath: '/social/meta/connect-url', manualPath: '/social/meta/facebook/manual', platformKey: 'facebook' },
-  { title: 'Instagram Business', type: 'Instagram Business', icon: Camera, available: true, oauthPath: '/social/instagram/connect-url', manualPath: '/social/instagram/manual', platformKey: 'instagram' },
-  { title: 'Threads Business', type: 'Threads', icon: Music, available: true, oauthPath: '/social/threads/connect-url', manualPath: '/social/threads/manual', platformKey: 'threads' },
+  { title: 'Trang Facebook', type: 'Facebook Page', icon: Smartphone, available: true, oauthPath: '/social/meta/connect-url' },
+  { title: 'Instagram Business', type: 'Instagram Business', icon: Camera, available: true, oauthPath: '/social/instagram/connect-url' },
+  { title: 'Threads Business', type: 'Threads', icon: Music, available: true, oauthPath: '/social/threads/connect-url' },
 ]
 
 type StatusTone = 'info' | 'success' | 'error'
-type ManualSocialPlatform = 'facebook' | 'instagram' | 'threads'
-type ManualSocialForm = {
-  accountId: string
-  accountName: string
-  accessToken: string
+type OAuthPlatform = 'facebook' | 'instagram' | 'threads'
+const oauthPlatforms: OAuthPlatform[] = ['facebook', 'instagram', 'threads']
+const oauthPlatformLabels: Record<OAuthPlatform, string> = {
+  facebook: 'Facebook',
+  instagram: 'Instagram',
+  threads: 'Threads',
 }
 type SocialConnectUrlResponse = {
   url: string | null
@@ -34,31 +35,33 @@ export function ConnectionsPage() {
   const [deletingPageId, setDeletingPageId] = useState<string | null>(null)
   const [syncingPageId, setSyncingPageId] = useState<string | null>(null)
   const [connectingType, setConnectingType] = useState<string | null>(null)
-  const [manualConnectingType, setManualConnectingType] = useState<ManualSocialPlatform | null>(null)
-  const [manualSocialForms, setManualSocialForms] = useState<Record<ManualSocialPlatform, ManualSocialForm>>({
-    facebook: { accountId: '', accountName: '', accessToken: '' },
-    instagram: { accountId: '', accountName: '', accessToken: '' },
-    threads: { accountId: '', accountName: '', accessToken: '' },
-  })
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    const connectedPlatform = params.get('facebook') === 'connected'
-      ? 'Facebook'
-      : params.get('instagram') === 'connected'
-        ? 'Instagram'
-        : params.get('threads') === 'connected' ? 'Threads' : null
-    if (!connectedPlatform) {
+    const callbackPlatform = oauthPlatforms.find((platform) => {
+      const result = params.get(platform)
+      return result === 'connected' || result === 'error'
+    })
+    if (!callbackPlatform) {
       return
     }
 
-    const pageCount = Number(params.get('pages'))
-    setConnectStatusTone('success')
-    setConnectStatus(connectedPlatform === 'Facebook' && Number.isFinite(pageCount)
-      ? `${t('Đã kết nối Facebook')} (${pageCount} ${t('trang')}).`
-      : `${t('Đã kết nối')} ${connectedPlatform}.`)
+    const callbackResult = params.get(callbackPlatform)
+    const platformLabel = oauthPlatformLabels[callbackPlatform]
+    if (callbackResult === 'connected') {
+      const pageCountValue = params.get('pages')
+      const pageCount = pageCountValue === null ? null : Number(pageCountValue)
+      setConnectStatusTone('success')
+      setConnectStatus(callbackPlatform === 'facebook' && pageCount !== null && Number.isFinite(pageCount)
+        ? `${t('Đã kết nối Facebook')} (${pageCount} ${t('trang')}).`
+        : `${t('Đã kết nối')} ${platformLabel}.`)
+      reload()
+    } else {
+      setConnectStatusTone('error')
+      setConnectStatus(`${t('Không thể kết nối')} ${platformLabel}. ${oauthErrorMessage(params.get('reason'), t)}`)
+    }
     window.history.replaceState({}, '', window.location.pathname + window.location.hash)
-  }, [t])
+  }, [reload, t])
 
   if (loading) {
     return <PageState title={t('Đang tải kênh kết nối...', )} />
@@ -110,65 +113,6 @@ export function ConnectionsPage() {
       setConnectStatusTone('error')
       setConnectStatus(getErrorMessage(error, `Không thể mở kết nối ${type}.`))
       setConnectingType(null)
-    }
-  }
-
-  function updateManualSocialForm(platform: ManualSocialPlatform, field: keyof ManualSocialForm, value: string) {
-    setManualSocialForms((current) => ({
-      ...current,
-      [platform]: {
-        ...current[platform],
-        [field]: value,
-      },
-    }))
-  }
-
-  async function handleManualSocialConnect(
-    event: FormEvent<HTMLFormElement>,
-    platform: ManualSocialPlatform,
-    title: string,
-    path: string,
-  ) {
-    event.preventDefault()
-    const form = manualSocialForms[platform]
-    const accountId = form.accountId.trim()
-    const accountName = form.accountName.trim()
-    const accessToken = form.accessToken.trim()
-
-    if (!accessToken) {
-      setConnectStatusTone('error')
-      setConnectStatus(t('Mã kết nối là bắt buộc.'))
-      return
-    }
-
-    if (platform === 'facebook' && (!accountId || !accountName)) {
-      setConnectStatusTone('error')
-      setConnectStatus(t('ID trang và tên trang Facebook là bắt buộc.'))
-      return
-    }
-
-    setManualConnectingType(platform)
-    setConnectStatusTone('info')
-    setConnectStatus(`${t('Đang kết nối')} ${title}...`)
-
-    try {
-      const payload = platform === 'facebook'
-        ? { pageId: accountId, pageName: accountName, pageAccessToken: accessToken }
-        : { accountId: accountId || null, accountName: accountName || null, accessToken }
-
-      await api.post(path, payload)
-      setConnectStatusTone('success')
-      setConnectStatus(`${t('Đã kết nối')} ${title}.`)
-      setManualSocialForms((current) => ({
-        ...current,
-        [platform]: { accountId: '', accountName: '', accessToken: '' },
-      }))
-      reload()
-    } catch (error) {
-      setConnectStatusTone('error')
-      setConnectStatus(getErrorMessage(error, `Không thể kết nối ${title}.`))
-    } finally {
-      setManualConnectingType(null)
     }
   }
 
@@ -307,9 +251,6 @@ export function ConnectionsPage() {
           const count = type.available
             ? connectedChannels.filter((channel) => channel.type === type.type).length
             : 0
-          const platformKey = type.platformKey as ManualSocialPlatform | undefined
-          const manualForm = platformKey ? manualSocialForms[platformKey] : null
-
           return (
             <div key={type.title} className="rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] p-4 shadow-sm">
               <div className="mb-4 flex items-center justify-between">
@@ -320,60 +261,17 @@ export function ConnectionsPage() {
               <p className={`mt-2 text-xs font-semibold ${type.available && count > 0 ? 'text-emerald-600' : 'text-[var(--muted-text)]'}`}>
                 {type.available ? (count > 0 ? `${count} ${t('kết nối')}` : t('Chưa kết nối')) : t('Sắp ra mắt')}
               </p>
-              {type.manualPath && platformKey && manualForm && (
-                <form
-                  className="mt-4 space-y-3"
-                  onSubmit={(event) => void handleManualSocialConnect(event, platformKey, type.title, type.manualPath)}
-                  autoComplete="off"
-                >
-                  <input
-                    name={`${platformKey}-page-id`}
-                    value={manualForm.accountId}
-                    onChange={(event) => updateManualSocialForm(platformKey, 'accountId', event.target.value)}
-                    placeholder={t('ID trang')}
-                    autoComplete="off"
-                    inputMode="numeric"
-                    className="h-9 w-full rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] px-3 text-xs outline-none focus:border-blue-500"
-                    required={platformKey === 'facebook'}
-                  />
-                  <input
-                    name={`${platformKey}-page-name`}
-                    value={manualForm.accountName}
-                    onChange={(event) => updateManualSocialForm(platformKey, 'accountName', event.target.value)}
-                    placeholder={t('Tên trang')}
-                    autoComplete="off"
-                    className="h-9 w-full rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] px-3 text-xs outline-none focus:border-blue-500"
-                    required={platformKey === 'facebook'}
-                  />
-                  <input
-                    type="password"
-                    name={`${platformKey}-access-token`}
-                    value={manualForm.accessToken}
-                    onChange={(event) => updateManualSocialForm(platformKey, 'accessToken', event.target.value)}
-                    placeholder={t('Mã truy cập')}
-                    autoComplete="new-password"
-                    data-lpignore="true"
-                    data-1p-ignore="true"
-                    className="h-9 w-full rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] px-3 text-xs outline-none focus:border-blue-500"
-                    required
-                  />
-                  <button
-                    type="submit"
-                    disabled={manualConnectingType === platformKey}
-                    className="h-9 w-full rounded-lg bg-blue-600 px-3 text-xs font-bold text-white hover:bg-blue-700 disabled:bg-slate-300"
-                  >
-                    {manualConnectingType === platformKey ? t('Đang kết nối') : t('Kết nối bằng mã')}
-                  </button>
-                </form>
-              )}
+              <p className="mt-4 text-xs leading-5 text-[var(--muted-text)]">
+                {t('Đăng nhập và cấp quyền trực tiếp. Bạn không cần tự lấy hoặc nhập access token.')}
+              </p>
               {type.oauthPath && (
                 <button
                   type="button"
                   onClick={() => void handleOAuthConnect(type.title, type.oauthPath)}
                   disabled={connectingType === type.title}
-                  className="mt-3 h-9 w-full rounded-lg border border-[var(--app-border)] px-3 text-xs font-bold text-[var(--muted-text)] hover:bg-[var(--soft-bg)] disabled:bg-slate-100"
+                  className="mt-3 h-9 w-full rounded-lg bg-blue-600 px-3 text-xs font-bold text-white hover:bg-blue-700 disabled:bg-slate-300"
                 >
-                  {connectingType === type.title ? t('Đang mở OAuth') : t('Kết nối OAuth')}
+                  {connectingType === type.title ? t('Đang chuyển hướng...') : `${t('Kết nối với')} ${type.title}`}
                 </button>
               )}
             </div>
@@ -407,4 +305,22 @@ function getStatusClassName(tone: StatusTone) {
   }
 
   return 'border border-[var(--app-border)] bg-[var(--soft-bg)] text-[var(--muted-text)]'
+}
+
+function oauthErrorMessage(reason: string | null, t: (vi: string, en?: string) => string) {
+  switch (reason) {
+    case 'access_denied':
+      return t('Bạn đã hủy hoặc từ chối cấp quyền. Hãy thử lại khi sẵn sàng.')
+    case 'missing_state':
+    case 'invalid_state':
+      return t('Phiên kết nối không hợp lệ hoặc đã hết hạn. Vui lòng bắt đầu lại.')
+    case 'missing_code':
+      return t('Nhà cung cấp không trả về mã xác thực. Vui lòng thử lại.')
+    case 'provider_error':
+      return t('Nhà cung cấp từ chối yêu cầu kết nối. Vui lòng thử lại.')
+    case 'no_pages':
+      return t('Không tìm thấy Facebook Page có quyền kết nối. Hãy kiểm tra quyền quản lý Trang rồi thử lại.')
+    default:
+      return t('Đã xảy ra lỗi khi hoàn tất OAuth. Vui lòng thử lại.')
+  }
 }

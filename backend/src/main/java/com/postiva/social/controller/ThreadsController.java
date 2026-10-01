@@ -13,6 +13,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatusCode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -27,6 +30,8 @@ import java.net.URI;
 @RestController
 @RequestMapping("/api/social/threads")
 public class ThreadsController {
+    private static final Logger log = LoggerFactory.getLogger(ThreadsController.class);
+
     private final ThreadsOAuthService oauthService;
     private final SocialAccountService accountService;
     private final MetaSignedRequestService signedRequestService;
@@ -48,12 +53,31 @@ public class ThreadsController {
     }
 
     @GetMapping("/callback")
-    public ResponseEntity<Void> callback(@RequestParam String code, @RequestParam String state) {
-        oauthService.complete(code, state);
-        URI location = connectionsUri("threads=connected");
-        return ResponseEntity.status(HttpStatus.FOUND)
-                .header(HttpHeaders.LOCATION, location.toString())
-                .build();
+    public ResponseEntity<Void> callback(
+            @RequestParam(required = false) String code,
+            @RequestParam(required = false) String state,
+            @RequestParam(required = false) String error
+    ) {
+        if (OAuthCallbackRedirects.isBlank(state)) {
+            return redirect(OAuthCallbackRedirects.error(frontendOrigin, "threads", "missing_state"));
+        }
+        try {
+            if (!OAuthCallbackRedirects.isBlank(error)) {
+                oauthService.consumeFailedCallbackState(state);
+                return redirect(OAuthCallbackRedirects.error(
+                        frontendOrigin, "threads", OAuthCallbackRedirects.providerErrorReason(error)));
+            }
+            if (OAuthCallbackRedirects.isBlank(code)) {
+                oauthService.consumeFailedCallbackState(state);
+                return redirect(OAuthCallbackRedirects.error(frontendOrigin, "threads", "missing_code"));
+            }
+            oauthService.complete(code, state);
+            return redirect(OAuthCallbackRedirects.connected(frontendOrigin, "threads"));
+        } catch (RuntimeException exception) {
+            logCallbackFailure(exception);
+            return redirect(OAuthCallbackRedirects.error(
+                    frontendOrigin, "threads", OAuthCallbackRedirects.failureReason(exception)));
+        }
     }
 
     @PostMapping("/manual")
@@ -86,8 +110,18 @@ public class ThreadsController {
         return signedRequestService.getDeletionStatus(Platform.THREADS, confirmationCode);
     }
 
-    private URI connectionsUri(String query) {
-        return URI.create(frontendOrigin.replaceAll("/+$", "") + "/app/connections?" + query);
+    private ResponseEntity<Void> redirect(URI location) {
+        return ResponseEntity.status(HttpStatus.FOUND)
+                .header(HttpHeaders.LOCATION, location.toString())
+                .build();
+    }
+
+    private void logCallbackFailure(RuntimeException exception) {
+        HttpStatusCode status = exception instanceof org.springframework.web.server.ResponseStatusException statusException
+                ? statusException.getStatusCode()
+                : HttpStatus.INTERNAL_SERVER_ERROR;
+        log.warn("Threads OAuth callback failed with status {} ({})",
+                status.value(), exception.getClass().getSimpleName());
     }
 
     private MetaSignedRequestService.DataDeletionResponse deletionResponse(

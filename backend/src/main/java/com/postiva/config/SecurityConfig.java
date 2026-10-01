@@ -73,7 +73,23 @@ public class SecurityConfig {
                         )
                         .permitAll()
                         .requestMatchers(
+                                HttpMethod.GET,
                                 "/api/social/meta/callback",
+                                "/api/social/instagram/callback",
+                                "/api/social/threads/callback"
+                        )
+                        .permitAll()
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/social/meta/deauthorize",
+                                "/api/social/meta/delete-data",
+                                "/api/social/instagram/deauthorize",
+                                "/api/social/instagram/delete-data",
+                                "/api/social/threads/deauthorize",
+                                "/api/social/threads/delete-data"
+                        )
+                        .permitAll()
+                        .requestMatchers(
                                 "/error"
                         )
                         .permitAll()

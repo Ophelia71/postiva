@@ -1,9 +1,9 @@
 server:
-  port: 8080
+  port: ${SERVER_PORT:8080}
 
 spring:
   config:
-    import: optional:file:.env[.properties]
+    import: optional:file:../.env[.properties]
 
   application:
     name: postiva-backend
@@ -11,7 +11,7 @@ spring:
   datasource:
     url: ${POSTIVA_DB_URL:jdbc:postgresql://localhost:5432/postiva}
     username: ${POSTIVA_DB_USERNAME:postgres}
-    password: ${POSTIVA_DB_PASSWORD:postgres}
+    password: ${POSTIVA_DB_PASSWORD:devhoa}
 
   jpa:
     hibernate:
@@ -47,6 +47,8 @@ spring:
 
 postiva:
   frontend-origin: ${POSTIVA_FRONTEND_ORIGIN:http://localhost:5173}
+  cors:
+    allowed-origin-patterns: ${POSTIVA_CORS_ALLOWED_ORIGIN_PATTERNS:}
 
   openai:
     api-key: ${OPENAI_API_KEY:}
@@ -88,5 +90,5 @@ postiva:
 
 app:
   jwt:
-    secret: 404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
+    secret: ${POSTIVA_JWT_SECRET}
     expiration: 86400000 

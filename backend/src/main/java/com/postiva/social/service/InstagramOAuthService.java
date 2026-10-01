@@ -42,8 +42,9 @@ public class InstagramOAuthService {
     }
 
     public SocialConnectUrlResponse createConnectUrl() {
-        if (appId == null || appId.isBlank()) {
-            return new SocialConnectUrlResponse(null, "Chưa cấu hình INSTAGRAM_APP_ID");
+        String configurationError = configurationError();
+        if (configurationError != null) {
+            return new SocialConnectUrlResponse(null, configurationError);
         }
         String state = stateService.issue(currentUserService.requireCurrentUserId());
         String url = "https://www.instagram.com/oauth/authorize"
@@ -58,8 +59,8 @@ public class InstagramOAuthService {
     }
 
     public void complete(String code, String state) {
-        requireConfiguration();
         UUID userId = stateService.consume(state);
+        requireConfiguration();
         InstagramGraphClient.OAuthToken shortToken = graphClient.exchangeCode(appId, appSecret, redirectUri, code);
         InstagramGraphClient.OAuthToken token = graphClient.exchangeLongLived(appSecret, shortToken.accessToken());
         InstagramGraphClient.InstagramProfile profile = graphClient.getMe(token.accessToken());
@@ -70,10 +71,34 @@ public class InstagramOAuthService {
                 userId, accountId, profile.username(), profile.accountType(), profile.apiMode(), token.accessToken(), expiresAt);
     }
 
+    public void consumeFailedCallbackState(String state) {
+        stateService.consume(state);
+    }
+
     private void requireConfiguration() {
-        if (appId == null || appId.isBlank() || appSecret == null || appSecret.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Chưa cấu hình Instagram App ID/App Secret");
+        String configurationError = configurationError();
+        if (configurationError != null) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, configurationError);
         }
+    }
+
+    private String configurationError() {
+        if (appId == null || appId.isBlank()) {
+            return "Chưa cấu hình INSTAGRAM_APP_ID";
+        }
+        if (!appId.matches("[0-9]+")) {
+            return "INSTAGRAM_APP_ID phải là App ID dạng số hợp lệ";
+        }
+        if (appSecret == null || appSecret.isBlank()) {
+            return "Chưa cấu hình INSTAGRAM_APP_SECRET";
+        }
+        if (appSecret.equalsIgnoreCase("your_instagram_app_secret")) {
+            return "INSTAGRAM_APP_SECRET vẫn là giá trị placeholder";
+        }
+        if (redirectUri == null || redirectUri.isBlank()) {
+            return "Chưa cấu hình INSTAGRAM_REDIRECT_URI";
+        }
+        return null;
     }
 
     private String encode(String value) {
