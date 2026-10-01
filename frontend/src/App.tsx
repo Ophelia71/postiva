@@ -25,6 +25,7 @@ import { CreatePostPage } from './pages/CreatePostPage'
 import { HomePage } from './pages/HomePage'
 import { ReportsPage } from './pages/ReportsPage'
 import { SchedulePage } from './pages/SchedulePage'
+import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage'
 
 const navItems = [
   { to: '/app/schedule', label: 'Lịch đăng', icon: CalendarDays },
@@ -40,6 +41,15 @@ type UserResponse = {
 }
 
 function App() {
+  return (
+    <Routes>
+      <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+      <Route path="*" element={<SessionApp />} />
+    </Routes>
+  )
+}
+
+function SessionApp() {
   const [session, setSession] = useState<AuthSession | null>(() => getAuthSession())
   const [isSessionReady, setIsSessionReady] = useState(false)
 
