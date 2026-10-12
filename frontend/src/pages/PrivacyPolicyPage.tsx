@@ -18,12 +18,12 @@ const sections: { id: string; title: string; content: ReactNode }[] = [
       <h3>Account information</h3>
       <p>When you create a Postiva account, we collect your name, email address, and authentication information required to access Postiva. Passwords are stored as hashes, not in plaintext.</p>
       <h3>Social media account information</h3>
-      <p>When you connect Facebook, Instagram, or Threads through OAuth, Postiva may receive information you authorize the provider to share. Depending on the provider and permissions granted, this may include:</p>
+      <p>When you connect Facebook, Instagram, or Threads by entering an access token, Postiva may receive information available to that token. Depending on the provider and permissions granted, this may include:</p>
       <ul>
         <li>Provider user/account ID and Page or professional account ID</li>
         <li>Page/account name and username</li>
         <li>Permissions granted to Postiva</li>
-        <li>OAuth access tokens and access-token expiration information</li>
+        <li>Access tokens and expiration information, when available</li>
         <li>Information required to publish content to the connected account</li>
       </ul>
       <p>Postiva does not ask you to manually provide your social media passwords.</p>
@@ -32,9 +32,9 @@ const sections: { id: string; title: string; content: ReactNode }[] = [
     </>,
   },
   {
-    id: 'oauth', title: 'OAuth Access Tokens', content: <>
-      <p>Postiva uses OAuth authorization provided by supported social media platforms. You are redirected to the provider to authenticate and approve requested permissions.</p>
-      <p>Postiva does not receive your Facebook, Instagram, or Threads password. OAuth access tokens received by the backend are encrypted before being stored and are not intentionally exposed through the Postiva frontend.</p>
+    id: 'social-tokens', title: 'Social Media Access Tokens', content: <>
+      <p>You can enter an account ID, account name, and access token to connect a supported social media account. Postiva verifies the token and account ID with the provider before saving the connection.</p>
+      <p>Postiva does not receive your Facebook, Instagram, or Threads password. Access tokens are encrypted before being stored and are not returned to the frontend after connection.</p>
     </>,
   },
   {
@@ -58,8 +58,8 @@ const sections: { id: string; title: string; content: ReactNode }[] = [
   },
   {
     id: 'security', title: 'Data Storage and Security', content: <>
-      <p>Postiva applies technical measures intended to protect user information. OAuth access tokens are encrypted before persistent storage. Sensitive credentials, such as provider application secrets, are maintained on the server side and are not intentionally exposed to the browser.</p>
-      <p>Postiva stores its sign-in session in your browser’s local storage so you can remain signed in. Social media providers manage their own sign-in sessions when you authorize a connection.</p>
+      <p>Postiva applies technical measures intended to protect user information. Social media access tokens are encrypted before persistent storage. Sensitive credentials, such as provider application secrets, are maintained on the server side and are not intentionally exposed to the browser.</p>
+      <p>Postiva stores its sign-in session in your browser’s local storage so you can remain signed in. Social media providers control the validity and permissions of their access tokens.</p>
       <p>No system can guarantee absolute security. Please protect access to your Postiva account.</p>
     </>,
   },

@@ -72,13 +72,17 @@ public class SocialAccountService {
     public SocialAccountResponse connectManual(ManualFacebookConnectRequest request) {
         UUID userId = currentUserService.requireCurrentUserId();
         String pageId = request.pageId().trim();
+        String pageName = request.pageName().trim();
         String accessToken = request.pageAccessToken().trim();
         FacebookGraphClient.FacebookPage profile = facebookGraphClient.getPage(pageId, accessToken);
-        String profileName = trimToNull(profile.name());
+        if (!pageId.equals(trimToNull(profile.id()))) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                    "Page ID không khớp với Facebook Page mà access token có thể truy cập.");
+        }
         return response(saveFacebookPage(
                 userId,
-                profile.id(),
-                profileName == null ? request.pageName().trim() : profileName,
+                pageId,
+                pageName,
                 accessToken,
                 expiresAt(request.expiresInSeconds())
         ));
@@ -87,59 +91,38 @@ public class SocialAccountService {
     @Transactional
     public SocialAccountResponse connectInstagramManual(ManualSocialConnectRequest request) {
         UUID userId = currentUserService.requireCurrentUserId();
+        String accountId = request.accountId().trim();
+        String accountName = request.accountName().trim();
         String accessToken = request.accessToken().trim();
         LocalDateTime expiresAt = expiresAt(request.expiresInSeconds());
-        String accountId = trimToNull(request.accountId());
-        String accountName = trimToNull(request.accountName());
-        String accountType = "";
-
         InstagramGraphClient.InstagramProfile profile = instagramGraphClient.getProfile(accountId, accessToken);
-        String profileId = trimToNull(profile.id());
-        if (profileId != null) {
-            accountId = profileId;
+        if (!accountId.equals(trimToNull(profile.id()))) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                    "Instagram ID không khớp với tài khoản mà access token có thể truy cập.");
         }
-        if (accountName == null) {
-            accountName = trimToNull(profile.username());
-        }
-        accountType = blankToDefault(profile.accountType(), "");
 
         return response(saveInstagramAccount(
-                userId, accountId, accountName, accountType, profile.apiMode(), accessToken, expiresAt));
+                userId, accountId, accountName, profile.accountType(), profile.apiMode(), accessToken, expiresAt));
     }
 
     @Transactional
     public SocialAccountResponse connectThreadsManual(ManualSocialConnectRequest request) {
         UUID userId = currentUserService.requireCurrentUserId();
+        String accountId = request.accountId().trim();
+        String accountName = request.accountName().trim();
         String accessToken = request.accessToken().trim();
         LocalDateTime expiresAt = expiresAt(request.expiresInSeconds());
-        String accountId = trimToNull(request.accountId());
-        String accountName = trimToNull(request.accountName());
-
         ThreadsGraphClient.ThreadsProfile profile = threadsGraphClient.getMe(accessToken);
-        String profileId = trimToNull(profile.id());
-        if (profileId != null) {
-            accountId = profileId;
+        if (!accountId.equals(trimToNull(profile.id()))) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                    "Threads ID không khớp với tài khoản của access token.");
         }
-        if (accountName == null) {
-            accountName = trimToNull(profile.username());
-        }
-
         return response(saveThreadsAccount(userId, accountId, accountName, accessToken, expiresAt));
     }
 
     @Transactional
     public SocialAccount saveFacebookPage(UUID userId, String pageId, String pageName,
                                           String pageAccessToken, LocalDateTime expiresAt) {
-        return saveFacebookPage(userId, pageId, pageName, pageAccessToken, expiresAt, null);
-    }
-
-    @Transactional
-    public SocialAccount saveFacebookPage(UUID userId,
-                                          String pageId,
-                                          String pageName,
-                                          String pageAccessToken,
-                                          LocalDateTime expiresAt,
-                                          String oauthUserId) {
         String normalizedPageId = trimToNull(pageId);
         String normalizedAccessToken = trimToNull(pageAccessToken);
         if (normalizedPageId == null) {
@@ -159,11 +142,6 @@ public class SocialAccountService {
         account.setAccessTokenEncrypted(tokenCipher.encrypt(normalizedAccessToken));
         account.setTokenExpiresAt(expiresAt);
         account.setScopes(FACEBOOK_SCOPES);
-        Map<String, Object> metadata = accountMetadata(account);
-        if (trimToNull(oauthUserId) != null) {
-            metadata.put("oauthUserId", oauthUserId.trim());
-        }
-        account.setAccountMetadata(metadata);
         account.setConnectedAt(LocalDateTime.now());
         account.setDisconnectedAt(null);
         return repository.save(account);
@@ -182,7 +160,7 @@ public class SocialAccountService {
                 THREADS_SCOPES,
                 Map.of(
                         "username", blankToDefault(username, ""),
-                        "oauthUserId", accountId
+                        "providerUserId", accountId
                 )
         );
     }
@@ -199,7 +177,7 @@ public class SocialAccountService {
         metadata.put("username", blankToDefault(username, ""));
         metadata.put("accountType", blankToDefault(accountType, ""));
         metadata.put("apiMode", apiMode.name());
-        metadata.put("oauthUserId", accountId);
+        metadata.put("providerUserId", accountId);
         return saveExternalAccount(
                 userId,
                 Platform.INSTAGRAM,
@@ -420,12 +398,12 @@ public class SocialAccountService {
 
         String currentToken = decryptToken(account);
         if (account.getProvider() == Platform.INSTAGRAM && isInstagramLogin(account)) {
-            InstagramGraphClient.OAuthToken refreshed = instagramGraphClient.refreshLongLived(currentToken);
+            InstagramGraphClient.AccessToken refreshed = instagramGraphClient.refreshLongLived(currentToken);
             applyRefreshedToken(account, refreshed.accessToken(), refreshed.expiresInSeconds());
             return true;
         }
         if (account.getProvider() == Platform.THREADS) {
-            ThreadsGraphClient.OAuthToken refreshed = threadsGraphClient.refreshLongLived(currentToken);
+            ThreadsGraphClient.AccessToken refreshed = threadsGraphClient.refreshLongLived(currentToken);
             applyRefreshedToken(account, refreshed.accessToken(), refreshed.expiresInSeconds());
             return true;
         }
@@ -453,7 +431,11 @@ public class SocialAccountService {
             return true;
         }
         Map<String, Object> metadata = account.getAccountMetadata();
-        return metadata != null && providerUserId.equals(String.valueOf(metadata.get("oauthUserId")));
+        if (metadata == null) {
+            return false;
+        }
+        return providerUserId.equals(String.valueOf(metadata.get("providerUserId")))
+                || providerUserId.equals(String.valueOf(metadata.get("oauthUserId")));
     }
 
     private void applyRefreshedToken(SocialAccount account, String accessToken, long expiresInSeconds) {

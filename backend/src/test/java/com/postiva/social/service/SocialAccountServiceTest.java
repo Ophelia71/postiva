@@ -97,7 +97,7 @@ class SocialAccountServiceTest {
                 LocalDateTime.now().plusDays(40),
                 LocalDateTime.now().minusDays(2)
         );
-        account.setAccountMetadata(Map.of("oauthUserId", "threads-user"));
+        account.setAccountMetadata(Map.of("providerUserId", "threads-user"));
         repositoryFake.providerAccounts.add(account);
 
         int affected = service.removeProviderUserData(Platform.THREADS, "threads-user", false);
@@ -126,10 +126,10 @@ class SocialAccountServiceTest {
         }
 
         @Override
-        public OAuthToken refreshLongLived(String accessToken) {
+        public AccessToken refreshLongLived(String accessToken) {
             refreshCalls++;
             assertEquals("old-token", accessToken);
-            return new OAuthToken("new-token", "threads-user", 5_184_000);
+            return new AccessToken("new-token", "threads-user", 5_184_000);
         }
     }
 

@@ -60,15 +60,6 @@ test('401 for current session removes auth', async () => {
   assert.equal(auth.getAuthSession(), null)
 })
 
-test('late successful connect URL from A cannot redirect B into A flow', async () => {
-  auth.saveAuthSession(session('A'))
-  await assert.rejects(api.get('/social/meta/connect-url', { adapter: async config => {
-    auth.saveAuthSession(session('B'))
-    return { status: 200, data: { success: true, data: { url: 'https://example.test/oauth' } }, headers: {}, config }
-  } }))
-  assert.equal(auth.getAuthToken(), 'B')
-})
-
 test('restore request keeps its captured token even if storage changes before dispatch', async () => {
   auth.saveAuthSession(session('B'))
   await assert.rejects(api.get('/auth/me', {

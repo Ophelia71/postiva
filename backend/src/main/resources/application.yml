@@ -1,9 +1,9 @@
 server:
-  port: ${SERVER_PORT:8081}
+  port: ${SERVER_PORT:8080}
 
 spring:
   config:
-    import: optional:file:../.env[.properties]
+    import: optional:file:./.env[.properties]
 
   application:
     name: postiva-backend
@@ -11,7 +11,7 @@ spring:
   datasource:
     url: ${POSTIVA_DB_URL:jdbc:postgresql://localhost:5432/postiva}
     username: ${POSTIVA_DB_USERNAME:postgres}
-    password: ${POSTIVA_DB_PASSWORD:devhoa}
+    password: ${POSTIVA_DB_PASSWORD:1234}
 
   jpa:
     hibernate:
@@ -55,21 +55,15 @@ postiva:
     model: ${OPENAI_MODEL:gpt-4o-mini}
 
   meta:
-    app-id: ${META_APP_ID:}
     app-secret: ${META_APP_SECRET:}
     api-version: ${META_API_VERSION:v26.0}
-    redirect-uri: ${META_REDIRECT_URI:http://localhost:8080/api/social/meta/callback}
 
   instagram:
-    app-id: ${INSTAGRAM_APP_ID:}
     app-secret: ${INSTAGRAM_APP_SECRET:}
     api-version: ${INSTAGRAM_API_VERSION:v26.0}
-    redirect-uri: ${INSTAGRAM_REDIRECT_URI:http://localhost:8080/api/social/instagram/callback}
 
   threads:
-    app-id: ${THREADS_APP_ID:}
     app-secret: ${THREADS_APP_SECRET:}
-    redirect-uri: ${THREADS_REDIRECT_URI:http://localhost:8080/api/social/threads/callback}
 
   security:
     jwt-secret: ${POSTIVA_JWT_SECRET:change-this-development-jwt-secret-before-deploying}
