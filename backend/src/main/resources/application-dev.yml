@@ -8,10 +8,10 @@ postiva:
   cors:
     allowed-origin-patterns: http://localhost:*,http://127.0.0.1:*
   meta:
-    redirect-uri: http://localhost:8080/api/social/meta/callback
+    redirect-uri: ${META_REDIRECT_URI:http://localhost:8081/api/social/meta/callback}
   instagram:
-    redirect-uri: ${INSTAGRAM_LOCAL_REDIRECT_URI:http://localhost:8080/api/social/instagram/callback}
+    redirect-uri: ${INSTAGRAM_REDIRECT_URI:http://localhost:8081/api/social/instagram/callback}
   threads:
-    redirect-uri: ${THREADS_LOCAL_REDIRECT_URI:http://localhost:8080/api/social/threads/callback}
+    redirect-uri: ${THREADS_REDIRECT_URI:http://localhost:8081/api/social/threads/callback}
   storage:
     public-base-url: ${POSTIVA_LOCAL_PUBLIC_BASE_URL:http://localhost:8080}

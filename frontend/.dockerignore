@@ -1,0 +1,13 @@
+node_modules/
+dist/
+dist-ssr/
+.npm-cache/
+.vite/
+.git/
+.idea/
+.vscode/
+.env
+.env.*
+!.env.example
+*.local
+*.log
