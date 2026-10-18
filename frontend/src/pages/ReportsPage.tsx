@@ -416,8 +416,8 @@ function getChartBuckets(posts: AppPost[], period: ChartPeriod) {
   })
 
   for (const post of posts) {
-    if (!post.scheduledTime) continue
-    const postDate = new Date(post.scheduledTime)
+    if (!post.time) continue
+    const postDate = new Date(post.time)
     if (Number.isNaN(postDate.getTime())) continue
     const bucket = buckets.find((item) => postDate >= item.start && postDate < item.end)
     if (bucket) {
@@ -449,23 +449,22 @@ function formatShortDate(date: Date, locale: string) {
 }
 
 function formatPostDateTime(value: string) {
-  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/)
-  if (match) {
-    return `${match[3]}/${match[2]}/${match[1]} ${match[4]}:${match[5]}`
-  }
-
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) {
     return value
   }
 
-  return new Intl.DateTimeFormat('vi-VN', {
+  const day = new Intl.DateTimeFormat('vi-VN', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
+  }).format(date)
+  const time = new Intl.DateTimeFormat('vi-VN', {
     hour: '2-digit',
     minute: '2-digit',
+    hourCycle: 'h23',
   }).format(date)
+  return `${day} ${time}`
 }
 
 function getPlatformCounts(posts: AppPost[]) {

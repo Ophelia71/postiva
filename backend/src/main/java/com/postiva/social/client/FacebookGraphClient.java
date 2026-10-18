@@ -249,14 +249,19 @@ public class FacebookGraphClient {
         return "Meta không thể " + action + ". Hãy kiểm tra access token và quyền ứng dụng.";
     }
 
-    private Instant parseDate(String value) {
+    static Instant parseDate(String value) {
         if (value == null || value.isBlank()) {
-            return Instant.now();
+            return null;
         }
         try {
             return OffsetDateTime.parse(value).toInstant();
         } catch (RuntimeException exception) {
-            return Instant.now();
+            try {
+                return OffsetDateTime.parse(value,
+                        java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssZ")).toInstant();
+            } catch (RuntimeException invalidDate) {
+                return null;
+            }
         }
     }
 

@@ -358,9 +358,7 @@ public class AppDataController {
         String status = statusLabel(schedule == null
                 ? (post.getStatus() == null ? null : post.getStatus().name())
                 : (schedule.getStatus() == null ? null : schedule.getStatus().name()));
-        Instant time = schedule == null
-                ? (post.getCreatedAt() == null ? null : post.getCreatedAt().toInstant(ZoneOffset.UTC))
-                : schedule.getScheduledTime();
+        Instant time = displayTime(post, schedule);
         Map<?, ?> platformValues = platformValues(post, platform);
         List<String> mediaUrls = mediaUrls(post, mediaFiles);
         Map<String, Object> result = new HashMap<>();
@@ -385,6 +383,15 @@ public class AppDataController {
         return result;
     }
 
+    private Instant displayTime(GeneratedPost post, ScheduledPost schedule) {
+        if (schedule == null) {
+            return post.getCreatedAt() == null ? null : post.getCreatedAt().toInstant(ZoneOffset.UTC);
+        }
+        return schedule.getStatus() == ScheduledPostStatus.PUBLISHED && schedule.getPublishedAt() != null
+                ? schedule.getPublishedAt()
+                : schedule.getScheduledTime();
+    }
+
     private Map<String, Object> fallbackPostMap(GeneratedPost post,
                                                 ScheduledPost schedule,
                                                 List<UploadedFile> mediaFiles) {
@@ -400,9 +407,7 @@ public class AppDataController {
         result.put("status", statusLabel(schedule == null
                 ? (post.getStatus() == null ? null : post.getStatus().name())
                 : (schedule.getStatus() == null ? null : schedule.getStatus().name())));
-        Instant time = schedule == null
-                ? (post.getCreatedAt() == null ? null : post.getCreatedAt().toInstant(ZoneOffset.UTC))
-                : schedule.getScheduledTime();
+        Instant time = displayTime(post, schedule);
         result.put("time", time == null ? "" : time.toString());
         result.put("attemptCount", schedule == null ? 0 : schedule.getAttemptCount());
         result.put("nextAttemptAt", schedule == null ? null : schedule.getNextAttemptAt());

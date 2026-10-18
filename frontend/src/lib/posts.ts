@@ -5,10 +5,10 @@ export function sortPostsNewestFirst(posts: AppPost[]) {
 }
 
 function postTimeValue(post: AppPost) {
-  if (!post.scheduledTime) {
+  if (!post.time) {
     return 0
   }
 
-  const value = new Date(post.scheduledTime).getTime()
+  const value = new Date(post.time).getTime()
   return Number.isNaN(value) ? 0 : value
 }

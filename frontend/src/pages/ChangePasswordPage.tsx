@@ -2,6 +2,7 @@ import { KeyRound } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { api } from '../lib/api'
 import { getErrorMessage } from '../lib/errors'
+import { PasswordVisibilityField } from '../components/PasswordVisibilityField'
 
 export function ChangePasswordPage({ onPasswordChanged }: { onPasswordChanged: () => void }) {
   const [currentPassword, setCurrentPassword] = useState('')
@@ -54,15 +55,9 @@ export function ChangePasswordPage({ onPasswordChanged }: { onPasswordChanged: (
       <h1 className="mt-5 text-2xl font-bold tracking-tight">Bảo mật tài khoản</h1>
       <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--muted-text)]">Đổi mật khẩu sẽ thu hồi tất cả phiên đăng nhập hiện tại. Bạn cần đăng nhập lại trên các thiết bị sau khi lưu.</p>
       <form onSubmit={(event) => void submit(event)} className="mt-7 max-w-lg space-y-4">
-        <label className="block text-sm font-semibold">Mật khẩu hiện tại
-          <input type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} maxLength={72} required disabled={pending} className="mt-2 min-h-12 w-full rounded-xl border border-[var(--app-border)] bg-[var(--panel-bg)] px-4 text-base outline-none focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--focus-ring)]" />
-        </label>
-        <label className="block text-sm font-semibold">Mật khẩu mới
-          <input type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} minLength={8} maxLength={72} required disabled={pending} className="mt-2 min-h-12 w-full rounded-xl border border-[var(--app-border)] bg-[var(--panel-bg)] px-4 text-base outline-none focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--focus-ring)]" />
-        </label>
-        <label className="block text-sm font-semibold">Nhập lại mật khẩu mới
-          <input type="password" autoComplete="new-password" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} minLength={8} maxLength={72} required disabled={pending} className="mt-2 min-h-12 w-full rounded-xl border border-[var(--app-border)] bg-[var(--panel-bg)] px-4 text-base outline-none focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--focus-ring)]" />
-        </label>
+        <PasswordVisibilityField label="Mật khẩu hiện tại" value={currentPassword} onChange={setCurrentPassword} autoComplete="current-password" disabled={pending} />
+        <PasswordVisibilityField label="Mật khẩu mới" value={newPassword} onChange={setNewPassword} autoComplete="new-password" minLength={8} disabled={pending} />
+        <PasswordVisibilityField label="Nhập lại mật khẩu mới" value={confirmation} onChange={setConfirmation} autoComplete="new-password" minLength={8} disabled={pending} />
         <p className="text-xs leading-5 text-[var(--muted-text)]">Mật khẩu mới cần ít nhất 8 ký tự và không vượt quá 72 byte UTF-8.</p>
         {error && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</p>}
         <button type="submit" disabled={pending} className="min-h-12 rounded-full bg-[#6672d8] px-6 text-sm font-bold text-white hover:bg-[#505db8] disabled:opacity-60">{pending ? 'Đang cập nhật...' : 'Đổi mật khẩu và đăng xuất'}</button>

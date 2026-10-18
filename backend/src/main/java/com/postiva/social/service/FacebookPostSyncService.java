@@ -28,6 +28,7 @@ import java.util.stream.Collectors;
 
 @Service
 public class FacebookPostSyncService {
+    private static final String IMPORT_INDUSTRY_CODE = "FACEBOOK_IMPORT";
     private final SocialAccountService accountService;
     private final FacebookGraphClient facebookClient;
     private final ProductBriefRepository briefRepository;
@@ -63,7 +64,9 @@ public class FacebookPostSyncService {
 
         int imported = 0;
         for (FacebookGraphClient.FacebookPagePost pagePost : pagePosts) {
-            if (logRepository.findFirstByProviderAndExternalPostId("FACEBOOK", pagePost.id()).isPresent()) {
+            var existingLog = logRepository.findFirstByProviderAndExternalPostId("FACEBOOK", pagePost.id());
+            if (existingLog.isPresent()) {
+                refreshImportedTime(account, pagePost, existingLog.get());
                 continue;
             }
             importPost(account, pagePost);
@@ -71,6 +74,23 @@ public class FacebookPostSyncService {
         }
         int removed = removeDeletedFacebookPosts(account, livePostIds);
         return new FacebookSyncResponse(account.getPageId(), imported, removed);
+    }
+
+    private void refreshImportedTime(SocialAccount account, FacebookGraphClient.FacebookPagePost source,
+                                     PublishLog log) {
+        if (source.createdAt() == null || log.getScheduledPostId() == null) return;
+        ScheduledPost scheduled = scheduledRepository.findById(log.getScheduledPostId()).orElse(null);
+        if (scheduled == null || !account.getId().equals(scheduled.getSocialAccountId())
+                || scheduled.getStatus() != ScheduledPostStatus.PUBLISHED) return;
+        GeneratedPost post = postRepository.findById(scheduled.getPostId()).orElse(null);
+        if (post == null || post.getBriefId() == null
+                || !briefRepository.findById(post.getBriefId())
+                        .map(brief -> IMPORT_INDUSTRY_CODE.equals(brief.getIndustryCode())).orElse(false)) return;
+
+        Instant publishedAt = source.createdAt();
+        scheduled.setScheduledTime(publishedAt);
+        scheduled.setPublishedAt(publishedAt);
+        log.setPublishedAt(publishedAt);
     }
 
     private int removeDeletedFacebookPosts(SocialAccount account, Set<String> livePostIds) {
@@ -157,7 +177,7 @@ public class FacebookPostSyncService {
         ProductBrief brief = new ProductBrief();
         brief.setUserId(account.getUserId());
         brief.setProductName("Imported Facebook post");
-        brief.setIndustryCode("FACEBOOK_IMPORT");
+        brief.setIndustryCode(IMPORT_INDUSTRY_CODE);
         brief.setTargetAudience("Facebook Page followers");
         brief.setGoal("Import post history");
         brief.setTone("Imported from Facebook");
