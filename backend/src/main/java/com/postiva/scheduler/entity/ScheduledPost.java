@@ -12,7 +12,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 @Entity
@@ -28,19 +28,22 @@ public class ScheduledPost {
     @Column(nullable = false)
     private Platform platform;
     @Column(nullable = false)
-    private LocalDateTime scheduledTime;
+    private Instant scheduledTime;
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private ScheduledPostStatus status = ScheduledPostStatus.SCHEDULED;
     private Integer attemptCount = 0;
+    private Instant nextAttemptAt;
+    private UUID claimToken;
+    private Instant leaseUntil;
     @Column(columnDefinition = "TEXT")
     private String lastError;
-    private LocalDateTime publishedAt;
-    private LocalDateTime createdAt = LocalDateTime.now();
-    private LocalDateTime updatedAt = LocalDateTime.now();
+    private Instant publishedAt;
+    private Instant createdAt = Instant.now();
+    private Instant updatedAt = Instant.now();
 
     @PreUpdate
-    void touchUpdatedAt() { updatedAt = LocalDateTime.now(); }
+    void touchUpdatedAt() { updatedAt = Instant.now(); }
 
     public UUID getId() { return id; }
     public UUID getPostId() { return postId; }
@@ -49,14 +52,20 @@ public class ScheduledPost {
     public void setSocialAccountId(UUID socialAccountId) { this.socialAccountId = socialAccountId; }
     public Platform getPlatform() { return platform; }
     public void setPlatform(Platform platform) { this.platform = platform; }
-    public LocalDateTime getScheduledTime() { return scheduledTime; }
-    public void setScheduledTime(LocalDateTime scheduledTime) { this.scheduledTime = scheduledTime; }
+    public Instant getScheduledTime() { return scheduledTime; }
+    public void setScheduledTime(Instant scheduledTime) { this.scheduledTime = scheduledTime; }
     public ScheduledPostStatus getStatus() { return status; }
     public void setStatus(ScheduledPostStatus status) { this.status = status; }
     public Integer getAttemptCount() { return attemptCount; }
     public void setAttemptCount(Integer attemptCount) { this.attemptCount = attemptCount; }
+    public Instant getNextAttemptAt() { return nextAttemptAt; }
+    public void setNextAttemptAt(Instant nextAttemptAt) { this.nextAttemptAt = nextAttemptAt; }
+    public UUID getClaimToken() { return claimToken; }
+    public void setClaimToken(UUID claimToken) { this.claimToken = claimToken; }
+    public Instant getLeaseUntil() { return leaseUntil; }
+    public void setLeaseUntil(Instant leaseUntil) { this.leaseUntil = leaseUntil; }
     public String getLastError() { return lastError; }
     public void setLastError(String lastError) { this.lastError = lastError; }
-    public LocalDateTime getPublishedAt() { return publishedAt; }
-    public void setPublishedAt(LocalDateTime publishedAt) { this.publishedAt = publishedAt; }
+    public Instant getPublishedAt() { return publishedAt; }
+    public void setPublishedAt(Instant publishedAt) { this.publishedAt = publishedAt; }
 }

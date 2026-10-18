@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.client.MultipartBodyBuilder;
@@ -17,7 +16,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 
@@ -41,7 +40,7 @@ public class FacebookGraphClient {
                         .build(pageId))
                 .retrieve()
                 .onStatus(HttpStatusCode::isError, response -> response.bodyToMono(String.class)
-                        .map(responseBody -> new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                        .map(responseBody -> new MetaApiException(response.statusCode().value(),
                                 metaErrorMessage("đọc thông tin Facebook Page", responseBody))))
                 .bodyToMono(String.class)
                 .block();
@@ -194,7 +193,8 @@ public class FacebookGraphClient {
                         .build(postId))
                 .retrieve()
                 .onStatus(HttpStatusCode::isError, response -> response.bodyToMono(String.class)
-                        .map(body -> new IllegalStateException("Meta không thể xóa bài viết: " + body)))
+                        .map(body -> new MetaApiException(response.statusCode().value(),
+                                "Meta không thể xóa bài viết: " + body)))
                 .bodyToMono(String.class)
                 .block();
     }
@@ -217,7 +217,7 @@ public class FacebookGraphClient {
                     posts.add(new FacebookPagePost(
                             id,
                             node.path("message").asText(""),
-                            parseDate(node.path("created_time").asText()),
+                    parseDate(node.path("created_time").asText()),
                             node.path("permalink_url").asText("")
                     ));
                 }
@@ -249,20 +249,20 @@ public class FacebookGraphClient {
         return "Meta không thể " + action + ". Hãy kiểm tra access token và quyền ứng dụng.";
     }
 
-    private LocalDateTime parseDate(String value) {
+    private Instant parseDate(String value) {
         if (value == null || value.isBlank()) {
-            return LocalDateTime.now();
+            return Instant.now();
         }
         try {
-            return OffsetDateTime.parse(value).atZoneSameInstant(ZoneId.systemDefault()).toLocalDateTime();
+            return OffsetDateTime.parse(value).toInstant();
         } catch (RuntimeException exception) {
-            return LocalDateTime.now();
+            return Instant.now();
         }
     }
 
     public record FacebookPage(String id, String name, String accessToken) {
     }
 
-    public record FacebookPagePost(String id, String message, LocalDateTime createdAt, String permalinkUrl) {
+    public record FacebookPagePost(String id, String message, Instant createdAt, String permalinkUrl) {
     }
 }

@@ -21,8 +21,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.time.LocalDateTime;
-import java.time.ZoneId;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -58,7 +57,7 @@ public class SocialPostService {
 
     public SocialPostResponse create(SocialPostRequest request) {
         UUID userId = currentUserService.requireCurrentUserId();
-        LocalDateTime scheduledTime = validateAndConvertTime(request);
+        Instant scheduledTime = validateAndConvertTime(request);
         List<SocialPostTargetRequest> targets = validateTargets(request.targets());
         List<Platform> platforms = targets.stream()
                 .map(SocialPostTargetRequest::platform)
@@ -96,14 +95,12 @@ public class SocialPostService {
         return new SocialPostResponse(post.getId(), results);
     }
 
-    private LocalDateTime validateAndConvertTime(SocialPostRequest request) {
+    private Instant validateAndConvertTime(SocialPostRequest request) {
         if (request.scheduledTime() == null) {
             return null;
         }
-        LocalDateTime value = request.scheduledTime()
-                .atZoneSameInstant(ZoneId.systemDefault())
-                .toLocalDateTime();
-        if (!value.isAfter(LocalDateTime.now())) {
+        Instant value = request.scheduledTime().toInstant();
+        if (!value.isAfter(Instant.now())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Thời gian đăng phải ở tương lai");
         }
         return value;

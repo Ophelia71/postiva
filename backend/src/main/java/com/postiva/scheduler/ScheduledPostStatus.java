@@ -5,5 +5,6 @@ public enum ScheduledPostStatus {
     PUBLISHING,
     PUBLISHED,
     FAILED,
+    UNKNOWN,
     CANCELLED
 }

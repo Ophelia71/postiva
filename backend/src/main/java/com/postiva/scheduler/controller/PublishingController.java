@@ -2,6 +2,7 @@ package com.postiva.scheduler.controller;
 
 import com.postiva.common.ApiResponse;
 import com.postiva.scheduler.dto.PublishNowRequest;
+import com.postiva.scheduler.dto.ResolvePublishRequest;
 import com.postiva.scheduler.dto.SchedulePostRequest;
 import com.postiva.scheduler.dto.ScheduledPostResponse;
 import com.postiva.scheduler.service.PublishingService;
@@ -43,5 +44,16 @@ public class PublishingController {
     @PostMapping("/{scheduledPostId}/retry")
     public ApiResponse<ScheduledPostResponse> retry(@PathVariable UUID scheduledPostId) {
         return ApiResponse.ok(publishingService.retry(scheduledPostId));
+    }
+
+    @PostMapping("/{scheduledPostId}/resolve")
+    public ApiResponse<ScheduledPostResponse> resolve(
+            @PathVariable UUID scheduledPostId,
+            @Valid @RequestBody ResolvePublishRequest request) {
+        if (request.result() == null) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.BAD_REQUEST, "Cần xác nhận bài đã đăng hay chưa đăng");
+        }
+        return ApiResponse.ok(publishingService.resolveUnknown(scheduledPostId, request));
     }
 }

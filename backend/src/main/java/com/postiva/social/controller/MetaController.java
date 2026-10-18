@@ -10,6 +10,7 @@ import com.postiva.social.dto.SocialAccountResponse;
 import com.postiva.social.service.MetaSignedRequestService;
 import com.postiva.social.service.SocialAccountService;
 import com.postiva.social.service.FacebookPostSyncService;
+import com.postiva.social.service.MetaDeletionStatusUrlFactory;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -19,7 +20,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import java.util.List;
 import java.util.UUID;
@@ -30,15 +30,18 @@ public class MetaController {
     private final SocialAccountService accountService;
     private final FacebookPostSyncService facebookPostSyncService;
     private final MetaSignedRequestService signedRequestService;
+    private final MetaDeletionStatusUrlFactory deletionStatusUrls;
 
     public MetaController(
             SocialAccountService accountService,
             FacebookPostSyncService facebookPostSyncService,
-            MetaSignedRequestService signedRequestService
+            MetaSignedRequestService signedRequestService,
+            MetaDeletionStatusUrlFactory deletionStatusUrls
     ) {
         this.accountService = accountService;
         this.facebookPostSyncService = facebookPostSyncService;
         this.signedRequestService = signedRequestService;
+        this.deletionStatusUrls = deletionStatusUrls;
     }
 
     @GetMapping("/accounts")
@@ -92,12 +95,10 @@ public class MetaController {
     public MetaSignedRequestService.DataDeletionResponse deleteData(
             @RequestParam("signed_request") String signedRequest
     ) {
+        deletionStatusUrls.requireConfigured();
         MetaSignedRequestService.DeletionReceipt receipt =
                 signedRequestService.deleteData(Platform.FACEBOOK, signedRequest);
-        String url = ServletUriComponentsBuilder.fromCurrentContextPath()
-                .path("/api/social/meta/delete-data/status/{code}")
-                .buildAndExpand(receipt.confirmationCode())
-                .toUriString();
+        String url = deletionStatusUrls.statusUrl(Platform.FACEBOOK, receipt.confirmationCode());
         return new MetaSignedRequestService.DataDeletionResponse(url, receipt.confirmationCode());
     }
 

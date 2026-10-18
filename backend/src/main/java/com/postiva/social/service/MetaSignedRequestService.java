@@ -19,10 +19,14 @@ import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 @Service
 public class MetaSignedRequestService {
     private static final String HMAC_SHA_256 = "HmacSHA256";
+    private static final Pattern CONFIRMATION_CODE = Pattern.compile(
+            "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    );
     private final ObjectMapper objectMapper;
     private final SocialAccountService accountService;
     private final SocialDataDeletionRequestRepository deletionRequestRepository;
@@ -70,6 +74,9 @@ public class MetaSignedRequestService {
 
     @Transactional(readOnly = true)
     public DeletionStatus getDeletionStatus(Platform provider, String confirmationCode) {
+        if (confirmationCode == null || !CONFIRMATION_CODE.matcher(confirmationCode).matches()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy yêu cầu xóa dữ liệu");
+        }
         SocialDataDeletionRequest request = deletionRequestRepository
                 .findByConfirmationCodeAndProvider(confirmationCode, provider)
                 .orElseThrow(() -> new ResponseStatusException(

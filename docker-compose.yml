@@ -6,16 +6,15 @@ services:
     restart: unless-stopped
 
     environment:
-      POSTGRES_USER: ${POSTIVA_DB_USERNAME}
-      POSTGRES_PASSWORD: ${POSTIVA_DB_PASSWORD}
-      POSTGRES_DB: mydatabase
+      POSTGRES_USER: ${POSTIVA_DB_USERNAME:?Set POSTIVA_DB_USERNAME}
+      POSTGRES_PASSWORD: ${POSTIVA_DB_PASSWORD:?Set POSTIVA_DB_PASSWORD}
+      POSTGRES_DB: ${POSTIVA_DB_NAME:-postiva}
 
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./database/schema.sql:/docker-entrypoint-initdb.d/init.sql:ro
 
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTIVA_DB_USERNAME} -d mydatabase"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -23,14 +22,24 @@ services:
     networks:
       - my_network
 
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
 
   backend:
-    image: devhoa/postiva-backend:latest
+    image: devhoa/postiva-backend:${POSTIVA_IMAGE_TAG:?Set POSTIVA_IMAGE_TAG to an immutable release tag}
     container_name: postiva-backend
     restart: unless-stopped
 
     env_file:
       - ./.env
+
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      POSTIVA_TRUSTED_PROXY_ADDRESSES: ${POSTIVA_PROXY_IP}/32
 
     depends_on:
       postgres:
@@ -42,9 +51,15 @@ services:
     networks:
       - my_network
 
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
 
   frontend:
-    image: devhoa/postiva-frontend:latest
+    image: devhoa/postiva-frontend:${POSTIVA_IMAGE_TAG:?Set POSTIVA_IMAGE_TAG to an immutable release tag}
     container_name: postiva-nginx
     restart: unless-stopped
 
@@ -58,10 +73,17 @@ services:
 
     depends_on:
       backend:
-        condition: service_started
+        condition: service_healthy
 
     networks:
-      - my_network
+      my_network:
+        ipv4_address: ${POSTIVA_PROXY_IP:?Set POSTIVA_PROXY_IP}
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
 
 
 volumes:
@@ -72,3 +94,6 @@ volumes:
 networks:
   my_network:
     driver: bridge
+    ipam:
+      config:
+        - subnet: ${POSTIVA_DOCKER_SUBNET:?Set a private non-overlapping POSTIVA_DOCKER_SUBNET}

@@ -7,7 +7,6 @@ export type AppChannel = {
   name: string
   type: string
   badge: string
-  followers: string
   color: string
   active: boolean
 }
@@ -20,18 +19,10 @@ export type AppPost = {
   status: string
   time: string
   scheduledTime: string | null
-  viewCount: number
-  likeCount: number
-  commentCount: number
-  shareCount: number
+  attemptCount: number
+  nextAttemptAt: string | null
+  lastError: string
   permalinkUrl: string
-  reactionLikeCount: number
-  reactionLoveCount: number
-  reactionCareCount: number
-  reactionHahaCount: number
-  reactionWowCount: number
-  reactionSadCount: number
-  reactionAngryCount: number
   platformPostId: string
   mediaType: string
   mediaUrl: string
@@ -41,29 +32,11 @@ export type AppPost = {
   mediaIds: string[]
 }
 
-export type AppComment = {
-  id: string
-  platformCommentId: string
-  parentCommentId: string
-  commenterName: string
-  commenterAvatarUrl: string
-  message: string
-  attachmentType: string
-  attachmentUrl: string
-  commentedAt: string | null
-  likeCount: number
-  replyCount: number
-}
-
 export type AppOverview = {
   totalPosts: number
   scheduledPosts: number
   publishedPosts: number
   failedPosts: number
-  views: number
-  likes: number
-  comments: number
-  shares: number
   channels: AppChannel[]
   recentPosts: AppPost[]
 }
@@ -74,10 +47,6 @@ export function normalizeAppOverview(overview: Partial<AppOverview>): AppOvervie
     scheduledPosts: toNumber(overview.scheduledPosts),
     publishedPosts: toNumber(overview.publishedPosts),
     failedPosts: toNumber(overview.failedPosts),
-    views: toNumber(overview.views),
-    likes: toNumber(overview.likes),
-    comments: toNumber(overview.comments),
-    shares: toNumber(overview.shares),
     channels: overview.channels ?? [],
     recentPosts: overview.recentPosts ?? [],
   }

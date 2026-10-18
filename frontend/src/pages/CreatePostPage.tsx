@@ -19,6 +19,7 @@ import {
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { FacebookBadge } from '../components/FacebookBadge'
+import { ProtectedMediaImage, ProtectedMediaVideo } from '../components/ProtectedMedia'
 import { PageState } from '../components/PageUi'
 import { api } from '../lib/api'
 import { type AppChannel, useAppDataResource } from '../lib/appDataApi'
@@ -26,6 +27,8 @@ import { getErrorMessage } from '../lib/errors'
 import { formatFileSize } from '../lib/format'
 import { resolveMediaUrl } from '../lib/media'
 import { usePreferences } from '../lib/preferences'
+import axios from 'axios'
+import { UsagePanel } from '../components/UsagePanel'
 
 type Platform = 'FACEBOOK' | 'INSTAGRAM' | 'THREADS'
 
@@ -48,7 +51,7 @@ type SocialPostTargetResponse = {
   socialAccountId: string
   platform: Platform
   scheduledPostId: string
-  status: 'SCHEDULED' | 'PUBLISHING' | 'PUBLISHED' | 'FAILED' | 'CANCELLED'
+  status: 'SCHEDULED' | 'PUBLISHING' | 'PUBLISHED' | 'FAILED' | 'UNKNOWN' | 'CANCELLED'
   errorMessage?: string | null
 }
 
@@ -126,6 +129,8 @@ export function CreatePostPage() {
   const [statusTone, setStatusTone] = useState<'info' | 'success' | 'error'>('info')
   const [isUploadingMedia, setIsUploadingMedia] = useState(false)
   const [isGeneratingContent, setIsGeneratingContent] = useState(false)
+  const generationRequest = useRef<{ fingerprint: string; key: string } | null>(null)
+  const [usageVersion, setUsageVersion] = useState(0)
   const [isPublishing, setIsPublishing] = useState(false)
 
   useEffect(() => {
@@ -296,9 +301,13 @@ export function CreatePostPage() {
         scheduledTime: publishMode === 'SCHEDULE' ? new Date(scheduledTime).toISOString() : undefined,
       })
       const failed = response.data.targets.filter((target) => target.status === 'FAILED')
+      const unknown = response.data.targets.some((target) => target.status === 'UNKNOWN')
       const completed = response.data.targets.filter((target) => target.status !== 'FAILED')
       if (failed.length > 0) {
         setStatusTone(completed.length > 0 ? 'info' : 'error')
+        setStatus(formatTargetResults(response.data.targets, publishMode, t))
+      } else if (unknown) {
+        setStatusTone('info')
         setStatus(formatTargetResults(response.data.targets, publishMode, t))
       } else {
         setStatusTone('success')
@@ -360,6 +369,7 @@ export function CreatePostPage() {
   }
 
   async function applyPlatformTemplates() {
+    if (isGeneratingContent) return
     if (!validateProductInput()) {
       return
     }
@@ -369,7 +379,7 @@ export function CreatePostPage() {
     setStatus(t('Đang tự gen bài cho từng nền tảng...', 'Generating platform-specific posts...'))
 
     try {
-      const response = await api.post<GeneratePostResponse>('/posts/generate', {
+      const body = {
         productName: productName.trim(),
         productDescription: productDescription.trim(),
         price: price.trim() || undefined,
@@ -381,7 +391,15 @@ export function CreatePostPage() {
         platforms: selectedPlatforms,
         additionalInfo: sourceContent.trim() || undefined,
         imageIds: uploadedMedia.map((media) => media.id),
+      }
+      const fingerprint = JSON.stringify(body)
+      if (!generationRequest.current || generationRequest.current.fingerprint !== fingerprint) {
+        generationRequest.current = { fingerprint, key: crypto.randomUUID() }
+      }
+      const response = await api.post<GeneratePostResponse>('/posts/generate', body, {
+        headers: { 'Idempotency-Key': generationRequest.current.key },
       })
+      generationRequest.current = null
 
       const nextCaptions: Partial<Record<Platform, string>> = {}
       const nextCtas: Partial<Record<Platform, string>> = {}
@@ -407,9 +425,16 @@ export function CreatePostPage() {
       setStatusTone('success')
       setStatus(t('Đã tự gen bài riêng cho từng nền tảng.', 'Generated separate posts for each platform.'))
     } catch (error) {
-      setError(getErrorMessage(error, t('Không thể tự gen bài. Kiểm tra OPENAI_API_KEY và thử lại.', 'Could not generate posts. Check OPENAI_API_KEY and try again.')))
+      if (axios.isAxiosError(error)) {
+        const state = error.response?.headers['x-ai-request-state']
+        if (state === 'FAILED' || state === 'UNKNOWN' || (error.response && error.response.status < 500 && error.response.status !== 409)) {
+          generationRequest.current = null
+        }
+      }
+      setError(getErrorMessage(error, t('Chưa thể tạo nội dung. Vui lòng thử lại.', 'Could not generate content. Please try again.')))
     } finally {
       setIsGeneratingContent(false)
+      setUsageVersion((value) => value + 1)
     }
   }
 
@@ -488,6 +513,7 @@ export function CreatePostPage() {
         </div>
       </div>
 
+      <UsagePanel refreshVersion={usageVersion} />
       <div className="grid gap-8 lg:grid-cols-[minmax(0,520px)_minmax(420px,1fr)]">
         <div className="overflow-hidden rounded-[8px] border border-slate-200 bg-white shadow-xl shadow-slate-200/70">
           <div className="max-h-[calc(100svh-190px)] space-y-4 overflow-auto px-5 py-5">
@@ -902,9 +928,9 @@ function SocialFeedPreview({
             {visiblePreviewMedia.map((media, index) => (
               <div key={media.url + '-' + index} className="relative">
                 {media.type.startsWith('video/') ? (
-                  <video src={media.url} controls className="mx-auto max-h-[430px] w-full bg-slate-950 object-contain" />
+                  <ProtectedMediaVideo src={media.url} controls className="mx-auto max-h-[430px] w-full bg-slate-950 object-contain" />
                 ) : (
-                  <img
+                  <ProtectedMediaImage
                     src={media.url}
                     alt={`${PLATFORM_LABELS[platform]} post media preview ${index + 1}`}
                     className="mx-auto h-auto max-h-[430px] w-full object-contain"
@@ -1150,6 +1176,11 @@ function formatTargetResults(
     }
     if (target.status === 'PUBLISHED') {
       return `${label}: ${t('đã đăng', 'published')}`
+    }
+    if (target.status === 'UNKNOWN') {
+      const recordedCause = target.errorMessage?.match(/Chi tiết:\s*(.+)$/i)?.[1]
+      const guidance = t('chưa rõ kết quả; hãy kiểm tra trên nền tảng trước khi thử lại', 'outcome unknown; check the platform before retrying')
+      return `${label}: ${guidance}${recordedCause ? ` (${recordedCause})` : ''}`
     }
     if (target.status === 'SCHEDULED' || mode === 'SCHEDULE') {
       return `${label}: ${t('đã đặt lịch', 'scheduled')}`

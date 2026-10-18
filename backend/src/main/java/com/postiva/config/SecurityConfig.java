@@ -17,6 +17,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.access.expression.WebExpressionAuthorizationManager;
 import org.springframework.web.cors.CorsConfigurationSource;
 
 @Configuration
@@ -57,21 +58,42 @@ public class SecurityConfig {
                         .permitAll()
                         .requestMatchers(
                                 HttpMethod.POST,
+                                "/api/billing/payos/webhook",
                                 "/api/auth/register",
                                 "/api/auth/register/verify",
-                                "/api/auth/login"
+                                "/api/auth/login",
+                                "/api/auth/password/forgot",
+                                "/api/auth/password/reset",
+                                "/api/analytics/events"
                         )
                         .permitAll()
                         .requestMatchers(
                                 HttpMethod.GET,
-                                "/api/files/**"
+                                "/api/social/meta/delete-data/status/*",
+                                "/api/social/instagram/delete-data/status/*",
+                                "/api/social/threads/delete-data/status/*"
+                        )
+                        .permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/password/change")
+                        .hasRole("USER")
+                        .requestMatchers(HttpMethod.POST, "/api/auth/sessions/revoke")
+                        .hasRole("USER")
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/files/public/**"
                         )
                         .permitAll()
                         .requestMatchers(
                                 HttpMethod.HEAD,
-                                "/api/files/**"
+                                "/api/files/public/**"
                         )
                         .permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/files/**")
+                        .hasRole("USER")
+                        .requestMatchers(HttpMethod.HEAD, "/api/files/**")
+                        .hasRole("USER")
+                        .requestMatchers(HttpMethod.POST, "/api/files/upload")
+                        .hasRole("USER")
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/api/social/meta/deauthorize",
@@ -86,8 +108,16 @@ public class SecurityConfig {
                                 "/error"
                         )
                         .permitAll()
+                        .requestMatchers("/actuator/health", "/actuator/health/**")
+                        .permitAll()
+                        .requestMatchers("/api/admin/security/**")
+                        .hasRole("ADMIN")
+                        .requestMatchers("/api/admin", "/api/admin/**")
+                        .access(new WebExpressionAuthorizationManager("hasRole('ADMIN') and hasAuthority('MFA_VERIFIED')"))
+                        .requestMatchers(HttpMethod.GET, "/api/auth/me")
+                        .hasAnyRole("USER", "ADMIN")
                         .anyRequest()
-                        .authenticated()
+                        .hasRole("USER")
                 )
                 .authenticationProvider(authenticationProvider())
                 .exceptionHandling(exception -> exception

@@ -2,6 +2,11 @@ package com.postiva.post.service;
 
 import com.postiva.ai.dto.AiPostResult;
 import com.postiva.ai.service.OpenAiService;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.postiva.auth.security.PersistentRateLimiter;
+import com.postiva.config.OpenAiProperties;
+import com.postiva.usage.AiUsageService;
 import com.postiva.auth.service.CurrentUserService;
 import com.postiva.common.PostStatus;
 import com.postiva.file.service.FileService;
@@ -16,6 +21,10 @@ import com.postiva.template.entity.IndustryTemplate;
 import com.postiva.template.service.TemplateService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.UUID;
 import java.util.LinkedHashMap;
@@ -32,25 +41,59 @@ public class PostService {
     private final OpenAiService openAiService;
     private final CurrentUserService currentUserService;
     private final FileService fileService;
+    private final AiUsageService usage;
+    private final OpenAiProperties openAiProperties;
+    private final ObjectMapper json;
+    private final TransactionTemplate transactions;
 
     public PostService(ProductBriefRepository briefRepository,
                        GeneratedPostRepository postRepository,
                        TemplateService templateService,
                        OpenAiService openAiService,
                        CurrentUserService currentUserService,
-                       FileService fileService) {
+                       FileService fileService, AiUsageService usage, OpenAiProperties openAiProperties,
+                       ObjectMapper json, PlatformTransactionManager transactionManager) {
         this.briefRepository = briefRepository;
         this.postRepository = postRepository;
         this.templateService = templateService;
         this.openAiService = openAiService;
         this.currentUserService = currentUserService;
         this.fileService = fileService;
+        this.usage = usage;
+        this.openAiProperties = openAiProperties;
+        this.json = json;
+        this.transactions = new TransactionTemplate(transactionManager);
     }
 
-    @Transactional
-    public GeneratePostResponse generate(GeneratePostRequest request) {
+    public GeneratePostResponse generate(GeneratePostRequest request, UUID idempotencyKey) {
         UUID userId = currentUserService.requireCurrentUserId();
+        if (idempotencyKey == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Thiếu Idempotency-Key");
+        if (!openAiProperties.enabled()) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Dịch vụ AI chưa sẵn sàng");
+        fileService.validateAttachments(request.imageIds(), userId);
         IndustryTemplate template = templateService.findByCode(request.industryCode()).orElse(null);
+        String fingerprint;
+        try { fingerprint = PersistentRateLimiter.sha256(json.writeValueAsString(request)); }
+        catch (JsonProcessingException e) { throw new IllegalArgumentException("Nội dung yêu cầu không hợp lệ", e); }
+        var reservation = usage.reserve(userId, idempotencyKey, fingerprint, openAiProperties.model());
+        if (reservation.existingPostId() != null) return getPostResponse(reservation.existingPostId());
+        try {
+            // External I/O is outside the database transaction and does not hold a connection/row lock.
+            AiPostResult result = openAiService.generatePost(request, template,
+                    providerUsage -> usage.recordProviderUsage(reservation.requestId(), providerUsage));
+            return transactions.execute(status -> {
+                GeneratePostResponse saved = saveGenerated(request, userId, result);
+                usage.succeed(userId, reservation.requestId(), saved.postId());
+                return saved;
+            });
+        } catch (RuntimeException e) {
+            boolean uncertain = !(e instanceof ResponseStatusException status && status.getStatusCode().is4xxClientError());
+            try { usage.fail(userId, reservation.requestId(), uncertain, "GENERATION_FAILED"); }
+            catch (RuntimeException failure) { e.addSuppressed(failure); }
+            throw e;
+        }
+    }
+
+    private GeneratePostResponse saveGenerated(GeneratePostRequest request, UUID userId, AiPostResult aiResult) {
 
         ProductBrief brief = new ProductBrief();
         brief.setUserId(userId);
@@ -65,8 +108,6 @@ public class PostService {
         brief.setPlatforms(request.platforms());
         brief.setAdditionalInfo(combineAdditionalInfo(request.productDescription(), request.additionalInfo()));
         brief = briefRepository.save(brief);
-
-        AiPostResult aiResult = openAiService.generatePost(request, template);
 
         GeneratedPost post = new GeneratedPost();
         post.setBriefId(brief.getId());
@@ -88,6 +129,7 @@ public class PostService {
             post = postRepository.save(post);
         }
 
+        postRepository.flush();
         return toResponse(post);
     }
 

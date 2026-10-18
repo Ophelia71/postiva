@@ -63,8 +63,8 @@ public class TokenCipher {
     }
 
     private void requireConfigured() {
-        if (configuredKey == null || configuredKey.length() < 16) {
-            throw new IllegalStateException("POSTIVA_TOKEN_ENCRYPTION_KEY phải có ít nhất 16 ký tự");
+        if (configuredKey == null || configuredKey.getBytes(StandardCharsets.UTF_8).length < 32) {
+            throw new IllegalStateException("POSTIVA_TOKEN_ENCRYPTION_KEY phải có ít nhất 32 byte UTF-8");
         }
     }
 }

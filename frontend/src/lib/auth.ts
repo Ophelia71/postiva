@@ -9,6 +9,7 @@ export type AuthSession = {
   email: string
   fullName: string
   role: UserRole
+  mfaSetupRequired?: boolean
   workspaceId?: string | null
   workspaceName?: string | null
 }
@@ -64,6 +65,7 @@ export function isAuthSession(value: unknown): value is AuthSession {
     && isNonBlankString(session.email)
     && isNonBlankString(session.fullName)
     && (session.role === 'USER' || session.role === 'ADMIN')
+    && (session.mfaSetupRequired === undefined || typeof session.mfaSetupRequired === 'boolean')
 }
 
 function isNonBlankString(value: unknown): value is string {

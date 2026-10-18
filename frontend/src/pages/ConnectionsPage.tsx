@@ -71,10 +71,12 @@ export function ConnectionsPage() {
         await api.post(`/social/meta/accounts/${channel.id}/check`)
       }
       setConnectStatusTone('success')
-      setConnectStatus(`${t('Kết nối hoạt động tốt trên')} ${channel.name}.`)
+      setConnectStatus(isFacebook
+        ? `${t('Kết nối hoạt động tốt trên')} ${channel.name}.`
+        : `${t('Token truy cập được tài khoản', 'Token can access account')} ${channel.name}. ${t('Chưa kiểm tra quyền đăng bài và URL media công khai.', 'Publishing permission and public media URL have not been tested.')}`)
     } catch (error) {
       setConnectStatusTone('error')
-      setConnectStatus(getErrorMessage(error, `Không thể kiểm tra ${channel.type}.`))
+      setConnectStatus(getSocialErrorMessage(error, `Không thể kiểm tra ${channel.type}.`))
     } finally {
       setPostingPageId(null)
     }
@@ -107,7 +109,7 @@ export function ConnectionsPage() {
       reload()
     } catch (error) {
       setConnectStatusTone('error')
-      setConnectStatus(getErrorMessage(error, `Không thể kết nối ${title}.`))
+      setConnectStatus(getSocialErrorMessage(error, `Không thể kết nối ${title}.`))
     } finally {
       setConnectingType(null)
     }
@@ -161,7 +163,7 @@ export function ConnectionsPage() {
       }
     } catch (error) {
       setConnectStatusTone('error')
-      setConnectStatus(getErrorMessage(error, `Không thể cập nhật ${channel.type}.`))
+      setConnectStatus(getSocialErrorMessage(error, `Không thể cập nhật ${channel.type}.`))
     } finally {
       setSyncingPageId(null)
     }
@@ -189,7 +191,7 @@ export function ConnectionsPage() {
               <div className="px-5 py-6 text-sm text-[var(--muted-text)]">{t('Chưa có kênh nào được kết nối.')}</div>
             ) : (
               connectedChannels.map((channel) => (
-                <div key={channel.id} className="grid gap-4 px-5 py-4 md:grid-cols-[40px_1fr_112px_190px_40px] md:items-center">
+                <div key={channel.id} className="grid gap-4 px-5 py-4 md:grid-cols-[40px_minmax(0,1fr)_max-content_max-content_40px] md:items-center">
                   <ChannelAvatar channel={channel} />
                   <div className="min-w-0">
                     <h3 className="truncate text-sm font-bold">{channel.name}</h3>
@@ -197,8 +199,8 @@ export function ConnectionsPage() {
                       {channel.type} · ID {channel.accountId}
                     </p>
                   </div>
-                  <span className={`w-fit rounded-full px-3 py-1 text-xs font-semibold ${channel.active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-                    {channel.active ? t('Đang kết nối' ) : t('Tạm ngừng')}
+                  <span className={`w-fit whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold ${channel.active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                    {channel.active ? 'Đã lưu · cần kiểm tra hiệu lực' : t('Tạm ngừng')}
                   </span>
                   <div className="flex items-center gap-2 md:justify-end">
                     <button
@@ -371,4 +373,15 @@ function getStatusClassName(tone: StatusTone) {
   }
 
   return 'border border-[var(--app-border)] bg-[var(--soft-bg)] text-[var(--muted-text)]'
+}
+
+function getSocialErrorMessage(error: unknown, fallback: string) {
+  const message = getErrorMessage(error, fallback)
+  if (/invalid oauth access token|access token.*(expired|invalid|revoked)|session has expired|token.*(hết hạn|không hợp lệ|bị thu hồi)/i.test(message)) {
+    return 'Token đã hết hạn hoặc bị Meta thu hồi. Hãy lấy Page Access Token mới, kết nối lại rồi bấm Kiểm tra.'
+  }
+  if (/permission|permissions|thiếu quyền|không có quyền/i.test(message)) {
+    return 'Token chưa có quyền cần thiết cho thao tác này. Hãy kiểm tra quyền Page trong cấu hình Meta; nếu vừa cấp quyền, hãy tạo token mới rồi kết nối lại.'
+  }
+  return message
 }

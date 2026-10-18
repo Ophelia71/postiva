@@ -17,8 +17,22 @@ public interface ScheduledPostRepository extends JpaRepository<ScheduledPost, UU
     );
 
     List<ScheduledPost> findBySocialAccountIdAndStatus(UUID socialAccountId, ScheduledPostStatus status);
+    List<ScheduledPost> findBySocialAccountId(UUID socialAccountId);
+
+    Optional<ScheduledPost> findByIdAndClaimTokenAndStatus(
+            UUID id, UUID claimToken, ScheduledPostStatus status
+    );
 
     List<ScheduledPost> findByPostId(UUID postId);
+
+    @Query("""
+            select scheduled from ScheduledPost scheduled
+            where scheduled.status = :status and scheduled.postId in (
+                select post.id from GeneratedPost post where post.userId = :userId
+            )
+            """)
+    List<ScheduledPost> findByUserIdAndStatus(@Param("userId") UUID userId,
+                                            @Param("status") ScheduledPostStatus status);
 
     @Query("""
             select scheduled from ScheduledPost scheduled
@@ -47,4 +61,14 @@ public interface ScheduledPostRepository extends JpaRepository<ScheduledPost, UU
             )
             """)
     Optional<ScheduledPost> findByIdForUser(@Param("id") UUID id, @Param("userId") UUID userId);
+
+    @Query("""
+            select scheduled from ScheduledPost scheduled
+            where scheduled.id = :id and scheduled.socialAccountId in (
+                select account.id from SocialAccount account where account.userId = :userId
+            )
+            """)
+    Optional<ScheduledPost> findByIdIncludingDisconnectedForUser(
+            @Param("id") UUID id, @Param("userId") UUID userId
+    );
 }

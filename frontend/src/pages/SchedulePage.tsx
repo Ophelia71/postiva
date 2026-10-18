@@ -1,5 +1,5 @@
 import { CalendarDays, ChevronLeft, ChevronRight, Eye, Pencil, Trash2 } from 'lucide-react'
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { EditPostModal } from '../components/EditPostModal'
 import { DeletePostConfirmModal } from '../components/DeletePostConfirmModal'
 import { getPaginatedItems, PaginationControls } from '../components/PaginationControls'
@@ -10,7 +10,6 @@ import { addDays, toDateKey } from '../lib/dates'
 import { getErrorMessage } from '../lib/errors'
 import { sortPostsNewestFirst } from '../lib/posts'
 import { usePreferences } from '../lib/preferences'
-import { useFacebookRealtimeRefetch } from '../lib/realtime'
 import { PageHeader, PageState, PlatformBadge, StatusBadge } from '../components/PageUi'
 
 type CalendarDay = {
@@ -29,7 +28,8 @@ type DeletePostResponse = {
 export function SchedulePage() {
   const { t } = usePreferences()
   const { data: posts, loading, error, reload } = useAppDataResource<AppPost[]>('/app-data/posts')
-  useFacebookRealtimeRefetch(() => reload())
+  const previousStatuses = useRef<Map<string, string> | null>(null)
+  const [publishNotice, setPublishNotice] = useState<{ tone: 'success' | 'error' | 'info'; message: string } | null>(null)
   const [visibleMonth, setVisibleMonth] = useState(() => startOfMonth(new Date()))
   const [selectedDate, setSelectedDate] = useState(() => stripTime(new Date()))
   const [schedulePage, setSchedulePage] = useState(1)
@@ -40,6 +40,48 @@ export function SchedulePage() {
   const [detailPost, setDetailPost] = useState<AppPost | null>(null)
   const [deleteCandidate, setDeleteCandidate] = useState<AppPost | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === 'visible') reload()
+    }
+    const timer = window.setInterval(refresh, 10000)
+    document.addEventListener('visibilitychange', refresh)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', refresh)
+    }
+  }, [reload])
+
+  useEffect(() => {
+    if (!posts) return
+    const currentStatuses = new Map(posts
+      .filter((post) => post.scheduleId)
+      .map((post) => [post.scheduleId, post.status]))
+    const previous = previousStatuses.current
+    previousStatuses.current = currentStatuses
+    if (!previous) return
+
+    const terminalChanges = posts.filter((post) => {
+      if (!post.scheduleId || previous.get(post.scheduleId) === post.status) return false
+      return ['Published', 'Failed', 'Unknown', 'Canceled'].includes(post.status)
+    })
+    if (terminalChanges.length === 1) {
+      const post = terminalChanges[0]
+      const labels: Record<string, string> = {
+        Published: 'đã đăng thành công',
+        Failed: 'đăng thất bại, có thể xem lỗi và thử lại',
+        Unknown: 'có kết quả chưa xác định, cần kiểm tra trên nền tảng',
+        Canceled: 'đã bị hủy vì tài khoản đích ngắt kết nối',
+      }
+      setPublishNotice({
+        tone: post.status === 'Published' ? 'success' : post.status === 'Failed' ? 'error' : 'info',
+        message: `Bài “${post.content.slice(0, 70)}” ${labels[post.status] ?? 'đã cập nhật trạng thái'}.`,
+      })
+    } else if (terminalChanges.length > 1) {
+      setPublishNotice({ tone: 'info', message: `${terminalChanges.length} bài đăng vừa cập nhật trạng thái. Mở từng bài để xem chi tiết.` })
+    }
+  }, [posts])
 
   const calendarDays = useMemo(() => buildCalendarDays(visibleMonth), [visibleMonth])
 
@@ -55,8 +97,9 @@ export function SchedulePage() {
     return <PageState title="Không thể tải lịch đăng" description={error ?? undefined} />
   }
 
-  const scheduledPosts = sortPostsNewestFirst(posts.filter(isEditableScheduledPost))
-  const paginatedSchedule = getPaginatedItems(scheduledPosts, schedulePage, schedulePageSize)
+  const scheduleRows = sortPostsNewestFirst(posts.filter(isScheduleVisible))
+  const scheduledPosts = scheduleRows.filter(isEditableScheduledPost)
+  const paginatedSchedule = getPaginatedItems(scheduleRows, schedulePage, schedulePageSize)
   const postsByDate = new Map<string, AppPost[]>()
   for (const post of scheduledPosts) {
     const dateKey = getDateKey(post.scheduledTime)
@@ -70,6 +113,23 @@ export function SchedulePage() {
   return (
     <section className="space-y-6">
       <PageHeader title={t('Lịch đăng')} />
+
+      {publishNotice && (
+        <div
+          role="status"
+          aria-live="polite"
+          className={`flex items-start justify-between gap-4 rounded-lg border px-4 py-3 text-sm ${
+            publishNotice.tone === 'success'
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+              : publishNotice.tone === 'error'
+                ? 'border-rose-200 bg-rose-50 text-rose-900'
+                : 'border-amber-200 bg-amber-50 text-amber-900'
+          }`}
+        >
+          <span>{publishNotice.message}</span>
+          <button type="button" onClick={() => setPublishNotice(null)} className="shrink-0 font-semibold underline">Đóng</button>
+        </div>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-[1fr_330px]">
         <div className="rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] p-5 shadow-sm">
@@ -141,20 +201,32 @@ export function SchedulePage() {
       </div>
 
       <div className="rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] shadow-sm">
-        <h2 className="border-b border-[var(--app-border)] p-5 text-base font-bold">{t('Bài đang chờ đăng')}</h2>
+        <h2 className="border-b border-[var(--app-border)] p-5 text-base font-bold">{t('Lịch đăng và bài cần xử lý')}</h2>
         <div className="divide-y divide-slate-100">
-          {scheduledPosts.length === 0 ? (
-            <div className="px-5 py-6 text-sm text-[var(--muted-text)]">{t('Chưa có bài nào đang chờ đăng.')}</div>
+          {scheduleRows.length === 0 ? (
+            <div className="px-5 py-6 text-sm text-[var(--muted-text)]">{t('Chưa có lịch đăng hoặc bài nào cần xử lý.')}</div>
           ) : (
             paginatedSchedule.pageItems.map((post) => (
-              <div key={postRowKey(post)} className="grid grid-cols-[90px_1fr_110px_90px_32px_32px_32px] items-center gap-4 px-5 py-4 text-sm">
+              <div key={postRowKey(post)} className="grid grid-cols-[72px_minmax(0,1fr)] items-center gap-2 px-4 py-4 text-sm lg:grid-cols-[90px_minmax(0,1fr)_110px_150px_32px_32px_32px_auto] lg:gap-3 lg:px-5">
                 <PlatformBadge platform={post.platform} />
                 {post.permalinkUrl ? (
-                  <a href={post.permalinkUrl} target="_blank" rel="noreferrer" className="truncate hover:text-violet-700">
-                    {post.content}
-                  </a>
+                  <div className="min-w-0">
+                    <a href={post.permalinkUrl} target="_blank" rel="noreferrer" className="block truncate hover:text-violet-700">
+                      {post.content}
+                    </a>
+                    {post.nextAttemptAt && <p className="mt-1 text-xs text-amber-700">Thử lại lúc {formatPostDateTime(post.nextAttemptAt)}</p>}
+                    {post.status === 'Unknown' && <p className="mt-1 text-xs text-amber-800">Kiểm tra bài trên nền tảng trước khi chọn kết quả.</p>}
+                    {post.attemptCount > 0 && <p className="mt-1 text-xs text-slate-500">Đã thử đăng {post.attemptCount} lần.</p>}
+                    {post.lastError && <p className="mt-1 line-clamp-2 text-xs text-rose-700">Lỗi gần nhất: {post.lastError}</p>}
+                  </div>
                 ) : (
-                  <p className="truncate">{post.content}</p>
+                  <div className="min-w-0">
+                    <p className="truncate">{post.content}</p>
+                    {post.nextAttemptAt && <p className="mt-1 text-xs text-amber-700">Thử lại lúc {formatPostDateTime(post.nextAttemptAt)}</p>}
+                    {post.status === 'Unknown' && <p className="mt-1 text-xs text-amber-800">Kiểm tra bài trên nền tảng trước khi chọn kết quả.</p>}
+                    {post.attemptCount > 0 && <p className="mt-1 text-xs text-slate-500">Đã thử đăng {post.attemptCount} lần.</p>}
+                    {post.lastError && <p className="mt-1 line-clamp-2 text-xs text-rose-700">Lỗi gần nhất: {post.lastError}</p>}
+                  </div>
                 )}
                 <StatusBadge status={post.status} />
                 <span className="text-xs text-[var(--muted-text)]">{formatPostDateTime(post.time)}</span>
@@ -181,6 +253,14 @@ export function SchedulePage() {
                 >
                   <Trash2 size={15} />
                 </button>
+                {post.status === 'Unknown' ? (
+                  <div className="flex flex-wrap gap-1">
+                    <button type="button" onClick={() => void resolveUnknown(post, true)} className="rounded border border-emerald-200 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">Đã đăng</button>
+                    <button type="button" onClick={() => void resolveUnknown(post, false)} className="rounded border border-amber-300 px-2 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-50">Chưa đăng · thử lại</button>
+                  </div>
+                ) : post.status === 'Failed' ? (
+                  <button type="button" onClick={() => void retryFailed(post)} className="rounded border border-blue-200 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50">Thử lại</button>
+                ) : <span />}
               </div>
             ))
           )}
@@ -188,7 +268,7 @@ export function SchedulePage() {
         <PaginationControls
           page={paginatedSchedule.currentPage}
           pageSize={schedulePageSize}
-          totalItems={scheduledPosts.length}
+          totalItems={scheduleRows.length}
           totalPages={paginatedSchedule.totalPages}
           onPageChange={setSchedulePage}
         />
@@ -288,6 +368,39 @@ export function SchedulePage() {
       setIsDeleting(false)
     }
   }
+
+  async function resolveUnknown(post: AppPost, published: boolean) {
+    if (!post.scheduleId) return
+    const confirmed = window.confirm(published
+      ? 'Hãy xác nhận bạn đã mở nền tảng và tìm thấy bài đăng. Đánh dấu lịch là đã đăng?'
+      : 'Chỉ tiếp tục nếu bạn đã kiểm tra Page/tài khoản đích và chắc chắn bài chưa xuất hiện. Postiva sẽ thử đăng lại; nếu kết quả trước còn chưa rõ, thao tác này có thể tạo bài trùng.')
+    if (!confirmed) return
+    try {
+      await api.post(`/publishing/${post.scheduleId}/resolve`, {
+        result: published ? 'CONFIRMED_PUBLISHED' : 'CONFIRMED_NOT_PUBLISHED',
+      })
+      if (!published) {
+        await api.post(`/publishing/${post.scheduleId}/retry`)
+        setPublishNotice({ tone: 'info', message: 'Đã xác nhận bài chưa được đăng và đưa yêu cầu thử lại vào hàng đợi.' })
+      } else {
+        setPublishNotice({ tone: 'success', message: 'Đã ghi nhận bài đăng thành công theo xác nhận của bạn.' })
+      }
+      reload()
+    } catch (error) {
+      setPublishNotice({ tone: 'error', message: getErrorMessage(error, 'Không thể cập nhật kết quả đăng.') })
+    }
+  }
+
+  async function retryFailed(post: AppPost) {
+    if (!post.scheduleId || !window.confirm('Thử đăng lại bài này ngay? Hãy kiểm tra trước rằng bài chưa được đăng trên nền tảng.')) return
+    try {
+      await api.post(`/publishing/${post.scheduleId}/retry`)
+      setPublishNotice({ tone: 'info', message: 'Đã nhận yêu cầu thử lại. Trạng thái sẽ tự cập nhật khi worker xử lý xong.' })
+      reload()
+    } catch (error) {
+      setPublishNotice({ tone: 'error', message: getErrorMessage(error, 'Không thể lên lịch thử lại bài đăng.') })
+    }
+  }
 }
 
 function PostCard({ post }: { post: AppPost }) {
@@ -298,7 +411,7 @@ function PostCard({ post }: { post: AppPost }) {
         <StatusBadge status={post.status} />
         <span className="ml-auto text-xs text-slate-400">{formatPostDateTime(post.time)}</span>
       </div>
-      <PostSummary post={post} showEngagement={false} showMediaBadge={false} />
+      <PostSummary post={post} showMediaBadge={false} />
     </div>
   )
 }
@@ -353,6 +466,11 @@ function isEditableScheduledPost(post: AppPost) {
   return post.status === 'Scheduled'
 }
 
+function isScheduleVisible(post: AppPost) {
+  return ['Scheduled', 'Publishing', 'Failed', 'Unknown'].includes(post.status)
+    || (post.status === 'Canceled' && post.lastError.includes('Tài khoản đã ngắt kết nối'))
+}
+
 function formatMonth(date: Date) {
   return new Intl.DateTimeFormat('vi-VN', { month: 'long', year: 'numeric' }).format(date)
 }
@@ -366,11 +484,6 @@ function formatDate(date: Date) {
 }
 
 function formatPostDateTime(value: string) {
-  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/)
-  if (match) {
-    return `${match[3]}/${match[2]}/${match[1]} ${match[4]}:${match[5]}`
-  }
-
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) {
     return value
@@ -382,5 +495,6 @@ function formatPostDateTime(value: string) {
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    timeZoneName: 'short',
   }).format(date)
 }

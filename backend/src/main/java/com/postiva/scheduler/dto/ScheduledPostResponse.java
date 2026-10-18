@@ -3,7 +3,7 @@ package com.postiva.scheduler.dto;
 import com.postiva.common.Platform;
 import com.postiva.scheduler.ScheduledPostStatus;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 public record ScheduledPostResponse(
@@ -11,10 +11,11 @@ public record ScheduledPostResponse(
         UUID postId,
         UUID socialAccountId,
         Platform platform,
-        LocalDateTime scheduledTime,
+        Instant scheduledTime,
         ScheduledPostStatus status,
         int attemptCount,
+        Instant nextAttemptAt,
         String lastError,
-        LocalDateTime publishedAt
+        Instant publishedAt
 ) {
 }

@@ -11,7 +11,6 @@ import { addDays, toDateKey } from '../lib/dates'
 import { getErrorMessage } from '../lib/errors'
 import { sortPostsNewestFirst } from '../lib/posts'
 import { usePreferences } from '../lib/preferences'
-import { useFacebookRealtimeRefetch } from '../lib/realtime'
 import { PageHeader, PageState, PlatformBadge, StatusBadge } from '../components/PageUi'
 
 const reportPageSize = 5
@@ -27,10 +26,6 @@ export function ReportsPage() {
   const { t } = usePreferences()
   const { data: overview, loading, error, reload } = useAppDataResource<AppOverview>('/app-data/overview')
   const postsState = useAppDataResource<AppPost[]>('/app-data/posts')
-  useFacebookRealtimeRefetch(() => {
-    reload()
-    postsState.reload()
-  })
   const [reportPage, setReportPage] = useState(1)
   const [editingPost, setEditingPost] = useState<AppPost | null>(null)
   const [editingMessage, setEditingMessage] = useState('')
@@ -42,6 +37,21 @@ export function ReportsPage() {
   const [repostingPost, setRepostingPost] = useState<AppPost | null>(null)
   const [chartPeriod, setChartPeriod] = useState<ChartPeriod>('DAY')
   const [selectedChartBucket, setSelectedChartBucket] = useState<string | null>(null)
+
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === 'visible') {
+        reload()
+        postsState.reload()
+      }
+    }
+    const timer = window.setInterval(refresh, 15000)
+    document.addEventListener('visibilitychange', refresh)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', refresh)
+    }
+  }, [reload, postsState.reload])
 
   useEffect(() => {
     setReportPage(1)
@@ -70,7 +80,13 @@ export function ReportsPage() {
 
   return (
     <section className="space-y-6">
-      <PageHeader title={t('Báo cáo & Phân tích', 'Reports & Analytics')} />
+      <PageHeader
+        title={t('Báo cáo trạng thái đăng', 'Publishing status report')}
+        subtitle={t(
+          'Tổng hợp lịch và kết quả do Postiva ghi nhận. Lượt xem, tương tác và bình luận chưa được đồng bộ; hãy xem trực tiếp trên nền tảng.',
+          'Shows schedules and publishing results recorded by Postiva. Views, engagement, and comments are not synced; check them on the platform.',
+        )}
+      />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] p-5 shadow-sm">
@@ -186,11 +202,13 @@ export function ReportsPage() {
       <div className="grid gap-4 md:grid-cols-3">
         <div className="rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] p-5 shadow-sm">
           <p className="text-base font-bold">{t('Tỷ lệ thành công', 'Success rate')}</p>
-          <p className="mt-3 text-4xl font-bold">{successRate}%</p>
+          <p className="mt-3 text-4xl font-bold">{finishedPosts === 0 ? '—' : `${successRate}%`}</p>
           <div className="mt-3 h-2 rounded-full bg-emerald-100">
             <div className="h-2 rounded-full bg-emerald-500" style={{ width: `${successRate}%` }} />
           </div>
-          <p className="mt-2 text-xs text-[var(--muted-text)]">{normalizedOverview.publishedPosts} {t('đã đăng', 'published')} / {normalizedOverview.failedPosts} {t('thất bại', 'failed')}</p>
+          <p className="mt-2 text-xs text-[var(--muted-text)]">{finishedPosts === 0
+            ? t('Chưa có bài đăng hoàn tất để tính tỷ lệ.', 'No completed posts to calculate a rate.')
+            : `${normalizedOverview.publishedPosts} ${t('đã đăng', 'published')} / ${normalizedOverview.failedPosts} ${t('thất bại', 'failed')}`}</p>
         </div>
         <div className="rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] p-5 shadow-sm">
           <p className="text-base font-bold">{t('Đang chờ đăng', 'Scheduled')}</p>

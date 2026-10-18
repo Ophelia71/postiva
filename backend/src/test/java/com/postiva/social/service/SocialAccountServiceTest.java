@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SocialAccountServiceTest {
-    private final TokenCipher tokenCipher = new TokenCipher("a-development-encryption-key");
+    private final TokenCipher tokenCipher = new TokenCipher("a-development-encryption-key-that-is-32-bytes");
     private RepositoryFake repositoryFake;
     private StubThreadsGraphClient threadsGraphClient;
     private SocialAccountService service;
@@ -37,7 +37,11 @@ class SocialAccountServiceTest {
                 tokenCipher,
                 null,
                 null,
-                threadsGraphClient
+                threadsGraphClient,
+                null,
+                null,
+                null,
+                null
         );
     }
 

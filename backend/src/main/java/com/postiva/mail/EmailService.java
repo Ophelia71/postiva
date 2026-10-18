@@ -86,6 +86,28 @@ public class EmailService {
         );
     }
 
+    public void sendPasswordResetLink(String recipient, String resetUrl, long expiresInMinutes) {
+        requireConfiguredMail();
+        String content = """
+                Bạn vừa yêu cầu đặt lại mật khẩu Postiva.
+
+                Mở liên kết sau để tạo mật khẩu mới:
+                %s
+
+                Liên kết có hiệu lực trong %d phút và chỉ sử dụng được một lần. Nếu bạn không yêu cầu, hãy bỏ qua email này.
+
+                Trân trọng,
+                Postiva
+                """.formatted(resetUrl, expiresInMinutes);
+        sendEmail(recipient, "Hướng dẫn đặt lại mật khẩu Postiva", content);
+    }
+
+    private void requireConfiguredMail() {
+        if (!enabled || !StringUtils.hasText(username) || !StringUtils.hasText(password)) {
+            throw new IllegalStateException("Dịch vụ email khôi phục chưa được cấu hình");
+        }
+    }
+
     public void sendLoginNotification(
             String recipient,
             String fullName

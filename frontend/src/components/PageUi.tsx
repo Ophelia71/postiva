@@ -100,6 +100,8 @@ export function StatusBadge({ status }: { status: string }) {
       ? 'bg-emerald-50 text-emerald-700'
       : status === 'Failed'
         ? 'bg-rose-50 text-rose-700'
+        : status === 'Unknown'
+          ? 'bg-amber-50 text-amber-800'
         : status === 'Canceled'
           ? 'bg-slate-100 text-slate-500'
           : 'bg-blue-50 text-blue-700'
@@ -127,6 +129,8 @@ function translateStatus(status: string, t: (vi: string) => string) {
       return 'Đã lên kế hoạch'
     case 'Publishing':
       return 'Đang đăng'
+    case 'Unknown':
+      return t('Cần xác minh kết quả')
     default:
       return status
   }

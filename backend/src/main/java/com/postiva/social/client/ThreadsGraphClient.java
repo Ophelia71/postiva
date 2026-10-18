@@ -37,8 +37,8 @@ public class ThreadsGraphClient {
                         .build())
                 .retrieve()
                 .onStatus(HttpStatusCode::isError, response -> response.bodyToMono(String.class)
-                        .map(responseBody -> new ResponseStatusException(
-                                HttpStatus.BAD_GATEWAY, metaErrorMessage(responseBody))))
+                        .map(responseBody -> new MetaApiException(response.statusCode().value(),
+                                metaErrorMessage(responseBody))))
                 .bodyToMono(String.class)
                 .block();
         return parseAccessToken(body, 0);
@@ -52,8 +52,8 @@ public class ThreadsGraphClient {
                         .build())
                 .retrieve()
                 .onStatus(HttpStatusCode::isError, response -> response.bodyToMono(String.class)
-                        .map(responseBody -> new ResponseStatusException(
-                                HttpStatus.BAD_GATEWAY, metaErrorMessage(responseBody))))
+                        .map(responseBody -> new MetaApiException(response.statusCode().value(),
+                                metaErrorMessage(responseBody))))
                 .bodyToMono(String.class)
                 .block();
         try {
@@ -106,7 +106,8 @@ public class ThreadsGraphClient {
                 .body(BodyInserters.fromFormData(form))
                 .retrieve()
                 .onStatus(HttpStatusCode::isError, response -> response.bodyToMono(String.class)
-                        .map(responseBody -> new IllegalStateException(metaErrorMessage(responseBody))))
+                        .map(responseBody -> new MetaApiException(response.statusCode().value(),
+                                metaErrorMessage(responseBody))))
                 .bodyToMono(String.class)
                 .block();
         return extractId(body, "Threads không trả về ID bài đăng");
@@ -133,7 +134,8 @@ public class ThreadsGraphClient {
                 .body(BodyInserters.fromFormData(form))
                 .retrieve()
                 .onStatus(HttpStatusCode::isError, response -> response.bodyToMono(String.class)
-                        .map(responseBody -> new IllegalStateException(metaErrorMessage(responseBody))))
+                        .map(responseBody -> new MetaApiException(response.statusCode().value(),
+                                metaErrorMessage(responseBody))))
                 .bodyToMono(String.class)
                 .block();
         return extractId(body, "Threads không trả về container ID");
@@ -147,7 +149,8 @@ public class ThreadsGraphClient {
                         .build(containerId))
                 .retrieve()
                 .onStatus(HttpStatusCode::isError, response -> response.bodyToMono(String.class)
-                        .map(responseBody -> new IllegalStateException(metaErrorMessage(responseBody))))
+                        .map(responseBody -> new MetaApiException(response.statusCode().value(),
+                                metaErrorMessage(responseBody))))
                 .bodyToMono(String.class)
                 .block();
         try {

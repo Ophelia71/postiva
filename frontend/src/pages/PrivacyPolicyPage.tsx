@@ -28,7 +28,9 @@ const sections: { id: string; title: string; content: ReactNode }[] = [
       </ul>
       <p>Postiva does not ask you to manually provide your social media passwords.</p>
       <h3>Content and activity</h3>
-      <p>Postiva stores content you create or upload, publication schedules, and publishing status. Supported integrations may also retrieve posts, comments, and engagement information to display and manage your connected accounts.</p>
+      <p>Postiva stores content you create or upload, publication schedules, and publishing status. Postiva does not currently sync views, reactions, engagement metrics, or comments from Meta.</p>
+      <h3>Website usage analytics</h3>
+      <p>Postiva records a random browser identifier, session identifier, page paths without query strings, broad traffic source, page-view and scroll milestones, and activity times to understand website usage. When you sign in, a session may be linked to your Postiva account. We do not store IP addresses or full referring URLs in these analytics tables. Website analytics sessions are removed after 180 days. Browser Do Not Track and Global Privacy Control signals disable this tracking in the website.</p>
     </>,
   },
   {
@@ -43,10 +45,11 @@ const sections: { id: string; title: string; content: ReactNode }[] = [
       <ul>
         <li>Authenticate users and protect the service against unauthorized access</li>
         <li>Connect, display, and maintain authorized social media accounts</li>
-        <li>Create and manage content, including supported posts, comments, and reports</li>
+        <li>Create and manage content, publication schedules, and publishing status</li>
         <li>Publish content to accounts selected by the user and schedule content for publication</li>
         <li>Process account disconnection or provider deauthorization</li>
         <li>Provide and maintain the Postiva service</li>
+        <li>Measure website usage, navigation and sign-up or purchase conversion in aggregate for internal administration</li>
       </ul>
     </>,
   },
@@ -84,7 +87,7 @@ const sections: { id: string; title: string; content: ReactNode }[] = [
   {
     id: 'deletion', title: 'Data Deletion', content: <>
       <p>To request deletion of your Postiva account data or information associated with a connected social account, contact {contactLink}.</p>
-      <p>For data received through supported Meta integrations, Postiva also exposes provider data-deletion handling. This handling applies to the associated integration data; it does not automatically delete all unrelated Postiva account data.</p>
+      <p>Meta data-deletion and deauthorization callbacks are available for connections that can be matched to Meta's signed app-scoped user ID. The current manual Page Access Token flow does not store that identity, so Postiva cannot reliably match a callback to those connections yet. For a manual-token connection, disconnect it in Postiva and contact {contactLink} to request deletion; do not treat the Meta callback as verified for that connection. Deleting integration data does not automatically delete unrelated Postiva account data.</p>
     </>,
   },
   {
@@ -154,7 +157,7 @@ export function PrivacyPolicyPage() {
         <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Postiva Privacy Policy</h1>
         <div className="mt-5 space-y-1 text-sm text-[var(--muted-text)]">
           <p>Effective date: <time dateTime="2026-10-01">October 1, 2026</time></p>
-          <p>Last updated: <time dateTime="2026-10-01">October 1, 2026</time></p>
+          <p>Last updated: <time dateTime="2026-10-17">October 17, 2026</time></p>
         </div>
         <nav aria-label="Table of contents" className="my-10 rounded-2xl border border-[var(--app-border)] bg-[var(--panel-bg)] p-6">
           <h2 className="mb-4 text-lg font-bold">Contents</h2>

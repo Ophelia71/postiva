@@ -41,6 +41,10 @@ public class JwtService {
     }
 
     public String generateToken(User user) {
+        return generateToken(user, false);
+    }
+
+    public String generateToken(User user, boolean mfaVerified) {
         Date now = new Date();
         Date expiration = new Date(
                 now.getTime() + expirationMilliseconds
@@ -50,6 +54,8 @@ public class JwtService {
                 .setSubject(user.getEmail())
                 .claim("userId", user.getId().toString())
                 .claim("role", user.getRole().name())
+                .claim("authVersion", user.getAuthVersion())
+                .claim("mfaVerified", mfaVerified)
                 .setIssuedAt(now)
                 .setExpiration(expiration)
                 .signWith(signingKey, SignatureAlgorithm.HS256)
@@ -58,6 +64,10 @@ public class JwtService {
 
     public String extractEmail(String token) {
         return extractClaim(token, Claims::getSubject);
+    }
+
+    public boolean isMfaVerified(String token) {
+        return Boolean.TRUE.equals(extractAllClaims(token).get("mfaVerified", Boolean.class));
     }
 
     public UUID extractUserId(String token) {
@@ -71,24 +81,24 @@ public class JwtService {
             String token,
             UserDetails userDetails
     ) {
-        String email = extractEmail(token);
-
-        return email != null
-                && email.equalsIgnoreCase(userDetails.getUsername())
-                && !isTokenExpired(token);
+        Claims claims = extractAllClaims(token);
+        Object tokenVersion = claims.get("authVersion");
+        // Tokens issued before V3 have no claim and represent version zero.
+        long version = tokenVersion == null ? 0 : tokenVersion instanceof Number number
+                ? number.longValue() : -1;
+        return userDetails instanceof PostivaUserDetails current
+                && claims.getSubject() != null
+                && claims.getSubject().equalsIgnoreCase(current.getUsername())
+                && current.getAuthorities().stream().anyMatch(authority ->
+                        authority.getAuthority().equals("ROLE_" + claims.get("role", String.class)))
+                && claims.getExpiration() != null
+                && claims.getExpiration().after(new Date())
+                && (!current.isMfaEnabled() || Boolean.TRUE.equals(claims.get("mfaVerified", Boolean.class)))
+                && version == current.getAuthVersion();
     }
 
     public long getExpirationSeconds() {
         return expirationMilliseconds / 1000;
-    }
-
-    private boolean isTokenExpired(String token) {
-        Date expiration = extractClaim(
-                token,
-                Claims::getExpiration
-        );
-
-        return expiration.before(new Date());
     }
 
     private <T> T extractClaim(

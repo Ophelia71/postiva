@@ -7,6 +7,7 @@ import com.postiva.config.CorsConfig;
 import com.postiva.config.SecurityConfig;
 import com.postiva.social.service.FacebookPostSyncService;
 import com.postiva.social.service.MetaSignedRequestService;
+import com.postiva.social.service.MetaDeletionStatusUrlFactory;
 import com.postiva.social.service.SocialAccountService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,9 +31,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         InstagramController.class,
         ThreadsController.class
 })
-@Import({SecurityConfig.class, CorsConfig.class, JwtAuthenticationFilter.class})
-@TestPropertySource(properties = "postiva.frontend-origin=http://localhost:5173")
+@Import({SecurityConfig.class, CorsConfig.class, JwtAuthenticationFilter.class, MetaDeletionStatusUrlFactory.class})
+@TestPropertySource(properties = {
+        "postiva.frontend-origin=http://localhost:5173",
+        "postiva.meta.public-base-url=https://api.example.test"
+})
 class SocialConnectionSecurityTest {
+    @MockBean private com.postiva.auth.security.AuthRequestGuard authRequestGuard;
     @Autowired
     private MockMvc mockMvc;
 
@@ -127,7 +132,8 @@ class SocialConnectionSecurityTest {
         when(signedRequestService.deauthorize(org.mockito.ArgumentMatchers.any(), anyString()))
                 .thenReturn(new MetaSignedRequestService.DeauthorizationResponse(true, 1));
         when(signedRequestService.deleteData(org.mockito.ArgumentMatchers.any(), anyString()))
-                .thenReturn(new MetaSignedRequestService.DeletionReceipt("confirmation", 1));
+                .thenReturn(new MetaSignedRequestService.DeletionReceipt(
+                        "00000000-0000-4000-8000-000000000001", 1));
 
         for (String provider : new String[]{"meta", "instagram", "threads"}) {
             mockMvc.perform(post("/api/social/" + provider + "/deauthorize")
@@ -135,6 +141,24 @@ class SocialConnectionSecurityTest {
                     .andExpect(status().isOk());
             mockMvc.perform(post("/api/social/" + provider + "/delete-data")
                             .param("signed_request", "signed-request"))
+                    .andExpect(status().isOk());
+        }
+    }
+
+    @Test
+    void deletionStatusCanBeReadWithoutJwt() throws Exception {
+        when(signedRequestService.getDeletionStatus(org.mockito.ArgumentMatchers.any(), anyString()))
+                .thenReturn(new MetaSignedRequestService.DeletionStatus(
+                        "00000000-0000-4000-8000-000000000001",
+                        com.postiva.common.Platform.FACEBOOK,
+                        "completed",
+                        0,
+                        java.time.LocalDateTime.now()
+                ));
+
+        for (String provider : new String[]{"meta", "instagram", "threads"}) {
+            mockMvc.perform(get("/api/social/" + provider
+                            + "/delete-data/status/00000000-0000-4000-8000-000000000001"))
                     .andExpect(status().isOk());
         }
     }

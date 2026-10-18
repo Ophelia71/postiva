@@ -5,6 +5,7 @@ import com.postiva.common.Platform;
 import com.postiva.social.dto.ManualSocialConnectRequest;
 import com.postiva.social.dto.SocialAccountResponse;
 import com.postiva.social.service.MetaSignedRequestService;
+import com.postiva.social.service.MetaDeletionStatusUrlFactory;
 import com.postiva.social.service.SocialAccountService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -14,18 +15,20 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 @RestController
 @RequestMapping("/api/social/instagram")
 public class InstagramController {
     private final SocialAccountService accountService;
     private final MetaSignedRequestService signedRequestService;
+    private final MetaDeletionStatusUrlFactory deletionStatusUrls;
 
     public InstagramController(SocialAccountService accountService,
-                               MetaSignedRequestService signedRequestService) {
+                               MetaSignedRequestService signedRequestService,
+                               MetaDeletionStatusUrlFactory deletionStatusUrls) {
         this.accountService = accountService;
         this.signedRequestService = signedRequestService;
+        this.deletionStatusUrls = deletionStatusUrls;
     }
 
     @PostMapping("/manual")
@@ -46,12 +49,10 @@ public class InstagramController {
     public MetaSignedRequestService.DataDeletionResponse deleteData(
             @RequestParam("signed_request") String signedRequest
     ) {
+        deletionStatusUrls.requireConfigured();
         MetaSignedRequestService.DeletionReceipt receipt =
                 signedRequestService.deleteData(Platform.INSTAGRAM, signedRequest);
-        String url = ServletUriComponentsBuilder.fromCurrentContextPath()
-                .path("/api/social/instagram/delete-data/status/{code}")
-                .buildAndExpand(receipt.confirmationCode())
-                .toUriString();
+        String url = deletionStatusUrls.statusUrl(Platform.INSTAGRAM, receipt.confirmationCode());
         return new MetaSignedRequestService.DataDeletionResponse(url, receipt.confirmationCode());
     }
 

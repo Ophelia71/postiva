@@ -135,7 +135,7 @@ class MetaSignedRequestServiceTest {
         private boolean hardDelete;
 
         private CapturingAccountService() {
-            super(null, null, null, null, null, null);
+            super(null, null, null, null, null, null, null, null, null, null);
         }
 
         @Override

@@ -31,6 +31,7 @@ public class CorsConfig {
         configuration.setAllowedOriginPatterns(allowedOriginPatterns);
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
+        configuration.setExposedHeaders(List.of("Retry-After", "X-AI-Request-State"));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);
 

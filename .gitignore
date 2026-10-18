@@ -30,6 +30,9 @@ application-local.yml
 # Logs
 *.log
 
+# Local database backups (may contain account data and encrypted tokens)
+database/backups/
+
 # Uploaded media
 backend/uploads/
 uploads/

@@ -20,8 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.time.LocalDateTime;
-import java.time.ZoneId;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -130,8 +129,8 @@ public class FacebookBusinessPostService {
         return ids;
     }
 
-    private LocalDateTime toLocalTime(java.time.OffsetDateTime time) {
-        return time.atZoneSameInstant(ZoneId.systemDefault()).toLocalDateTime();
+    private Instant toLocalTime(java.time.OffsetDateTime time) {
+        return time.toInstant();
     }
 
     private String blankToNull(String value) {

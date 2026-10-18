@@ -33,6 +33,9 @@ class OpenAiServiceTest {
         assertEquals("json_schema", responseFormat.get("type"));
         Map<?, ?> jsonSchema = map(responseFormat.get("json_schema"));
         assertEquals(true, jsonSchema.get("strict"));
+        assertEquals(1800, payload.get("max_completion_tokens"));
+        assertEquals("low", payload.get("reasoning_effort"));
+        assertFalse(payload.containsKey("temperature"));
 
         Map<?, ?> schema = map(jsonSchema.get("schema"));
         assertEquals(false, schema.get("additionalProperties"));
@@ -77,6 +80,24 @@ class OpenAiServiceTest {
     }
 
     @Test
+    void providerUsageIsExtractedForCostAccounting() {
+        OpenAiService service = service("test-key");
+        var usage = service.parseProviderUsage("""
+                {"id":"chatcmpl-fixture","model":"gpt-6-luna-2026","usage":{
+                  "prompt_tokens":1200,"completion_tokens":300,
+                  "prompt_tokens_details":{"cached_tokens":400,"cache_write_tokens":300}}}
+                """);
+
+        assertEquals(1200, usage.inputTokens());
+        assertEquals(400, usage.cachedInputTokens());
+        assertEquals(300, usage.cacheWriteInputTokens());
+        assertEquals(300, usage.outputTokens());
+        assertEquals("gpt-6-luna-2026", usage.providerModel());
+        assertEquals("chatcmpl-fixture", usage.providerRequestId());
+        assertTrue(usage.isComplete());
+    }
+
+    @Test
     void missingApiKeyDoesNotSilentlyReturnMockContent() {
         OpenAiService service = service("");
 
@@ -91,7 +112,7 @@ class OpenAiServiceTest {
 
     private OpenAiService service(String apiKey) {
         return new OpenAiService(
-                new OpenAiProperties(apiKey, "gpt-4o-mini"),
+                new OpenAiProperties(apiKey, "gpt-6-luna"),
                 new PromptBuilder(),
                 objectMapper,
                 WebClient.builder()

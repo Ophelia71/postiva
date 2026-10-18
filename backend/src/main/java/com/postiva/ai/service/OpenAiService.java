@@ -3,6 +3,7 @@ package com.postiva.ai.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.postiva.ai.dto.AiPostResult;
+import com.postiva.ai.dto.ProviderTokenUsage;
 import com.postiva.common.Platform;
 import com.postiva.config.OpenAiProperties;
 import com.postiva.post.dto.GeneratePostRequest;
@@ -22,6 +23,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 
 @Service
 public class OpenAiService {
@@ -49,6 +51,11 @@ public class OpenAiService {
     }
 
     public AiPostResult generatePost(GeneratePostRequest request, IndustryTemplate template) {
+        return generatePost(request, template, null);
+    }
+
+    public AiPostResult generatePost(GeneratePostRequest request, IndustryTemplate template,
+                                     Consumer<ProviderTokenUsage> usageObserver) {
         if (!properties.enabled()) {
             throw new ResponseStatusException(
                     HttpStatus.SERVICE_UNAVAILABLE,
@@ -56,7 +63,7 @@ public class OpenAiService {
             );
         }
 
-        String response = callOpenAi(buildRequestPayload(request, template));
+        String response = callOpenAi(buildRequestPayload(request, template), usageObserver);
         return parseOpenAiResponse(response, request);
     }
 
@@ -81,8 +88,14 @@ public class OpenAiService {
                         "schema", buildResponseSchema(request.platforms())
                 )
         ));
-        payload.put("temperature", 0.7);
-        payload.put("max_tokens", 1800);
+        // GPT-6 reasoning requests reject sampling controls unless reasoning_effort is "none".
+        // Keep a low reasoning budget for content writing and use the current completion limit.
+        if (properties.model() != null && properties.model().startsWith("gpt-6")) {
+            payload.put("reasoning_effort", "low");
+        } else {
+            payload.put("temperature", 0.7);
+        }
+        payload.put("max_completion_tokens", 1800);
         return payload;
     }
 
@@ -115,7 +128,7 @@ public class OpenAiService {
         }
     }
 
-    private String callOpenAi(Map<String, Object> payload) {
+    private String callOpenAi(Map<String, Object> payload, Consumer<ProviderTokenUsage> usageObserver) {
         try {
             String response = webClient.post()
                     .uri("/chat/completions")
@@ -126,6 +139,7 @@ public class OpenAiService {
             if (response == null || response.isBlank()) {
                 throw invalidResponse();
             }
+            if (usageObserver != null) usageObserver.accept(parseProviderUsage(response));
             return response;
         } catch (WebClientResponseException exception) {
             throw mapOpenAiError(exception);
@@ -141,6 +155,27 @@ public class OpenAiService {
                     "OpenAI phản hồi quá lâu. Hãy thử lại.",
                     exception
             );
+        }
+    }
+
+    ProviderTokenUsage parseProviderUsage(String response) {
+        try {
+            JsonNode root = objectMapper.readTree(response);
+            JsonNode usage = root.path("usage");
+            if (!usage.isObject() || !usage.path("prompt_tokens").canConvertToInt()
+                    || !usage.path("completion_tokens").canConvertToInt()) {
+                return new ProviderTokenUsage(null, null, null, root.path("model").asText(null), root.path("id").asText(null));
+            }
+            int promptTokens = usage.path("prompt_tokens").asInt();
+            int outputTokens = usage.path("completion_tokens").asInt();
+            int cachedTokens = usage.path("prompt_tokens_details").path("cached_tokens").canConvertToInt()
+                    ? usage.path("prompt_tokens_details").path("cached_tokens").asInt() : 0;
+            int cacheWriteTokens = usage.path("prompt_tokens_details").path("cache_write_tokens").canConvertToInt()
+                    ? usage.path("prompt_tokens_details").path("cache_write_tokens").asInt() : 0;
+            return new ProviderTokenUsage(promptTokens, cachedTokens, cacheWriteTokens, outputTokens,
+                    root.path("model").asText(null), root.path("id").asText(null));
+        } catch (Exception exception) {
+            return new ProviderTokenUsage(null, null, null, null, null);
         }
     }
 

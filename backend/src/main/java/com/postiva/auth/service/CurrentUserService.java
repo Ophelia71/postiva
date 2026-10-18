@@ -24,8 +24,12 @@ public class CurrentUserService {
                 || "anonymousUser".equals(authentication.getName())) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Bạn cần đăng nhập");
         }
-        return userRepository.findByEmailIgnoreCase(authentication.getName())
+        User user = userRepository.findByEmailIgnoreCase(authentication.getName())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Tài khoản không tồn tại"));
+        if (!user.isActive()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Tài khoản đã bị khóa");
+        }
+        return user;
     }
 
     public UUID requireCurrentUserId() {

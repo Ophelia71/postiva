@@ -9,6 +9,7 @@ import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.CacheControl;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -37,12 +38,58 @@ public class FileController {
     @GetMapping("/{fileId}")
     public ResponseEntity<Resource> get(@PathVariable UUID fileId) {
         UploadedFile file = fileService.requireFile(fileId);
+        return response(file, false);
+    }
+
+    @GetMapping("/public/{fileId}")
+    public ResponseEntity<Resource> getForPlatform(
+            @PathVariable UUID fileId,
+            @RequestParam("expires") long expiresAt,
+            @RequestParam("signature") String signature
+    ) {
+        UploadedFile file = fileService.requirePublicFile(fileId, expiresAt, signature);
+        return response(file, true);
+    }
+
+    private ResponseEntity<Resource> response(UploadedFile file, boolean publicLink) {
+        String fileName = file.getFileName() == null || file.getFileName().isBlank() ? "media" : file.getFileName();
         ContentDisposition disposition = ContentDisposition.inline()
-                .filename(file.getFileName(), StandardCharsets.UTF_8)
+                .filename(safeFileName(fileName), StandardCharsets.UTF_8)
                 .build();
-        return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType(file.getMimeType()))
+        MediaType contentType = safeMediaType(file.getMimeType());
+        ResponseEntity.BodyBuilder response = ResponseEntity.ok()
+                .contentType(contentType)
                 .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
-                .body(fileService.resource(file));
+                .header("X-Content-Type-Options", "nosniff");
+        if (publicLink) {
+            response.cacheControl(CacheControl.maxAge(java.time.Duration.ofMinutes(5)).cachePublic());
+        } else {
+            response.cacheControl(CacheControl.noStore());
+        }
+        return response.body(fileService.resource(file));
+    }
+
+    private MediaType safeMediaType(String value) {
+        try {
+            MediaType mediaType = MediaType.parseMediaType(value);
+            boolean allowed = mediaType.equals(MediaType.IMAGE_JPEG)
+                    || mediaType.equals(MediaType.IMAGE_PNG)
+                    || mediaType.toString().equals("image/webp")
+                    || mediaType.toString().equals("video/mp4")
+                    || mediaType.toString().equals("video/quicktime")
+                    || mediaType.toString().equals("video/webm");
+            return allowed ? mediaType : MediaType.APPLICATION_OCTET_STREAM;
+        } catch (RuntimeException exception) {
+            return MediaType.APPLICATION_OCTET_STREAM;
+        }
+    }
+
+    private String safeFileName(String value) {
+        String name = value.replace('\\', '/');
+        int separator = name.lastIndexOf('/');
+        if (separator >= 0) name = name.substring(separator + 1);
+        name = name.replaceAll("[\\p{Cntrl}]", "").trim();
+        if (name.isBlank() || name.equals(".") || name.equals("..")) return "media";
+        return name.length() > 255 ? name.substring(name.length() - 255) : name;
     }
 }

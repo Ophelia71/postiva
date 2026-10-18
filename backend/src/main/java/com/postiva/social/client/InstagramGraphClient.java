@@ -48,7 +48,7 @@ public class InstagramGraphClient {
                         .build())
                 .retrieve()
                 .onStatus(HttpStatusCode::isError, response -> response.bodyToMono(String.class)
-                        .map(responseBody -> new IllegalStateException(
+                        .map(responseBody -> new MetaApiException(response.statusCode().value(),
                                 metaErrorMessage("Instagram không thể refresh token", responseBody))))
                 .bodyToMono(String.class)
                 .block();
@@ -63,10 +63,8 @@ public class InstagramGraphClient {
                         .build())
                 .retrieve()
                 .onStatus(HttpStatusCode::isError, response -> response.bodyToMono(String.class)
-                        .map(responseBody -> new ResponseStatusException(
-                                HttpStatus.BAD_GATEWAY,
-                                metaErrorMessage("Instagram", responseBody)
-                        )))
+                        .map(responseBody -> new MetaApiException(response.statusCode().value(),
+                                metaErrorMessage("Instagram", responseBody))))
                 .bodyToMono(String.class)
                 .block();
         try {
@@ -181,7 +179,8 @@ public class InstagramGraphClient {
                         .build(containerId))
                 .retrieve()
                 .onStatus(HttpStatusCode::isError, response -> response.bodyToMono(String.class)
-                        .map(responseBody -> new IllegalStateException(metaErrorMessage("Instagram", responseBody))))
+                        .map(responseBody -> new MetaApiException(response.statusCode().value(),
+                                metaErrorMessage("Instagram", responseBody))))
                 .bodyToMono(String.class)
                 .block();
         try {
@@ -203,10 +202,8 @@ public class InstagramGraphClient {
                         .build(accountId))
                 .retrieve()
                 .onStatus(HttpStatusCode::isError, response -> response.bodyToMono(String.class)
-                        .map(responseBody -> new ResponseStatusException(
-                                HttpStatus.BAD_GATEWAY,
-                                metaErrorMessage("Instagram Business", responseBody)
-                        )))
+                        .map(responseBody -> new MetaApiException(response.statusCode().value(),
+                                metaErrorMessage("Instagram Business", responseBody))))
                 .bodyToMono(String.class)
                 .block();
         try {
@@ -233,7 +230,7 @@ public class InstagramGraphClient {
                 .body(BodyInserters.fromFormData(form))
                 .retrieve()
                 .onStatus(HttpStatusCode::isError, response -> response.bodyToMono(String.class)
-                        .map(responseBody -> new IllegalStateException(
+                        .map(responseBody -> new MetaApiException(response.statusCode().value(),
                                 metaErrorMessage("Instagram không thể " + action, responseBody))))
                 .bodyToMono(String.class)
                 .block();

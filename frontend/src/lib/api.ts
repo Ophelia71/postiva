@@ -56,7 +56,10 @@ api.interceptors.response.use(
   (error) => {
     const status = axios.isAxiosError(error) ? error.response?.status : undefined
     const requestUrl = axios.isAxiosError(error) ? String(error.config?.url ?? '') : ''
-    const isAuthRequest = requestUrl.includes('/auth/login') || requestUrl.includes('/auth/register')
+    const isAuthRequest = requestUrl.includes('/auth/login')
+      || requestUrl.includes('/auth/register')
+      || requestUrl.includes('/auth/password/forgot')
+      || requestUrl.includes('/auth/password/reset')
 
     const authorization = axios.isAxiosError(error)
       ? String(error.config?.headers?.Authorization ?? '') : ''
