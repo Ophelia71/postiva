@@ -36,9 +36,10 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.stream.Stream;
 
 @RestController
@@ -85,10 +86,6 @@ public class AppDataController {
                 "scheduledPosts", scheduled,
                 "publishedPosts", published,
                 "failedPosts", failed,
-                "views", 0,
-                "likes", 0,
-                "comments", 0,
-                "shares", 0,
                 "channels", channels,
                 "recentPosts", postData.stream().limit(10).toList()
         ));
@@ -101,8 +98,8 @@ public class AppDataController {
 
     @GetMapping("/posts/{postId}/comments")
     public ApiResponse<List<Map<String, Object>>> comments(@PathVariable UUID postId) {
-        currentUserService.requireCurrentUser();
-        return ApiResponse.ok(List.of());
+        throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED,
+                "Postiva chưa hỗ trợ đồng bộ hoặc quản lý bình luận.");
     }
 
     @PutMapping("/posts/{postId}")
@@ -264,7 +261,6 @@ public class AppDataController {
         result.put("name", blankToDefault(account.pageName(), badge + " Page"));
         result.put("type", type);
         result.put("badge", badge);
-        result.put("followers", "0");
         result.put("color", channelColor(account.provider()));
         result.put("active", true);
         return result;
@@ -279,12 +275,10 @@ public class AppDataController {
     }
 
     private List<Map<String, Object>> postData(UUID userId) {
-        List<ScheduledPost> schedules = safeSchedules(userId);
-        Set<UUID> postsWithSchedules = new HashSet<>();
-        safeAllSchedules(userId).forEach(schedule -> {
-            if (schedule.getPostId() != null) {
-                postsWithSchedules.add(schedule.getPostId());
-            }
+        List<ScheduledPost> schedules = safeAllSchedules(userId);
+        Set<UUID> postsWithSchedules = new java.util.HashSet<>();
+        schedules.forEach(schedule -> {
+            if (schedule.getPostId() != null) postsWithSchedules.add(schedule.getPostId());
         });
         Map<UUID, List<ScheduledPost>> schedulesByPost = new LinkedHashMap<>();
         schedules.forEach(schedule -> {
@@ -335,15 +329,6 @@ public class AppDataController {
         return status == null || status == PostStatus.DRAFT || status == PostStatus.PLANNED;
     }
 
-    private List<ScheduledPost> safeSchedules(UUID userId) {
-        try {
-            return scheduledRepository.findAllForUser(userId);
-        } catch (RuntimeException exception) {
-            log.warn("Could not load active schedules for app data. userId={}", userId, exception);
-            return List.of();
-        }
-    }
-
     private List<ScheduledPost> safeAllSchedules(UUID userId) {
         try {
             return scheduledRepository.findAllIncludingDisconnectedForUser(userId);
@@ -373,7 +358,9 @@ public class AppDataController {
         String status = statusLabel(schedule == null
                 ? (post.getStatus() == null ? null : post.getStatus().name())
                 : (schedule.getStatus() == null ? null : schedule.getStatus().name()));
-        LocalDateTime time = schedule == null ? post.getCreatedAt() : schedule.getScheduledTime();
+        Instant time = schedule == null
+                ? (post.getCreatedAt() == null ? null : post.getCreatedAt().toInstant(ZoneOffset.UTC))
+                : schedule.getScheduledTime();
         Map<?, ?> platformValues = platformValues(post, platform);
         List<String> mediaUrls = mediaUrls(post, mediaFiles);
         Map<String, Object> result = new HashMap<>();
@@ -383,10 +370,9 @@ public class AppDataController {
         result.put("content", content);
         result.put("status", status);
         result.put("time", time == null ? "" : time.toString());
-        result.put("viewCount", 0);
-        result.put("likeCount", 0);
-        result.put("commentCount", 0);
-        result.put("shareCount", 0);
+        result.put("attemptCount", schedule == null ? 0 : schedule.getAttemptCount());
+        result.put("nextAttemptAt", schedule == null ? null : schedule.getNextAttemptAt());
+        result.put("lastError", schedule == null ? "" : blankToDefault(schedule.getLastError(), ""));
         result.put("permalinkUrl", text(platformValues, "permalinkUrl"));
         result.put("platformPostId", log == null || log.getExternalPostId() == null ? text(platformValues, "platformPostId") : log.getExternalPostId());
         result.put("mediaType", text(platformValues, "mediaType"));
@@ -395,14 +381,7 @@ public class AppDataController {
         result.put("mediaTitle", "");
         result.put("mediaUrls", mediaUrls);
         result.put("mediaIds", mediaIds(mediaFiles));
-        result.put("reactionLikeCount", 0);
-        result.put("reactionLoveCount", 0);
-        result.put("reactionCareCount", 0);
-        result.put("reactionHahaCount", 0);
-        result.put("reactionWowCount", 0);
-        result.put("reactionSadCount", 0);
-        result.put("reactionAngryCount", 0);
-        result.put("scheduledTime", schedule == null || schedule.getScheduledTime() == null ? null : schedule.getScheduledTime().toString());
+        result.put("scheduledTime", schedule == null ? null : schedule.getScheduledTime());
         return result;
     }
 
@@ -421,14 +400,14 @@ public class AppDataController {
         result.put("status", statusLabel(schedule == null
                 ? (post.getStatus() == null ? null : post.getStatus().name())
                 : (schedule.getStatus() == null ? null : schedule.getStatus().name())));
-        LocalDateTime time = schedule == null ? post.getCreatedAt() : schedule.getScheduledTime();
+        Instant time = schedule == null
+                ? (post.getCreatedAt() == null ? null : post.getCreatedAt().toInstant(ZoneOffset.UTC))
+                : schedule.getScheduledTime();
         result.put("time", time == null ? "" : time.toString());
-        result.put("scheduledTime", schedule == null || schedule.getScheduledTime() == null
-                ? null : schedule.getScheduledTime().toString());
-        result.put("viewCount", 0);
-        result.put("likeCount", 0);
-        result.put("commentCount", 0);
-        result.put("shareCount", 0);
+        result.put("attemptCount", schedule == null ? 0 : schedule.getAttemptCount());
+        result.put("nextAttemptAt", schedule == null ? null : schedule.getNextAttemptAt());
+        result.put("lastError", schedule == null ? "" : blankToDefault(schedule.getLastError(), ""));
+        result.put("scheduledTime", schedule == null ? null : schedule.getScheduledTime());
         result.put("permalinkUrl", "");
         result.put("platformPostId", "");
         result.put("mediaType", "");
@@ -437,13 +416,6 @@ public class AppDataController {
         result.put("mediaTitle", "");
         result.put("mediaUrls", mediaUrls);
         result.put("mediaIds", mediaIds(mediaFiles));
-        result.put("reactionLikeCount", 0);
-        result.put("reactionLoveCount", 0);
-        result.put("reactionCareCount", 0);
-        result.put("reactionHahaCount", 0);
-        result.put("reactionWowCount", 0);
-        result.put("reactionSadCount", 0);
-        result.put("reactionAngryCount", 0);
         return result;
     }
 
@@ -503,6 +475,7 @@ public class AppDataController {
 
     private String statusLabel(String value) {
         if (value == null || value.isBlank()) return "Draft";
+        if ("CANCELLED".equalsIgnoreCase(value)) return "Canceled";
         String normalized = value.toLowerCase();
         return Character.toUpperCase(normalized.charAt(0)) + normalized.substring(1);
     }

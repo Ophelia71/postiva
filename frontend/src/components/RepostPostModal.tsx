@@ -1,5 +1,6 @@
 import { CheckCircle2, Image, Link as LinkIcon, Send, Upload, Video, X } from 'lucide-react'
 import { useEffect, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react'
+import { ProtectedMediaImage, ProtectedMediaVideo } from './ProtectedMedia'
 import { api } from '../lib/api'
 import { type AppChannel, type AppPost, useAppDataResource } from '../lib/appDataApi'
 import { getErrorMessage } from '../lib/errors'
@@ -233,9 +234,9 @@ export function RepostPostModal({
                 {selectedMedia.map((media, index) => (
                   <div key={media.id || media.fileUrl + index} className="relative overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
                     {media.mimeType.startsWith('video/') ? (
-                      <video src={resolveMediaUrl(media.fileUrl)} controls className="h-36 w-full bg-slate-950 object-contain" />
+                      <ProtectedMediaVideo src={resolveMediaUrl(media.fileUrl)} controls className="h-36 w-full bg-slate-950 object-contain" />
                     ) : (
-                      <img src={resolveMediaUrl(media.fileUrl)} alt={'Media đăng lại ' + (index + 1)} className="h-36 w-full object-contain" />
+                      <ProtectedMediaImage src={resolveMediaUrl(media.fileUrl)} alt={'Media đăng lại ' + (index + 1)} className="h-36 w-full object-contain" />
                     )}
                     <div className="flex items-center justify-between gap-2 px-3 py-2 text-xs">
                       <span className="truncate font-semibold text-slate-600">
@@ -376,8 +377,8 @@ function MediaPreview({ mediaType, mediaUrl }: { mediaType: 'IMAGE' | 'VIDEO'; m
   }
 
   if (mediaType === 'IMAGE') {
-    return <img src={previewMediaUrl} alt="Media xem trước" className="mx-auto h-auto max-h-72 max-w-full rounded-xl border border-slate-200 object-contain" />
+    return <ProtectedMediaImage src={previewMediaUrl} alt="Media xem trước" className="mx-auto h-auto max-h-72 max-w-full rounded-xl border border-slate-200 object-contain" />
   }
 
-  return <video src={previewMediaUrl} controls className="max-h-72 w-full rounded-xl border border-slate-200 bg-slate-950" />
+  return <ProtectedMediaVideo src={previewMediaUrl} controls className="max-h-72 w-full rounded-xl border border-slate-200 bg-slate-950" />
 }

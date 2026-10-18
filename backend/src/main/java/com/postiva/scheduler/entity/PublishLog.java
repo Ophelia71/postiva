@@ -7,7 +7,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 @Entity
@@ -24,7 +24,7 @@ public class PublishLog {
     private String status;
     @Column(columnDefinition = "TEXT")
     private String errorMessage;
-    private LocalDateTime publishedAt;
+    private Instant publishedAt;
 
     public UUID getId() { return id; }
     public UUID getScheduledPostId() { return scheduledPostId; }
@@ -32,12 +32,12 @@ public class PublishLog {
     public String getExternalPostId() { return externalPostId; }
     public String getStatus() { return status; }
     public String getErrorMessage() { return errorMessage; }
-    public LocalDateTime getPublishedAt() { return publishedAt; }
+    public Instant getPublishedAt() { return publishedAt; }
 
     public void setScheduledPostId(UUID scheduledPostId) { this.scheduledPostId = scheduledPostId; }
     public void setProvider(String provider) { this.provider = provider; }
     public void setExternalPostId(String externalPostId) { this.externalPostId = externalPostId; }
     public void setStatus(String status) { this.status = status; }
     public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
-    public void setPublishedAt(LocalDateTime publishedAt) { this.publishedAt = publishedAt; }
+    public void setPublishedAt(Instant publishedAt) { this.publishedAt = publishedAt; }
 }

@@ -7,19 +7,11 @@ import com.postiva.social.dto.FacebookTestPostRequest;
 import com.postiva.social.dto.FacebookTestPostResponse;
 import com.postiva.social.dto.ManualFacebookConnectRequest;
 import com.postiva.social.dto.SocialAccountResponse;
-import com.postiva.social.dto.SocialConnectUrlResponse;
-import com.postiva.social.service.MetaOAuthService;
 import com.postiva.social.service.MetaSignedRequestService;
 import com.postiva.social.service.SocialAccountService;
 import com.postiva.social.service.FacebookPostSyncService;
+import com.postiva.social.service.MetaDeletionStatusUrlFactory;
 import jakarta.validation.Valid;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.http.HttpStatusCode;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -28,68 +20,28 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
-import java.net.URI;
 import java.util.List;
 import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/social/meta")
 public class MetaController {
-    private static final Logger log = LoggerFactory.getLogger(MetaController.class);
-
-    private final MetaOAuthService oauthService;
     private final SocialAccountService accountService;
     private final FacebookPostSyncService facebookPostSyncService;
     private final MetaSignedRequestService signedRequestService;
-    private final String frontendOrigin;
+    private final MetaDeletionStatusUrlFactory deletionStatusUrls;
 
     public MetaController(
-            MetaOAuthService oauthService,
             SocialAccountService accountService,
             FacebookPostSyncService facebookPostSyncService,
             MetaSignedRequestService signedRequestService,
-            @Value("${postiva.frontend-origin}") String frontendOrigin
+            MetaDeletionStatusUrlFactory deletionStatusUrls
     ) {
-        this.oauthService = oauthService;
         this.accountService = accountService;
         this.facebookPostSyncService = facebookPostSyncService;
         this.signedRequestService = signedRequestService;
-        this.frontendOrigin = frontendOrigin;
-    }
-
-    @GetMapping("/connect-url")
-    public ApiResponse<SocialConnectUrlResponse> connectUrl() {
-        return ApiResponse.ok(oauthService.createConnectUrl());
-    }
-
-    @GetMapping("/callback")
-    public ResponseEntity<Void> callback(
-            @RequestParam(required = false) String code,
-            @RequestParam(required = false) String state,
-            @RequestParam(required = false) String error
-    ) {
-        if (OAuthCallbackRedirects.isBlank(state)) {
-            return redirect(OAuthCallbackRedirects.error(frontendOrigin, "facebook", "missing_state"));
-        }
-        try {
-            if (!OAuthCallbackRedirects.isBlank(error)) {
-                oauthService.consumeFailedCallbackState(state);
-                return redirect(OAuthCallbackRedirects.error(
-                        frontendOrigin, "facebook", OAuthCallbackRedirects.providerErrorReason(error)));
-            }
-            if (OAuthCallbackRedirects.isBlank(code)) {
-                oauthService.consumeFailedCallbackState(state);
-                return redirect(OAuthCallbackRedirects.error(frontendOrigin, "facebook", "missing_code"));
-            }
-            int pageCount = oauthService.complete(code, state);
-            return redirect(OAuthCallbackRedirects.connectedFacebook(frontendOrigin, pageCount));
-        } catch (RuntimeException exception) {
-            logCallbackFailure(exception);
-            return redirect(OAuthCallbackRedirects.error(
-                    frontendOrigin, "facebook", OAuthCallbackRedirects.failureReason(exception)));
-        }
+        this.deletionStatusUrls = deletionStatusUrls;
     }
 
     @GetMapping("/accounts")
@@ -143,12 +95,10 @@ public class MetaController {
     public MetaSignedRequestService.DataDeletionResponse deleteData(
             @RequestParam("signed_request") String signedRequest
     ) {
+        deletionStatusUrls.requireConfigured();
         MetaSignedRequestService.DeletionReceipt receipt =
                 signedRequestService.deleteData(Platform.FACEBOOK, signedRequest);
-        String url = ServletUriComponentsBuilder.fromCurrentContextPath()
-                .path("/api/social/meta/delete-data/status/{code}")
-                .buildAndExpand(receipt.confirmationCode())
-                .toUriString();
+        String url = deletionStatusUrls.statusUrl(Platform.FACEBOOK, receipt.confirmationCode());
         return new MetaSignedRequestService.DataDeletionResponse(url, receipt.confirmationCode());
     }
 
@@ -157,17 +107,4 @@ public class MetaController {
         return signedRequestService.getDeletionStatus(Platform.FACEBOOK, confirmationCode);
     }
 
-    private ResponseEntity<Void> redirect(URI location) {
-        return ResponseEntity.status(HttpStatus.FOUND)
-                .header(HttpHeaders.LOCATION, location.toString())
-                .build();
-    }
-
-    private void logCallbackFailure(RuntimeException exception) {
-        HttpStatusCode status = exception instanceof org.springframework.web.server.ResponseStatusException statusException
-                ? statusException.getStatusCode()
-                : HttpStatus.INTERNAL_SERVER_ERROR;
-        log.warn("Facebook OAuth callback failed with status {} ({})",
-                status.value(), exception.getClass().getSimpleName());
-    }
 }

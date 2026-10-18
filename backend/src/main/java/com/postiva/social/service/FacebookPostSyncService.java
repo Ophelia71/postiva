@@ -17,7 +17,7 @@ import com.postiva.social.entity.SocialAccount;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -178,7 +178,7 @@ public class FacebookPostSyncService {
         post.setStatus(PostStatus.PUBLISHED);
         post = postRepository.save(post);
 
-        LocalDateTime publishedAt = source.createdAt() == null ? LocalDateTime.now() : source.createdAt();
+        Instant publishedAt = source.createdAt() == null ? Instant.now() : source.createdAt();
         ScheduledPost scheduled = new ScheduledPost();
         scheduled.setPostId(post.getId());
         scheduled.setSocialAccountId(account.getId());

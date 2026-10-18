@@ -55,6 +55,10 @@ public class ProductBrief {
         return id;
     }
 
+    public String getIndustryCode() {
+        return industryCode;
+    }
+
     public void setUserId(UUID userId) {
         this.userId = userId;
     }

@@ -1,5 +1,5 @@
 import { Camera, CheckCircle2, Music, RefreshCw, Smartphone, Trash2 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { FacebookBadge } from '../components/FacebookBadge'
 import { api, FACEBOOK_SYNC_TIMEOUT_MS } from '../lib/api'
 import { type AppChannel, useAppDataResource } from '../lib/appDataApi'
@@ -7,24 +7,27 @@ import { getErrorMessage } from '../lib/errors'
 import { usePreferences } from '../lib/preferences'
 import { PageHeader, PageState } from '../components/PageUi'
 
-const channelTypes = [
-  { title: 'Trang Facebook', type: 'Facebook Page', icon: Smartphone, available: true, oauthPath: '/social/meta/connect-url' },
-  { title: 'Instagram Business', type: 'Instagram Business', icon: Camera, available: true, oauthPath: '/social/instagram/connect-url' },
-  { title: 'Threads Business', type: 'Threads', icon: Music, available: true, oauthPath: '/social/threads/connect-url' },
-]
-
 type StatusTone = 'info' | 'success' | 'error'
-type OAuthPlatform = 'facebook' | 'instagram' | 'threads'
-const oauthPlatforms: OAuthPlatform[] = ['facebook', 'instagram', 'threads']
-const oauthPlatformLabels: Record<OAuthPlatform, string> = {
-  facebook: 'Facebook',
-  instagram: 'Instagram',
-  threads: 'Threads',
+type SocialPlatform = 'facebook' | 'instagram' | 'threads'
+type ProtectedManualField = 'accountId' | 'accessToken'
+type ManualConnectionForm = {
+  accountId: string
+  accountName: string
+  accessToken: string
 }
-type SocialConnectUrlResponse = {
-  url: string | null
-  note: string
-}
+
+const channelTypes = [
+  { title: 'Trang Facebook', type: 'Facebook Page', icon: Smartphone, platform: 'facebook', manualPath: '/social/meta/facebook/manual' },
+  { title: 'Instagram Business', type: 'Instagram Business', icon: Camera, platform: 'instagram', manualPath: '/social/instagram/manual' },
+  { title: 'Threads Business', type: 'Threads', icon: Music, platform: 'threads', manualPath: '/social/threads/manual' },
+] as const
+
+type ConnectedAccount = { pageId: string; pageName: string }
+const emptyManualConnection = (): ManualConnectionForm => ({
+  accountId: '',
+  accountName: '',
+  accessToken: '',
+})
 
 export function ConnectionsPage() {
   const { t } = usePreferences()
@@ -34,34 +37,13 @@ export function ConnectionsPage() {
   const [postingPageId, setPostingPageId] = useState<string | null>(null)
   const [deletingPageId, setDeletingPageId] = useState<string | null>(null)
   const [syncingPageId, setSyncingPageId] = useState<string | null>(null)
-  const [connectingType, setConnectingType] = useState<string | null>(null)
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const callbackPlatform = oauthPlatforms.find((platform) => {
-      const result = params.get(platform)
-      return result === 'connected' || result === 'error'
-    })
-    if (!callbackPlatform) {
-      return
-    }
-
-    const callbackResult = params.get(callbackPlatform)
-    const platformLabel = oauthPlatformLabels[callbackPlatform]
-    if (callbackResult === 'connected') {
-      const pageCountValue = params.get('pages')
-      const pageCount = pageCountValue === null ? null : Number(pageCountValue)
-      setConnectStatusTone('success')
-      setConnectStatus(callbackPlatform === 'facebook' && pageCount !== null && Number.isFinite(pageCount)
-        ? `${t('Đã kết nối Facebook')} (${pageCount} ${t('trang')}).`
-        : `${t('Đã kết nối')} ${platformLabel}.`)
-      reload()
-    } else {
-      setConnectStatusTone('error')
-      setConnectStatus(`${t('Không thể kết nối')} ${platformLabel}. ${oauthErrorMessage(params.get('reason'), t)}`)
-    }
-    window.history.replaceState({}, '', window.location.pathname + window.location.hash)
-  }, [reload, t])
+  const [connectingType, setConnectingType] = useState<SocialPlatform | null>(null)
+  const [activeManualField, setActiveManualField] = useState<string | null>(null)
+  const [manualConnections, setManualConnections] = useState<Record<SocialPlatform, ManualConnectionForm>>({
+    facebook: emptyManualConnection(),
+    instagram: emptyManualConnection(),
+    threads: emptyManualConnection(),
+  })
 
   if (loading) {
     return <PageState title={t('Đang tải kênh kết nối...', )} />
@@ -89,29 +71,46 @@ export function ConnectionsPage() {
         await api.post(`/social/meta/accounts/${channel.id}/check`)
       }
       setConnectStatusTone('success')
-      setConnectStatus(`${t('Kết nối hoạt động tốt trên')} ${channel.name}.`)
+      setConnectStatus(isFacebook
+        ? `${t('Kết nối hoạt động tốt trên')} ${channel.name}.`
+        : `${t('Token truy cập được tài khoản', 'Token can access account')} ${channel.name}. ${t('Chưa kiểm tra quyền đăng bài và URL media công khai.', 'Publishing permission and public media URL have not been tested.')}`)
     } catch (error) {
       setConnectStatusTone('error')
-      setConnectStatus(getErrorMessage(error, `Không thể kiểm tra ${channel.type}.`))
+      setConnectStatus(getSocialErrorMessage(error, `Không thể kiểm tra ${channel.type}.`))
     } finally {
       setPostingPageId(null)
     }
   }
 
-  async function handleOAuthConnect(type: string, path: string) {
-    setConnectingType(type)
+  async function handleManualConnect(platform: SocialPlatform, title: string, path: string) {
+    const form = manualConnections[platform]
+    const accountId = form.accountId.trim()
+    const accountName = form.accountName.trim()
+    const accessToken = form.accessToken.trim()
+    if (!accountId || !accountName || !accessToken) {
+      return
+    }
+    setConnectingType(platform)
     setConnectStatusTone('info')
-    setConnectStatus(`${t('Đang mở trang kết nối')} ${type}...`)
+    setConnectStatus(`${t('Đang kiểm tra access token cho')} ${title}...`)
 
     try {
-      const response = await api.get<SocialConnectUrlResponse>(path)
-      if (!response.data.url) {
-        throw new Error(response.data.note || `${type} chưa được cấu hình.`)
-      }
-      window.location.href = response.data.url
+      const body = platform === 'facebook'
+        ? { pageId: accountId, pageName: accountName, pageAccessToken: accessToken }
+        : { accountId, accountName, accessToken }
+      const response = await api.post<ConnectedAccount>(path, body)
+      setManualConnections((connections) => ({
+        ...connections,
+        [platform]: emptyManualConnection(),
+      }))
+      setActiveManualField(null)
+      setConnectStatusTone('success')
+      setConnectStatus(`${t('Đã kết nối')} ${response.data.pageName} (ID ${response.data.pageId}).`)
+      reload()
     } catch (error) {
       setConnectStatusTone('error')
-      setConnectStatus(getErrorMessage(error, `Không thể mở kết nối ${type}.`))
+      setConnectStatus(getSocialErrorMessage(error, `Không thể kết nối ${title}.`))
+    } finally {
       setConnectingType(null)
     }
   }
@@ -164,7 +163,7 @@ export function ConnectionsPage() {
       }
     } catch (error) {
       setConnectStatusTone('error')
-      setConnectStatus(getErrorMessage(error, `Không thể cập nhật ${channel.type}.`))
+      setConnectStatus(getSocialErrorMessage(error, `Không thể cập nhật ${channel.type}.`))
     } finally {
       setSyncingPageId(null)
     }
@@ -176,6 +175,7 @@ export function ConnectionsPage() {
     setPostingPageId(null)
     setSyncingPageId(null)
     setConnectingType(null)
+    setActiveManualField(null)
   }
 
   return (
@@ -191,7 +191,7 @@ export function ConnectionsPage() {
               <div className="px-5 py-6 text-sm text-[var(--muted-text)]">{t('Chưa có kênh nào được kết nối.')}</div>
             ) : (
               connectedChannels.map((channel) => (
-                <div key={channel.id} className="grid gap-4 px-5 py-4 md:grid-cols-[40px_1fr_112px_190px_40px] md:items-center">
+                <div key={channel.id} className="grid gap-4 px-5 py-4 md:grid-cols-[40px_minmax(0,1fr)_max-content_max-content_40px] md:items-center">
                   <ChannelAvatar channel={channel} />
                   <div className="min-w-0">
                     <h3 className="truncate text-sm font-bold">{channel.name}</h3>
@@ -199,8 +199,8 @@ export function ConnectionsPage() {
                       {channel.type} · ID {channel.accountId}
                     </p>
                   </div>
-                  <span className={`w-fit rounded-full px-3 py-1 text-xs font-semibold ${channel.active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-                    {channel.active ? t('Đang kết nối' ) : t('Tạm ngừng')}
+                  <span className={`w-fit whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold ${channel.active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                    {channel.active ? 'Đã lưu · cần kiểm tra hiệu lực' : t('Tạm ngừng')}
                   </span>
                   <div className="flex items-center gap-2 md:justify-end">
                     <button
@@ -248,38 +248,106 @@ export function ConnectionsPage() {
       <div className="grid gap-4 md:grid-cols-3">
         {channelTypes.map((type) => {
           const Icon = type.icon
-          const count = type.available
-            ? connectedChannels.filter((channel) => channel.type === type.type).length
-            : 0
+          const count = connectedChannels.filter((channel) => channel.type === type.type).length
+          const accountIdField = manualFieldKey(type.platform, 'accountId')
+          const accessTokenField = manualFieldKey(type.platform, 'accessToken')
           return (
             <div key={type.title} className="rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] p-4 shadow-sm">
               <div className="mb-4 flex items-center justify-between">
                 <Icon className="text-blue-600" size={22} />
-                {type.available ? <CheckCircle2 className="text-emerald-500" size={18} /> : <span className="rounded-full bg-[var(--soft-bg)] px-2 py-1 text-[10px] font-bold text-[var(--muted-text)]">Sắp ra mắt</span>}
+                <CheckCircle2 className="text-emerald-500" size={18} />
               </div>
               <h2 className="text-sm font-bold">{type.title}</h2>
-              <p className={`mt-2 text-xs font-semibold ${type.available && count > 0 ? 'text-emerald-600' : 'text-[var(--muted-text)]'}`}>
-                {type.available ? (count > 0 ? `${count} ${t('kết nối')}` : t('Chưa kết nối')) : t('Sắp ra mắt')}
+              <p className={`mt-2 text-xs font-semibold ${count > 0 ? 'text-emerald-600' : 'text-[var(--muted-text)]'}`}>
+                {count > 0 ? `${count} ${t('kết nối')}` : t('Chưa kết nối')}
               </p>
-              <p className="mt-4 text-xs leading-5 text-[var(--muted-text)]">
-                {t('Đăng nhập và cấp quyền trực tiếp. Bạn không cần tự lấy hoặc nhập access token.')}
-              </p>
-              {type.oauthPath && (
+
+              <form autoComplete="off" data-form-type="other" className="mt-3 space-y-3" onSubmit={(event) => {
+                event.preventDefault()
+                void handleManualConnect(type.platform, type.title, type.manualPath)
+              }}>
+                <label htmlFor={`${type.platform}-account-id`} className="block text-xs font-semibold">
+                  {type.platform === 'facebook' ? t('Page ID') : t('Account ID')}
+                </label>
+                <input
+                  id={`${type.platform}-account-id`}
+                  name={`${type.platform}-connection-id`}
+                  type="text"
+                  autoComplete="off"
+                  spellCheck={false}
+                  required
+                  readOnly={!manualConnections[type.platform].accountId && activeManualField !== accountIdField}
+                  value={manualConnections[type.platform].accountId}
+                  onFocus={() => setActiveManualField(accountIdField)}
+                  onBlur={() => setActiveManualField((field) => field === accountIdField ? null : field)}
+                  onChange={(event) => setManualConnections((connections) => ({
+                    ...connections,
+                    [type.platform]: { ...connections[type.platform], accountId: event.target.value },
+                  }))}
+                  data-1p-ignore="true"
+                  data-bwignore="true"
+                  data-lpignore="true"
+                  className="h-9 w-full rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] px-3 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                  placeholder={type.platform === 'facebook' ? t('Nhập Page ID') : t('Nhập Account ID')}
+                />
+                <label htmlFor={`${type.platform}-account-name`} className="block text-xs font-semibold">
+                  {type.platform === 'facebook' ? t('Tên Page') : t('Tên tài khoản')}
+                </label>
+                <input
+                  id={`${type.platform}-account-name`}
+                  type="text"
+                  autoComplete="off"
+                  required
+                  value={manualConnections[type.platform].accountName}
+                  onChange={(event) => setManualConnections((connections) => ({
+                    ...connections,
+                    [type.platform]: { ...connections[type.platform], accountName: event.target.value },
+                  }))}
+                  className="h-9 w-full rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] px-3 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                  placeholder={type.platform === 'facebook' ? t('Nhập tên Page') : t('Nhập tên tài khoản')}
+                />
+                <label htmlFor={`${type.platform}-access-token`} className="block text-xs font-semibold">
+                  {type.platform === 'facebook' ? t('Page Access Token') : t('Access Token')}
+                </label>
+                <input
+                  id={`${type.platform}-access-token`}
+                  name={`${type.platform}-connection-token`}
+                  type="password"
+                  autoComplete="new-password"
+                  spellCheck={false}
+                  required
+                  readOnly={!manualConnections[type.platform].accessToken && activeManualField !== accessTokenField}
+                  value={manualConnections[type.platform].accessToken}
+                  onFocus={() => setActiveManualField(accessTokenField)}
+                  onBlur={() => setActiveManualField((field) => field === accessTokenField ? null : field)}
+                  onChange={(event) => setManualConnections((connections) => ({
+                    ...connections,
+                    [type.platform]: { ...connections[type.platform], accessToken: event.target.value },
+                  }))}
+                  data-1p-ignore="true"
+                  data-bwignore="true"
+                  data-lpignore="true"
+                  className="h-9 w-full rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] px-3 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                  placeholder={t('Dán access token vào đây')}
+                />
                 <button
-                  type="button"
-                  onClick={() => void handleOAuthConnect(type.title, type.oauthPath)}
-                  disabled={connectingType === type.title}
-                  className="mt-3 h-9 w-full rounded-lg bg-blue-600 px-3 text-xs font-bold text-white hover:bg-blue-700 disabled:bg-slate-300"
+                  type="submit"
+                  disabled={connectingType !== null}
+                  className="h-9 w-full rounded-lg bg-blue-600 px-3 text-xs font-bold text-white hover:bg-blue-700 disabled:bg-slate-300"
                 >
-                  {connectingType === type.title ? t('Đang chuyển hướng...') : `${t('Kết nối với')} ${type.title}`}
+                  {connectingType === type.platform ? t('Đang kết nối...') : `${t('Kết nối')} ${type.title}`}
                 </button>
-              )}
+              </form>
             </div>
           )
         })}
       </div>
     </section>
   )
+}
+
+function manualFieldKey(platform: SocialPlatform, field: ProtectedManualField) {
+  return `${platform}:${field}`
 }
 
 function ChannelAvatar({ channel }: { channel: AppChannel }) {
@@ -307,20 +375,13 @@ function getStatusClassName(tone: StatusTone) {
   return 'border border-[var(--app-border)] bg-[var(--soft-bg)] text-[var(--muted-text)]'
 }
 
-function oauthErrorMessage(reason: string | null, t: (vi: string, en?: string) => string) {
-  switch (reason) {
-    case 'access_denied':
-      return t('Bạn đã hủy hoặc từ chối cấp quyền. Hãy thử lại khi sẵn sàng.')
-    case 'missing_state':
-    case 'invalid_state':
-      return t('Phiên kết nối không hợp lệ hoặc đã hết hạn. Vui lòng bắt đầu lại.')
-    case 'missing_code':
-      return t('Nhà cung cấp không trả về mã xác thực. Vui lòng thử lại.')
-    case 'provider_error':
-      return t('Nhà cung cấp từ chối yêu cầu kết nối. Vui lòng thử lại.')
-    case 'no_pages':
-      return t('Không tìm thấy Facebook Page có quyền kết nối. Hãy kiểm tra quyền quản lý Trang rồi thử lại.')
-    default:
-      return t('Đã xảy ra lỗi khi hoàn tất OAuth. Vui lòng thử lại.')
+function getSocialErrorMessage(error: unknown, fallback: string) {
+  const message = getErrorMessage(error, fallback)
+  if (/invalid oauth access token|access token.*(expired|invalid|revoked)|session has expired|token.*(hết hạn|không hợp lệ|bị thu hồi)/i.test(message)) {
+    return 'Token đã hết hạn hoặc bị Meta thu hồi. Hãy lấy Page Access Token mới, kết nối lại rồi bấm Kiểm tra.'
   }
+  if (/permission|permissions|thiếu quyền|không có quyền/i.test(message)) {
+    return 'Token chưa có quyền cần thiết cho thao tác này. Hãy kiểm tra quyền Page trong cấu hình Meta; nếu vừa cấp quyền, hãy tạo token mới rồi kết nối lại.'
+  }
+  return message
 }

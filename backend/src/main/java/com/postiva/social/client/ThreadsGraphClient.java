@@ -19,59 +19,29 @@ public class ThreadsGraphClient {
     private static final int STATUS_ATTEMPTS = 30;
     private static final long STATUS_DELAY_MILLIS = 2_000;
 
-    private final WebClient oauthClient;
+    private final WebClient tokenClient;
     private final WebClient apiClient;
     private final ObjectMapper objectMapper;
 
     public ThreadsGraphClient(WebClient.Builder builder, ObjectMapper objectMapper) {
-        this.oauthClient = builder.clone().baseUrl("https://graph.threads.net").build();
+        this.tokenClient = builder.clone().baseUrl("https://graph.threads.net").build();
         this.apiClient = builder.clone().baseUrl("https://graph.threads.net/v1.0").build();
         this.objectMapper = objectMapper;
     }
 
-    public OAuthToken exchangeCode(String appId, String appSecret, String redirectUri, String code) {
-        MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
-        form.add("client_id", appId);
-        form.add("client_secret", appSecret);
-        form.add("grant_type", "authorization_code");
-        form.add("redirect_uri", redirectUri);
-        form.add("code", code);
-        String body = oauthClient.post()
-                .uri("/oauth/access_token")
-                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
-                .body(BodyInserters.fromFormData(form))
-                .retrieve()
-                .bodyToMono(String.class)
-                .block();
-        return parseToken(body, 0);
-    }
-
-    public OAuthToken exchangeLongLived(String appSecret, String accessToken) {
-        String body = oauthClient.get()
-                .uri(uri -> uri.path("/access_token")
-                        .queryParam("grant_type", "th_exchange_token")
-                        .queryParam("client_secret", appSecret)
-                        .queryParam("access_token", accessToken)
-                        .build())
-                .retrieve()
-                .bodyToMono(String.class)
-                .block();
-        return parseToken(body, 0);
-    }
-
-    public OAuthToken refreshLongLived(String accessToken) {
-        String body = oauthClient.get()
+    public AccessToken refreshLongLived(String accessToken) {
+        String body = tokenClient.get()
                 .uri(uri -> uri.path("/refresh_access_token")
                         .queryParam("grant_type", "th_refresh_token")
                         .queryParam("access_token", accessToken)
                         .build())
                 .retrieve()
                 .onStatus(HttpStatusCode::isError, response -> response.bodyToMono(String.class)
-                        .map(responseBody -> new ResponseStatusException(
-                                HttpStatus.BAD_GATEWAY, metaErrorMessage(responseBody))))
+                        .map(responseBody -> new MetaApiException(response.statusCode().value(),
+                                metaErrorMessage(responseBody))))
                 .bodyToMono(String.class)
                 .block();
-        return parseToken(body, 0);
+        return parseAccessToken(body, 0);
     }
 
     public ThreadsProfile getMe(String accessToken) {
@@ -82,8 +52,8 @@ public class ThreadsGraphClient {
                         .build())
                 .retrieve()
                 .onStatus(HttpStatusCode::isError, response -> response.bodyToMono(String.class)
-                        .map(responseBody -> new ResponseStatusException(
-                                HttpStatus.BAD_GATEWAY, metaErrorMessage(responseBody))))
+                        .map(responseBody -> new MetaApiException(response.statusCode().value(),
+                                metaErrorMessage(responseBody))))
                 .bodyToMono(String.class)
                 .block();
         try {
@@ -136,7 +106,8 @@ public class ThreadsGraphClient {
                 .body(BodyInserters.fromFormData(form))
                 .retrieve()
                 .onStatus(HttpStatusCode::isError, response -> response.bodyToMono(String.class)
-                        .map(responseBody -> new IllegalStateException(metaErrorMessage(responseBody))))
+                        .map(responseBody -> new MetaApiException(response.statusCode().value(),
+                                metaErrorMessage(responseBody))))
                 .bodyToMono(String.class)
                 .block();
         return extractId(body, "Threads không trả về ID bài đăng");
@@ -163,7 +134,8 @@ public class ThreadsGraphClient {
                 .body(BodyInserters.fromFormData(form))
                 .retrieve()
                 .onStatus(HttpStatusCode::isError, response -> response.bodyToMono(String.class)
-                        .map(responseBody -> new IllegalStateException(metaErrorMessage(responseBody))))
+                        .map(responseBody -> new MetaApiException(response.statusCode().value(),
+                                metaErrorMessage(responseBody))))
                 .bodyToMono(String.class)
                 .block();
         return extractId(body, "Threads không trả về container ID");
@@ -177,7 +149,8 @@ public class ThreadsGraphClient {
                         .build(containerId))
                 .retrieve()
                 .onStatus(HttpStatusCode::isError, response -> response.bodyToMono(String.class)
-                        .map(responseBody -> new IllegalStateException(metaErrorMessage(responseBody))))
+                        .map(responseBody -> new MetaApiException(response.statusCode().value(),
+                                metaErrorMessage(responseBody))))
                 .bodyToMono(String.class)
                 .block();
         try {
@@ -235,14 +208,14 @@ public class ThreadsGraphClient {
         }
     }
 
-    private OAuthToken parseToken(String body, long defaultExpiresIn) {
+    private AccessToken parseAccessToken(String body, long defaultExpiresIn) {
         try {
             JsonNode root = objectMapper.readTree(body);
             String accessToken = root.path("access_token").asText();
             if (accessToken.isBlank()) {
                 throw new IllegalStateException("Threads không trả về access token");
             }
-            return new OAuthToken(
+            return new AccessToken(
                     accessToken,
                     root.path("user_id").asText(""),
                     root.path("expires_in").asLong(defaultExpiresIn)
@@ -254,7 +227,7 @@ public class ThreadsGraphClient {
         }
     }
 
-    public record OAuthToken(String accessToken, String userId, long expiresInSeconds) {
+    public record AccessToken(String accessToken, String userId, long expiresInSeconds) {
     }
 
     public record ThreadsProfile(String id, String username) {

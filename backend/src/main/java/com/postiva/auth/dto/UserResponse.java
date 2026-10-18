@@ -10,7 +10,9 @@ public record UserResponse(
         String fullName,
         String email,
         String role,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        String status,
+        boolean mfaSetupRequired
 ) {
     public static UserResponse from(User user) {
         return new UserResponse(
@@ -18,7 +20,9 @@ public record UserResponse(
                 user.getFullName(),
                 user.getEmail(),
                 user.getRole().name(),
-                user.getCreatedAt()
+                user.getCreatedAt(),
+                user.getStatus().name(),
+                user.getRole() == User.Role.ADMIN && !user.isMfaEnabled()
         );
     }
 }

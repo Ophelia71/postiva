@@ -1,0 +1,37 @@
+server:
+  forward-headers-strategy: framework
+  shutdown: graceful
+
+spring:
+  datasource:
+    url: ${POSTIVA_DB_URL}
+    username: ${POSTIVA_DB_USERNAME}
+    password: ${POSTIVA_DB_PASSWORD}
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+  mail:
+    host: ${MAIL_HOST}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+
+postiva:
+  frontend-origin: ${POSTIVA_FRONTEND_ORIGIN}
+  cors:
+    allowed-origin-patterns: ${POSTIVA_CORS_ALLOWED_ORIGIN_PATTERNS:}
+  mail:
+    enabled: ${POSTIVA_MAIL_ENABLED:true}
+    from: ${MAIL_FROM}
+  security:
+    token-encryption-key: ${POSTIVA_TOKEN_ENCRYPTION_KEY}
+    mfa-encryption-key: ${POSTIVA_MFA_ENCRYPTION_KEY}
+    trusted-proxy-addresses: ${POSTIVA_TRUSTED_PROXY_ADDRESSES}
+  storage:
+    public-base-url: ${POSTIVA_PUBLIC_BASE_URL}
+    signing-secret: ${POSTIVA_MEDIA_SIGNING_SECRET}
+  meta:
+    public-base-url: ${POSTIVA_META_PUBLIC_BASE_URL}
+
+app:
+  jwt:
+    secret: ${POSTIVA_JWT_SECRET}

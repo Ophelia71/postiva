@@ -1,9 +1,12 @@
 server:
-  port: ${SERVER_PORT:8081}
+  port: ${SERVER_PORT:8080}
+  forward-headers-strategy: none
 
 spring:
+  profiles:
+    default: dev
   config:
-    import: optional:file:../.env[.properties]
+    import: optional:file:./backend/.env[.properties],optional:file:./.env[.properties]
 
   application:
     name: postiva-backend
@@ -11,15 +14,34 @@ spring:
   datasource:
     url: ${POSTIVA_DB_URL:jdbc:postgresql://localhost:5432/postiva}
     username: ${POSTIVA_DB_USERNAME:postgres}
-    password: ${POSTIVA_DB_PASSWORD:devhoa}
+    password: ${POSTIVA_DB_PASSWORD}
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    default-schema: public
+    schemas: public
+    baseline-on-migrate: false
+    baseline-version: 1
+    clean-disabled: true
+    validate-on-migrate: true
+    placeholders:
+      legacyScheduleTimeZone: ${POSTIVA_LEGACY_SCHEDULE_TIME_ZONE:UTC}
+      legacyTimestampTimeZone: ${POSTIVA_LEGACY_TIMESTAMP_TIME_ZONE:UTC}
+
+  sql:
+    init:
+      mode: never
 
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     open-in-view: false
     properties:
       hibernate:
         format_sql: true
+        jdbc:
+          time_zone: UTC
 
   jackson:
     default-property-inclusion: non_null
@@ -27,7 +49,7 @@ spring:
   servlet:
     multipart:
       max-file-size: 10MB
-      max-request-size: 10MB
+      max-request-size: 11MB
 
   mail:
     host: ${MAIL_HOST:smtp.gmail.com}
@@ -46,42 +68,83 @@ spring:
           writetimeout: 5000
 
 postiva:
+  billing:
+    enabled: ${POSTIVA_BILLING_ENABLED:false}
+    pro-price-vnd: ${POSTIVA_PRO_PRICE_VND:0}
+    client-id: ${PAYOS_CLIENT_ID:}
+    api-key: ${PAYOS_API_KEY:}
+    checksum-key: ${PAYOS_CHECKSUM_KEY:}
+    return-url: ${POSTIVA_BILLING_RETURN_URL:}
+    cancel-url: ${POSTIVA_BILLING_CANCEL_URL:}
+    refund-policy-url: ${POSTIVA_BILLING_REFUND_POLICY_URL:}
+  ai:
+    cost:
+      enabled: ${POSTIVA_AI_ENABLED:true}
+      openai-admin-key: ${OPENAI_ADMIN_API_KEY:}
+      openai-project-id: ${OPENAI_PROJECT_ID:}
+      daily-budget-usd: ${POSTIVA_AI_DAILY_BUDGET_USD:10.00}
+      monthly-budget-usd: ${POSTIVA_AI_MONTHLY_BUDGET_USD:100.00}
+      input-usd-per-million-tokens: ${POSTIVA_AI_INPUT_USD_PER_MILLION_TOKENS:0.10}
+      cached-input-usd-per-million-tokens: ${POSTIVA_AI_CACHED_INPUT_USD_PER_MILLION_TOKENS:0.01}
+      cache-write-input-usd-per-million-tokens: ${POSTIVA_AI_CACHE_WRITE_INPUT_USD_PER_MILLION_TOKENS:0.125}
+      output-usd-per-million-tokens: ${POSTIVA_AI_OUTPUT_USD_PER_MILLION_TOKENS:0.50}
+      reservation-multiplier: ${POSTIVA_AI_COST_RESERVATION_MULTIPLIER:2.0}
+      max-input-tokens: ${POSTIVA_AI_MAX_INPUT_TOKENS:32000}
+      max-output-tokens: ${POSTIVA_AI_MAX_OUTPUT_TOKENS:1800}
+      warning-percent: ${POSTIVA_AI_BUDGET_WARNING_PERCENT:80}
+  usage:
+    free-ai-limit: ${POSTIVA_FREE_AI_LIMIT:30}
+    pro-ai-limit: ${POSTIVA_PRO_AI_LIMIT:50}
+    period-days: 30
+    global-daily-attempts: ${POSTIVA_AI_GLOBAL_DAILY_ATTEMPTS:100}
+    user-daily-attempts: ${POSTIVA_AI_USER_DAILY_ATTEMPTS:20}
+  admin:
+    bootstrap:
+      enabled: ${POSTIVA_ADMIN_BOOTSTRAP_ENABLED:false}
+      email: ${POSTIVA_ADMIN_BOOTSTRAP_EMAIL:}
+      password: ${POSTIVA_ADMIN_BOOTSTRAP_PASSWORD:}
+      full-name: ${POSTIVA_ADMIN_BOOTSTRAP_FULL_NAME:Postiva Administrator}
+
   frontend-origin: ${POSTIVA_FRONTEND_ORIGIN:http://localhost:5173}
   cors:
     allowed-origin-patterns: ${POSTIVA_CORS_ALLOWED_ORIGIN_PATTERNS:}
 
   openai:
     api-key: ${OPENAI_API_KEY:}
-    model: ${OPENAI_MODEL:gpt-4o-mini}
+    model: ${OPENAI_MODEL:gpt-6-luna}
 
   meta:
-    app-id: ${META_APP_ID:}
     app-secret: ${META_APP_SECRET:}
     api-version: ${META_API_VERSION:v26.0}
-    redirect-uri: ${META_REDIRECT_URI:http://localhost:8080/api/social/meta/callback}
+    public-base-url: ${POSTIVA_META_PUBLIC_BASE_URL:}
 
   instagram:
-    app-id: ${INSTAGRAM_APP_ID:}
     app-secret: ${INSTAGRAM_APP_SECRET:}
     api-version: ${INSTAGRAM_API_VERSION:v26.0}
-    redirect-uri: ${INSTAGRAM_REDIRECT_URI:http://localhost:8080/api/social/instagram/callback}
 
   threads:
-    app-id: ${THREADS_APP_ID:}
     app-secret: ${THREADS_APP_SECRET:}
-    redirect-uri: ${THREADS_REDIRECT_URI:http://localhost:8080/api/social/threads/callback}
 
   security:
-    jwt-secret: ${POSTIVA_JWT_SECRET:change-this-development-jwt-secret-before-deploying}
-    jwt-expiration-seconds: ${POSTIVA_JWT_EXPIRATION_SECONDS:604800}
+    trusted-proxy-addresses: ${POSTIVA_TRUSTED_PROXY_ADDRESSES:}
+    login-attempts-per-15-minutes: ${POSTIVA_LOGIN_ATTEMPTS_PER_15_MINUTES:10}
     token-encryption-key: ${POSTIVA_TOKEN_ENCRYPTION_KEY:}
+    mfa-encryption-key: ${POSTIVA_MFA_ENCRYPTION_KEY:}
 
   storage:
     upload-dir: ${POSTIVA_UPLOAD_DIR:uploads/images}
     public-base-url: ${POSTIVA_PUBLIC_BASE_URL:}
+    max-file-size-bytes: 10485760
+    signing-secret: ${POSTIVA_MEDIA_SIGNING_SECRET:}
+    public-link-ttl-seconds: ${POSTIVA_MEDIA_PUBLIC_LINK_TTL_SECONDS:86400}
 
   scheduler:
     publish-delay-ms: ${POSTIVA_PUBLISH_DELAY_MS:10000}
+    batch-size: ${POSTIVA_SCHEDULER_BATCH_SIZE:1}
+    max-attempts: ${POSTIVA_SCHEDULER_MAX_ATTEMPTS:4}
+    lease-seconds: ${POSTIVA_SCHEDULER_LEASE_SECONDS:1800}
+    backoff-base-seconds: ${POSTIVA_SCHEDULER_BACKOFF_BASE_SECONDS:60}
+    backoff-max-seconds: ${POSTIVA_SCHEDULER_BACKOFF_MAX_SECONDS:3600}
 
   mail:
     enabled: ${POSTIVA_MAIL_ENABLED:false}
@@ -91,4 +154,15 @@ postiva:
 app:
   jwt:
     secret: ${POSTIVA_JWT_SECRET}
-    expiration: 86400000 
+    expiration-milliseconds: ${POSTIVA_JWT_EXPIRATION_MILLISECONDS:86400000}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true

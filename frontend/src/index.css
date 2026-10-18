@@ -27,6 +27,26 @@ body {
   min-width: 320px;
 }
 
+.admin-shell {
+  --muted-text: #596687;
+  --color-primary: var(--accent-strong);
+  --color-primary-hover: #414d9c;
+  --color-error: #b91c1c;
+  --color-error-hover: #991b1b;
+  --focus-ring: var(--accent-strong);
+  --radius-control: 12px;
+  --shadow-sm: 0 2px 8px rgb(30 35 70 / 0.06);
+}
+
+.admin-shell dialog::backdrop { background: rgb(20 27 50 / 0.45); }
+.admin-shell button:focus-visible,
+.admin-shell a:focus-visible,
+.admin-shell select:focus-visible,
+.admin-shell textarea:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 3px;
+}
+
 * { box-sizing: border-box; }
 
 button, a, input, textarea, select { transition: all 180ms ease; }

@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.client.MultipartBodyBuilder;
@@ -17,7 +16,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 
@@ -33,68 +32,6 @@ public class FacebookGraphClient {
         this.objectMapper = objectMapper;
     }
 
-    public OAuthToken exchangeCode(String appId, String appSecret, String redirectUri, String code) {
-        String body = webClient.get()
-                .uri(uri -> uri.path("/oauth/access_token")
-                        .queryParam("client_id", appId)
-                        .queryParam("client_secret", appSecret)
-                        .queryParam("redirect_uri", redirectUri)
-                        .queryParam("code", code)
-                        .build())
-                .retrieve()
-                .onStatus(HttpStatusCode::isError, response -> response.bodyToMono(String.class)
-                        .map(responseBody -> new ResponseStatusException(HttpStatus.BAD_GATEWAY,
-                                metaErrorMessage("đổi authorization code", responseBody))))
-                .bodyToMono(String.class)
-                .block();
-        return parseToken(body);
-    }
-
-    public OAuthToken exchangeLongLivedUserToken(String appId, String appSecret, String shortLivedToken) {
-        String body = webClient.get()
-                .uri(uri -> uri.path("/oauth/access_token")
-                        .queryParam("grant_type", "fb_exchange_token")
-                        .queryParam("client_id", appId)
-                        .queryParam("client_secret", appSecret)
-                        .queryParam("fb_exchange_token", shortLivedToken)
-                        .build())
-                .retrieve()
-                .onStatus(HttpStatusCode::isError, response -> response.bodyToMono(String.class)
-                        .map(responseBody -> new ResponseStatusException(HttpStatus.BAD_GATEWAY,
-                                metaErrorMessage("đổi long-lived token", responseBody))))
-                .bodyToMono(String.class)
-                .block();
-        return parseToken(body);
-    }
-
-    public List<FacebookPage> getManagedPages(String userAccessToken) {
-        String body = webClient.get()
-                .uri(uri -> uri.path("/me/accounts")
-                        .queryParam("fields", "id,name,access_token,tasks")
-                        .queryParam("limit", 100)
-                        .queryParam("access_token", userAccessToken)
-                        .build())
-                .retrieve()
-                .onStatus(HttpStatusCode::isError, response -> response.bodyToMono(String.class)
-                        .map(responseBody -> new ResponseStatusException(HttpStatus.BAD_GATEWAY,
-                                metaErrorMessage("đọc danh sách Facebook Page", responseBody))))
-                .bodyToMono(String.class)
-                .block();
-        try {
-            List<FacebookPage> pages = new ArrayList<>();
-            for (JsonNode node : objectMapper.readTree(body).path("data")) {
-                pages.add(new FacebookPage(
-                        node.path("id").asText(),
-                        node.path("name").asText(),
-                        node.path("access_token").asText()
-                ));
-            }
-            return pages;
-        } catch (Exception exception) {
-            throw new IllegalStateException("Không thể đọc danh sách Facebook Page", exception);
-        }
-    }
-
     public FacebookPage getPage(String pageId, String pageAccessToken) {
         String body = webClient.get()
                 .uri(uri -> uri.path("/{pageId}")
@@ -103,7 +40,7 @@ public class FacebookGraphClient {
                         .build(pageId))
                 .retrieve()
                 .onStatus(HttpStatusCode::isError, response -> response.bodyToMono(String.class)
-                        .map(responseBody -> new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                        .map(responseBody -> new MetaApiException(response.statusCode().value(),
                                 metaErrorMessage("đọc thông tin Facebook Page", responseBody))))
                 .bodyToMono(String.class)
                 .block();
@@ -118,32 +55,6 @@ public class FacebookGraphClient {
             throw exception;
         } catch (Exception exception) {
             throw new IllegalStateException("Meta trả về thông tin Facebook Page không hợp lệ", exception);
-        }
-    }
-
-    public String getCurrentUserId(String userAccessToken) {
-        String body = webClient.get()
-                .uri(uri -> uri.path("/me")
-                        .queryParam("fields", "id")
-                        .queryParam("access_token", userAccessToken)
-                        .build())
-                .retrieve()
-                .onStatus(HttpStatusCode::isError, response -> response.bodyToMono(String.class)
-                        .map(responseBody -> new ResponseStatusException(HttpStatus.BAD_GATEWAY,
-                                metaErrorMessage("đọc Meta user ID", responseBody))))
-                .bodyToMono(String.class)
-                .block();
-        try {
-            String userId = objectMapper.readTree(body).path("id").asText();
-            if (userId.isBlank()) {
-                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Meta không trả về user ID");
-            }
-            return userId;
-        } catch (ResponseStatusException exception) {
-            throw exception;
-        } catch (Exception exception) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_GATEWAY, "Meta trả về user ID không hợp lệ", exception);
         }
     }
 
@@ -282,7 +193,8 @@ public class FacebookGraphClient {
                         .build(postId))
                 .retrieve()
                 .onStatus(HttpStatusCode::isError, response -> response.bodyToMono(String.class)
-                        .map(body -> new IllegalStateException("Meta không thể xóa bài viết: " + body)))
+                        .map(body -> new MetaApiException(response.statusCode().value(),
+                                "Meta không thể xóa bài viết: " + body)))
                 .bodyToMono(String.class)
                 .block();
     }
@@ -305,7 +217,7 @@ public class FacebookGraphClient {
                     posts.add(new FacebookPagePost(
                             id,
                             node.path("message").asText(""),
-                            parseDate(node.path("created_time").asText()),
+                    parseDate(node.path("created_time").asText()),
                             node.path("permalink_url").asText("")
                     ));
                 }
@@ -326,21 +238,6 @@ public class FacebookGraphClient {
         }
     }
 
-    private OAuthToken parseToken(String body) {
-        try {
-            JsonNode root = objectMapper.readTree(body);
-            String accessToken = root.path("access_token").asText();
-            if (accessToken.isBlank()) {
-                throw new IllegalStateException("Meta không trả về access token");
-            }
-            return new OAuthToken(accessToken, root.path("expires_in").asLong(0));
-        } catch (IllegalStateException exception) {
-            throw exception;
-        } catch (Exception exception) {
-            throw new IllegalStateException("Meta trả về token không hợp lệ", exception);
-        }
-    }
-
     private String metaErrorMessage(String action, String body) {
         try {
             String message = objectMapper.readTree(body).path("error").path("message").asText();
@@ -352,23 +249,20 @@ public class FacebookGraphClient {
         return "Meta không thể " + action + ". Hãy kiểm tra access token và quyền ứng dụng.";
     }
 
-    private LocalDateTime parseDate(String value) {
+    private Instant parseDate(String value) {
         if (value == null || value.isBlank()) {
-            return LocalDateTime.now();
+            return Instant.now();
         }
         try {
-            return OffsetDateTime.parse(value).atZoneSameInstant(ZoneId.systemDefault()).toLocalDateTime();
+            return OffsetDateTime.parse(value).toInstant();
         } catch (RuntimeException exception) {
-            return LocalDateTime.now();
+            return Instant.now();
         }
-    }
-
-    public record OAuthToken(String accessToken, long expiresInSeconds) {
     }
 
     public record FacebookPage(String id, String name, String accessToken) {
     }
 
-    public record FacebookPagePost(String id, String message, LocalDateTime createdAt, String permalinkUrl) {
+    public record FacebookPagePost(String id, String message, Instant createdAt, String permalinkUrl) {
     }
 }

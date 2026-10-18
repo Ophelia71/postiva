@@ -1,4 +1,4 @@
-# Run locally with --spring.profiles.active=dev; credentials stay in root .env.
+# Run locally with --spring.profiles.active=dev; ignored .env can live in the project root or backend directory.
 spring:
   datasource:
     url: ${POSTIVA_LOCAL_DB_URL:jdbc:postgresql://localhost:5432/postiva}
@@ -7,11 +7,5 @@ postiva:
   frontend-origin: http://localhost:5173
   cors:
     allowed-origin-patterns: http://localhost:*,http://127.0.0.1:*
-  meta:
-    redirect-uri: ${META_REDIRECT_URI:http://localhost:8081/api/social/meta/callback}
-  instagram:
-    redirect-uri: ${INSTAGRAM_REDIRECT_URI:http://localhost:8081/api/social/instagram/callback}
-  threads:
-    redirect-uri: ${THREADS_REDIRECT_URI:http://localhost:8081/api/social/threads/callback}
   storage:
-    public-base-url: ${POSTIVA_LOCAL_PUBLIC_BASE_URL:http://localhost:8080}
+    public-base-url: ${POSTIVA_LOCAL_PUBLIC_BASE_URL:${POSTIVA_PUBLIC_BASE_URL:http://localhost:8080}}

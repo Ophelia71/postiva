@@ -4,6 +4,7 @@ import com.postiva.auth.service.CurrentUserService;
 import com.postiva.file.dto.UploadedFileResponse;
 import com.postiva.file.entity.UploadedFile;
 import com.postiva.file.repository.UploadedFileRepository;
+import com.postiva.file.security.MediaAccessSigner;
 import com.postiva.file.storage.LocalFileStorage;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
@@ -25,15 +26,18 @@ public class FileService {
     private final UploadedFileRepository repository;
     private final LocalFileStorage storage;
     private final CurrentUserService currentUserService;
+    private final MediaAccessSigner mediaAccessSigner;
     private final String publicBaseUrl;
 
     public FileService(UploadedFileRepository repository,
                        LocalFileStorage storage,
                        CurrentUserService currentUserService,
+                       MediaAccessSigner mediaAccessSigner,
                        @Value("${postiva.storage.public-base-url:}") String publicBaseUrl) {
         this.repository = repository;
         this.storage = storage;
         this.currentUserService = currentUserService;
+        this.mediaAccessSigner = mediaAccessSigner;
         this.publicBaseUrl = normalizeBaseUrl(publicBaseUrl);
     }
 
@@ -49,9 +53,28 @@ public class FileService {
         entity.setFileSize(stored.size());
         entity.setPublicId(stored.storedName());
         entity.setStorageProvider("LOCAL");
-        entity = repository.save(entity);
-        entity.setFileUrl("/api/files/" + entity.getId());
-        return toResponse(repository.save(entity));
+        try {
+            entity = repository.save(entity);
+            entity.setFileUrl("/api/files/" + entity.getId());
+            return toResponse(repository.save(entity));
+        } catch (RuntimeException exception) {
+            try {
+                storage.delete(stored.storedName());
+            } catch (RuntimeException cleanupException) {
+                exception.addSuppressed(cleanupException);
+            }
+            throw exception;
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public void validateAttachments(List<UUID> imageIds, UUID userId) {
+        if (imageIds == null || imageIds.isEmpty()) return;
+        List<UUID> ids = imageIds.stream().distinct().toList();
+        if (ids.size() > 20 || ids.contains(null)
+                || repository.findAllByIdInAndUserId(ids, userId).size() != ids.size()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Media không hợp lệ hoặc không thuộc tài khoản này");
+        }
     }
 
     @Transactional
@@ -121,8 +144,21 @@ public class FileService {
 
     @Transactional(readOnly = true)
     public UploadedFile requireFile(UUID id) {
-        return repository.findById(id)
+        UUID userId = currentUserService.requireCurrentUserId();
+        return repository.findByIdAndUserId(id, userId)
+                .filter(candidate -> "LOCAL".equalsIgnoreCase(candidate.getStorageProvider()))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy ảnh"));
+    }
+
+    @Transactional(readOnly = true)
+    public UploadedFile requirePublicFile(UUID id, long expiresAt, String signature) {
+        if (!mediaAccessSigner.isValid(id, expiresAt, signature)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy ảnh");
+        }
+        UploadedFile file = repository.findById(id)
+                .filter(candidate -> "LOCAL".equalsIgnoreCase(candidate.getStorageProvider()))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy ảnh"));
+        return file;
     }
 
     @Transactional(readOnly = true)
@@ -141,6 +177,20 @@ public class FileService {
 
     public String publicUrl(UploadedFile file) {
         String fileUrl = file == null ? null : file.getFileUrl();
+        if (file != null && "LOCAL".equalsIgnoreCase(file.getStorageProvider())) {
+            if (publicBaseUrl.isBlank()) {
+                throw new IllegalStateException(
+                        "Instagram/Threads cần URL media công khai. Hãy cấu hình POSTIVA_PUBLIC_BASE_URL bằng domain HTTPS của backend."
+                );
+            }
+            long expiresAt = mediaAccessSigner.expiresAtEpochSeconds();
+            String path = "/api/files/public/" + file.getId()
+                    + "?expires=" + expiresAt
+                    + "&signature=" + mediaAccessSigner.sign(file.getId(), expiresAt);
+            String result = publicBaseUrl + path;
+            ensurePublicAddress(result);
+            return result;
+        }
         if (fileUrl != null && (fileUrl.startsWith("https://") || fileUrl.startsWith("http://"))) {
             ensurePublicAddress(fileUrl);
             return fileUrl;
@@ -165,7 +215,7 @@ public class FileService {
 
     private void ensurePublicAddress(String value) {
         String normalized = value.toLowerCase();
-        if (!(normalized.startsWith("https://") || normalized.startsWith("http://"))
+        if (!normalized.startsWith("https://")
                 || normalized.contains("://localhost")
                 || normalized.contains("://127.0.0.1")
                 || normalized.contains("://0.0.0.0")) {

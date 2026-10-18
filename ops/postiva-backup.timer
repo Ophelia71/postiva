@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Postiva backup schedule
+
+[Timer]
+OnCalendar=*-*-* 19:15:00 UTC
+Persistent=true
+RandomizedDelaySec=10m
+Unit=postiva-backup.service
+
+[Install]
+WantedBy=timers.target

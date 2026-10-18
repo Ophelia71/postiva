@@ -1,4 +1,7 @@
 
+-- LEGACY RESET SCRIPT: contains DROP TABLE and must not be run on existing data.
+-- Application schema is now managed by backend/src/main/resources/db/migration.
+-- See database/README.md before adopting Flyway on an existing database.
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 
@@ -14,6 +17,7 @@ DROP TABLE IF EXISTS generated_posts CASCADE;
 DROP TABLE IF EXISTS product_briefs CASCADE;
 DROP TABLE IF EXISTS industry_templates CASCADE;
 DROP TABLE IF EXISTS business_profiles CASCADE;
+DROP TABLE IF EXISTS password_reset_tokens CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
 DROP TABLE IF EXISTS pending_registrations CASCADE;
 
@@ -32,6 +36,25 @@ CREATE TABLE users (
                        CONSTRAINT chk_users_role
                            CHECK (role IN ('USER', 'ADMIN'))
 );
+
+CREATE TABLE password_reset_tokens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash VARCHAR(64) NOT NULL UNIQUE,
+    expires_at TIMESTAMPTZ NOT NULL,
+    used_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+    CONSTRAINT chk_password_reset_token_hash CHECK (token_hash ~ '^[0-9a-f]{64}$'),
+    CONSTRAINT chk_password_reset_token_expiry CHECK (expires_at > created_at)
+);
+
+CREATE INDEX idx_password_reset_tokens_expiry
+    ON password_reset_tokens(expires_at)
+    WHERE used_at IS NULL;
+
+CREATE UNIQUE INDEX idx_password_reset_tokens_one_active_per_user
+    ON password_reset_tokens(user_id)
+    WHERE used_at IS NULL;
 
 CREATE TABLE pending_registrations (
                                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -318,13 +341,16 @@ CREATE TABLE scheduled_posts (
                                  post_id UUID NOT NULL,
                                  social_account_id UUID,
                                  platform VARCHAR(50) NOT NULL,
-                                 scheduled_time TIMESTAMP NOT NULL,
+                                 scheduled_time TIMESTAMPTZ NOT NULL,
                                  status VARCHAR(50) NOT NULL DEFAULT 'SCHEDULED',
                                  attempt_count INT NOT NULL DEFAULT 0,
+                                 next_attempt_at TIMESTAMPTZ,
+                                 claim_token UUID,
+                                 lease_until TIMESTAMPTZ,
                                  last_error TEXT,
-                                 published_at TIMESTAMP,
-                                 created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                                 updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                                 published_at TIMESTAMPTZ,
+                                 created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                                 updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
                                  CONSTRAINT fk_scheduled_posts_post
                                      FOREIGN KEY (post_id)
@@ -340,7 +366,7 @@ CREATE TABLE scheduled_posts (
                                      CHECK (platform IN ('FACEBOOK', 'INSTAGRAM', 'THREADS')),
 
                                  CONSTRAINT chk_scheduled_posts_status
-                                     CHECK (status IN ('SCHEDULED', 'PUBLISHING', 'PUBLISHED', 'FAILED', 'CANCELLED'))
+                                     CHECK (status IN ('SCHEDULED', 'PUBLISHING', 'PUBLISHED', 'FAILED', 'UNKNOWN', 'CANCELLED'))
 );
 
 -- =========================================================
@@ -355,7 +381,7 @@ CREATE TABLE publish_logs (
                               external_post_id VARCHAR(255),
                               status VARCHAR(50) NOT NULL,
                               error_message TEXT,
-                              published_at TIMESTAMP,
+                              published_at TIMESTAMPTZ,
 
                               CONSTRAINT fk_publish_logs_scheduled_post
                                   FOREIGN KEY (scheduled_post_id)
@@ -496,7 +522,7 @@ CREATE INDEX idx_scheduled_posts_social_account_id
     ON scheduled_posts(social_account_id);
 
 CREATE INDEX idx_scheduled_posts_due
-    ON scheduled_posts(status, scheduled_time);
+    ON scheduled_posts(status, scheduled_time, next_attempt_at);
 
 CREATE INDEX idx_publish_logs_scheduled_post_id
     ON publish_logs(scheduled_post_id);

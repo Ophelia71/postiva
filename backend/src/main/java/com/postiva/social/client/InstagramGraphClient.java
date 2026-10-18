@@ -20,7 +20,7 @@ public class InstagramGraphClient {
     private static final int STATUS_ATTEMPTS = 30;
     private static final long STATUS_DELAY_MILLIS = 2_000;
 
-    private final WebClient oauthClient;
+    private final WebClient tokenClient;
     private final WebClient instagramClient;
     private final WebClient facebookClient;
     private final ObjectMapper objectMapper;
@@ -28,7 +28,7 @@ public class InstagramGraphClient {
     public InstagramGraphClient(WebClient.Builder builder,
                                 ObjectMapper objectMapper,
                                 @Value("${postiva.instagram.api-version}") String apiVersion) {
-        this.oauthClient = builder.clone().build();
+        this.tokenClient = builder.clone().build();
         this.instagramClient = builder.clone()
                 .baseUrl("https://graph.instagram.com/" + apiVersion)
                 .build();
@@ -38,40 +38,8 @@ public class InstagramGraphClient {
         this.objectMapper = objectMapper;
     }
 
-    public OAuthToken exchangeCode(String appId, String appSecret, String redirectUri, String code) {
-        MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
-        form.add("client_id", appId);
-        form.add("client_secret", appSecret);
-        form.add("grant_type", "authorization_code");
-        form.add("redirect_uri", redirectUri);
-        form.add("code", code);
-        String body = oauthClient.post()
-                .uri("https://api.instagram.com/oauth/access_token")
-                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
-                .body(BodyInserters.fromFormData(form))
-                .retrieve()
-                .bodyToMono(String.class)
-                .block();
-        return parseToken(body, 0);
-    }
-
-    public OAuthToken exchangeLongLived(String appSecret, String accessToken) {
-        String body = oauthClient.get()
-                .uri(uri -> uri.scheme("https")
-                        .host("graph.instagram.com")
-                        .path("/access_token")
-                        .queryParam("grant_type", "ig_exchange_token")
-                        .queryParam("client_secret", appSecret)
-                        .queryParam("access_token", accessToken)
-                        .build())
-                .retrieve()
-                .bodyToMono(String.class)
-                .block();
-        return parseToken(body, 0);
-    }
-
-    public OAuthToken refreshLongLived(String accessToken) {
-        String body = oauthClient.get()
+    public AccessToken refreshLongLived(String accessToken) {
+        String body = tokenClient.get()
                 .uri(uri -> uri.scheme("https")
                         .host("graph.instagram.com")
                         .path("/refresh_access_token")
@@ -80,11 +48,11 @@ public class InstagramGraphClient {
                         .build())
                 .retrieve()
                 .onStatus(HttpStatusCode::isError, response -> response.bodyToMono(String.class)
-                        .map(responseBody -> new IllegalStateException(
+                        .map(responseBody -> new MetaApiException(response.statusCode().value(),
                                 metaErrorMessage("Instagram không thể refresh token", responseBody))))
                 .bodyToMono(String.class)
                 .block();
-        return parseToken(body, 0);
+        return parseAccessToken(body, 0);
     }
 
     public InstagramProfile getMe(String accessToken) {
@@ -95,10 +63,8 @@ public class InstagramGraphClient {
                         .build())
                 .retrieve()
                 .onStatus(HttpStatusCode::isError, response -> response.bodyToMono(String.class)
-                        .map(responseBody -> new ResponseStatusException(
-                                HttpStatus.BAD_GATEWAY,
-                                metaErrorMessage("Instagram", responseBody)
-                        )))
+                        .map(responseBody -> new MetaApiException(response.statusCode().value(),
+                                metaErrorMessage("Instagram", responseBody))))
                 .bodyToMono(String.class)
                 .block();
         try {
@@ -213,7 +179,8 @@ public class InstagramGraphClient {
                         .build(containerId))
                 .retrieve()
                 .onStatus(HttpStatusCode::isError, response -> response.bodyToMono(String.class)
-                        .map(responseBody -> new IllegalStateException(metaErrorMessage("Instagram", responseBody))))
+                        .map(responseBody -> new MetaApiException(response.statusCode().value(),
+                                metaErrorMessage("Instagram", responseBody))))
                 .bodyToMono(String.class)
                 .block();
         try {
@@ -235,10 +202,8 @@ public class InstagramGraphClient {
                         .build(accountId))
                 .retrieve()
                 .onStatus(HttpStatusCode::isError, response -> response.bodyToMono(String.class)
-                        .map(responseBody -> new ResponseStatusException(
-                                HttpStatus.BAD_GATEWAY,
-                                metaErrorMessage("Instagram Business", responseBody)
-                        )))
+                        .map(responseBody -> new MetaApiException(response.statusCode().value(),
+                                metaErrorMessage("Instagram Business", responseBody))))
                 .bodyToMono(String.class)
                 .block();
         try {
@@ -265,7 +230,7 @@ public class InstagramGraphClient {
                 .body(BodyInserters.fromFormData(form))
                 .retrieve()
                 .onStatus(HttpStatusCode::isError, response -> response.bodyToMono(String.class)
-                        .map(responseBody -> new IllegalStateException(
+                        .map(responseBody -> new MetaApiException(response.statusCode().value(),
                                 metaErrorMessage("Instagram không thể " + action, responseBody))))
                 .bodyToMono(String.class)
                 .block();
@@ -307,14 +272,14 @@ public class InstagramGraphClient {
         }
     }
 
-    private OAuthToken parseToken(String body, long defaultExpiresIn) {
+    private AccessToken parseAccessToken(String body, long defaultExpiresIn) {
         try {
             JsonNode root = objectMapper.readTree(body);
             String accessToken = root.path("access_token").asText();
             if (accessToken.isBlank()) {
                 throw new IllegalStateException("Instagram không trả về access token");
             }
-            return new OAuthToken(
+            return new AccessToken(
                     accessToken,
                     root.path("user_id").asText(""),
                     root.path("expires_in").asLong(defaultExpiresIn)
@@ -354,7 +319,7 @@ public class InstagramGraphClient {
         INSTAGRAM_LOGIN
     }
 
-    public record OAuthToken(String accessToken, String userId, long expiresInSeconds) {
+    public record AccessToken(String accessToken, String userId, long expiresInSeconds) {
     }
 
     public record InstagramProfile(String id, String username, String accountType, ApiMode apiMode) {

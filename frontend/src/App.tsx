@@ -2,13 +2,17 @@ import {
   BarChart3,
   CalendarDays,
   ChevronDown,
+  CreditCard,
+  KeyRound,
   Link2,
   LogOut,
   PlusCircle,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { Navigate, NavLink, Route, Routes } from 'react-router-dom'
+import { Link, Navigate, NavLink, Route, Routes } from 'react-router-dom'
 import { api } from './lib/api'
+import { identifyWebAnalyticsUser, WebAnalyticsTracker } from './lib/webAnalytics'
+import { AdminShell } from './components/AdminShell'
 import {
   AUTH_EXPIRED_EVENT,
   AUTH_STORAGE_KEY,
@@ -26,11 +30,16 @@ import { HomePage } from './pages/HomePage'
 import { ReportsPage } from './pages/ReportsPage'
 import { SchedulePage } from './pages/SchedulePage'
 import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage'
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
+import { ResetPasswordPage } from './pages/ResetPasswordPage'
+import { ChangePasswordPage } from './pages/ChangePasswordPage'
+import { BillingPage } from './pages/BillingPage'
 
 const navItems = [
   { to: '/app/schedule', label: 'Lịch đăng', icon: CalendarDays },
   { to: '/app/reports', label: 'Báo cáo', icon: BarChart3 },
   { to: '/app/connections', label: 'Kết nối', icon: Link2 },
+  { to: '/app/billing', label: 'Gói & thanh toán', icon: CreditCard },
 ]
 
 type UserResponse = {
@@ -38,20 +47,27 @@ type UserResponse = {
   fullName: string
   email: string
   role: AuthSession['role']
+  mfaSetupRequired: boolean
 }
 
 function App() {
   return (
+    <>
+    <WebAnalyticsTracker />
     <Routes>
       <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="*" element={<SessionApp />} />
     </Routes>
+    </>
   )
 }
 
 function SessionApp() {
   const [session, setSession] = useState<AuthSession | null>(() => getAuthSession())
   const [isSessionReady, setIsSessionReady] = useState(false)
+  const [authNotice, setAuthNotice] = useState('')
 
   useEffect(() => {
     let ignore = false
@@ -77,12 +93,14 @@ function SessionApp() {
           email: response.data.email,
           fullName: response.data.fullName,
           role: response.data.role,
+          mfaSetupRequired: response.data.mfaSetupRequired,
         }
 
         if (!isAuthSession(refreshedSession)) {
           throw new Error('Phiên đăng nhập không hợp lệ')
         }
         saveAuthSession(refreshedSession)
+        identifyWebAnalyticsUser()
         if (!ignore) {
           setSession(refreshedSession)
         }
@@ -128,12 +146,20 @@ function SessionApp() {
 
   function handleAuthenticated(nextSession: AuthSession) {
     saveAuthSession(nextSession)
+    identifyWebAnalyticsUser()
     setSession(nextSession)
+    setAuthNotice('')
   }
 
   function handleLogout() {
     clearAuthSession()
     setSession(null)
+  }
+
+  function handlePasswordChanged() {
+    clearAuthSession()
+    setSession(null)
+    setAuthNotice('Mật khẩu đã được cập nhật hoặc các phiên đã bị thu hồi. Vui lòng đăng nhập lại.')
   }
 
   return (
@@ -146,9 +172,11 @@ function SessionApp() {
               !isSessionReady ? (
                 <SessionLoading />
               ) : session ? (
-                    <AppShell session={session} onLogout={handleLogout} />
+                    session.role === 'ADMIN'
+                      ? <AdminShell session={session} onLogout={handleLogout} onPasswordChanged={handlePasswordChanged} />
+                      : <AppShell session={session} onLogout={handleLogout} onPasswordChanged={handlePasswordChanged} />
               ) : (
-                <AuthPage onAuthenticated={handleAuthenticated} />
+                <AuthPage onAuthenticated={handleAuthenticated} notice={authNotice} />
               )
             }
           />
@@ -165,7 +193,7 @@ function SessionLoading() {
   )
 }
 
-function AppShell({ session, onLogout }: { session: AuthSession; onLogout: () => void }) {
+function AppShell({ session, onLogout, onPasswordChanged }: { session: AuthSession; onLogout: () => void; onPasswordChanged: () => void }) {
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const { t } = usePreferences()
   const profileName = session.fullName
@@ -240,6 +268,14 @@ function AppShell({ session, onLogout }: { session: AuthSession; onLogout: () =>
                 <p className="truncate text-sm font-bold">{profileName}</p>
                 <p className="mt-1 truncate text-xs text-[var(--muted-text)]">{profileEmail}</p>
               </div>
+              <Link
+                to="/app/security"
+                onClick={() => setUserMenuOpen(false)}
+                className="mt-2 flex h-10 w-full items-center gap-2 rounded-md px-3 text-sm font-semibold text-[var(--app-text)] hover:bg-[var(--soft-bg)]"
+              >
+                <KeyRound size={16} />
+                Bảo mật tài khoản
+              </Link>
               <button
                 type="button"
                 onClick={onLogout}
@@ -273,6 +309,9 @@ function AppShell({ session, onLogout }: { session: AuthSession; onLogout: () =>
             <Route path="/reports" element={<ReportsPage />} />
             <Route path="/connections" element={<ConnectionsPage />} />
             <Route path="/create" element={<CreatePostPage />} />
+            <Route path="/billing" element={<BillingPage />} />
+            <Route path="/security" element={<ChangePasswordPage onPasswordChanged={onPasswordChanged} />} />
+            <Route path="/admin/*" element={<Navigate to="/app/reports" replace />} />
           </Routes>
         </div>
       </main>

@@ -25,6 +25,13 @@ public class PendingRegistration {
     @Column(name = "otp_hash", nullable = false)
     private String otpHash;
 
+    @Column(name = "failed_attempts", nullable = false)
+    private int failedAttempts;
+
+    public int getFailedAttempts() { return failedAttempts; }
+    public void resetFailedAttempts() { failedAttempts = 0; }
+    public void failAttempt() { failedAttempts++; }
+
     @Column(name = "otp_expires_at", nullable = false)
     private LocalDateTime otpExpiresAt;
 

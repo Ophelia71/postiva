@@ -10,10 +10,18 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.reactive.function.client.WebClientException;
+import com.postiva.social.client.MetaApiException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ApiResponse<Void> handleInvalidParameter(MethodArgumentTypeMismatchException exception) {
+        return ApiResponse.fail("Tham số " + exception.getName() + " không hợp lệ");
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ApiResponse<Void> handleBadRequest(IllegalArgumentException exception) {
@@ -58,9 +66,16 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.fail("Meta từ chối yêu cầu. Kiểm tra access token và quyền của tài khoản."));
     }
 
+    @ExceptionHandler(MetaApiException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMetaApiError(MetaApiException exception) {
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                .body(ApiResponse.fail("Meta từ chối yêu cầu. Kiểm tra access token và quyền của tài khoản."));
+    }
+
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<ApiResponse<Void>> handleStatus(ResponseStatusException exception) {
         return ResponseEntity.status(exception.getStatusCode())
+                .headers(exception.getHeaders())
                 .body(ApiResponse.fail(
                         exception.getReason() == null || exception.getReason().isBlank()
                                 ? "Không thể xử lý yêu cầu"

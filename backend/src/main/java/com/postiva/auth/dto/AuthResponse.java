@@ -9,6 +9,7 @@ public record AuthResponse(
         String fullName,
         String role,
         UUID workspaceId,
-        String workspaceName
+        String workspaceName,
+        boolean mfaSetupRequired
 ) {
 }

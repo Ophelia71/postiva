@@ -34,6 +34,19 @@ public class ThreadsPublisher implements PlatformPublisher {
                           SocialAccount account,
                           String accessToken,
                           List<UploadedFile> mediaFiles) {
+        String containerId;
+        try {
+            containerId = prepareContainer(post, accessToken, mediaFiles);
+        } catch (RuntimeException exception) {
+            throw new PublishPreparationException(exception);
+        }
+        // Only this request can publish the prepared container. Keep failures ambiguous here.
+        return threadsClient.publishContainer(accessToken, containerId);
+    }
+
+    private String prepareContainer(GeneratedPost post,
+                                    String accessToken,
+                                    List<UploadedFile> mediaFiles) {
         String text = PlatformPostContent.require(post, Platform.THREADS);
         if (text.length() > MAX_TEXT_LENGTH) {
             throw new IllegalStateException("Nội dung Threads vượt quá 500 ký tự");
@@ -42,10 +55,10 @@ public class ThreadsPublisher implements PlatformPublisher {
             throw new IllegalStateException("Threads carousel hỗ trợ tối đa 20 ảnh/video");
         }
         mediaFiles.forEach(this::validateMedia);
+        List<String> mediaUrls = mediaFiles.stream().map(fileService::publicUrl).toList();
 
         if (mediaFiles.isEmpty()) {
-            String containerId = threadsClient.createTextContainer(accessToken, text);
-            return threadsClient.publishContainer(accessToken, containerId);
+            return threadsClient.createTextContainer(accessToken, text);
         }
         if (mediaFiles.size() == 1) {
             UploadedFile media = mediaFiles.get(0);
@@ -53,20 +66,21 @@ public class ThreadsPublisher implements PlatformPublisher {
                     accessToken,
                     text,
                     isVideo(media) ? "VIDEO" : "IMAGE",
-                    fileService.publicUrl(media),
+                    mediaUrls.get(0),
                     false
             );
             threadsClient.awaitContainerReady(containerId, accessToken);
-            return threadsClient.publishContainer(accessToken, containerId);
+            return containerId;
         }
 
         List<String> childIds = new ArrayList<>();
-        for (UploadedFile media : mediaFiles) {
+        for (int index = 0; index < mediaFiles.size(); index++) {
+            UploadedFile media = mediaFiles.get(index);
             String childId = threadsClient.createMediaContainer(
                     accessToken,
                     null,
                     isVideo(media) ? "VIDEO" : "IMAGE",
-                    fileService.publicUrl(media),
+                    mediaUrls.get(index),
                     true
             );
             threadsClient.awaitContainerReady(childId, accessToken);
@@ -74,7 +88,7 @@ public class ThreadsPublisher implements PlatformPublisher {
         }
         String containerId = threadsClient.createCarouselContainer(accessToken, text, childIds);
         threadsClient.awaitContainerReady(containerId, accessToken);
-        return threadsClient.publishContainer(accessToken, containerId);
+        return containerId;
     }
 
     private void validateMedia(UploadedFile media) {

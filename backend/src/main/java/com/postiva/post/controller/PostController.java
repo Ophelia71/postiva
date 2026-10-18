@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -26,8 +27,9 @@ public class PostController {
     }
 
     @PostMapping("/generate")
-    public ApiResponse<GeneratePostResponse> generate(@Valid @RequestBody GeneratePostRequest request) {
-        return ApiResponse.ok(postService.generate(request));
+    public ApiResponse<GeneratePostResponse> generate(@Valid @RequestBody GeneratePostRequest request,
+                                                    @RequestHeader("Idempotency-Key") UUID idempotencyKey) {
+        return ApiResponse.ok(postService.generate(request, idempotencyKey));
     }
 
     @GetMapping("/{postId}")

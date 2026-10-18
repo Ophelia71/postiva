@@ -35,6 +35,23 @@ public class InstagramPublisher implements PlatformPublisher {
                           SocialAccount account,
                           String accessToken,
                           List<UploadedFile> mediaFiles) {
+        InstagramGraphClient.ApiMode apiMode = apiMode(account);
+        String accountId = account.getPageId();
+        String containerId;
+        try {
+            containerId = prepareContainer(post, accountId, accessToken, mediaFiles, apiMode);
+        } catch (RuntimeException exception) {
+            throw new PublishPreparationException(exception);
+        }
+        // Only this request can publish the prepared container. Keep failures ambiguous here.
+        return instagramClient.publishContainer(accountId, accessToken, containerId, apiMode);
+    }
+
+    private String prepareContainer(GeneratedPost post,
+                                    String accountId,
+                                    String accessToken,
+                                    List<UploadedFile> mediaFiles,
+                                    InstagramGraphClient.ApiMode apiMode) {
         String caption = PlatformPostContent.require(post, Platform.INSTAGRAM);
         if (caption.length() > MAX_CAPTION_LENGTH) {
             throw new IllegalStateException("Caption Instagram vượt quá 2.200 ký tự");
@@ -46,34 +63,35 @@ public class InstagramPublisher implements PlatformPublisher {
             throw new IllegalStateException("Instagram carousel hỗ trợ tối đa 10 ảnh/video");
         }
         mediaFiles.forEach(this::validateMedia);
+        // Resolve every URL before creating any container, including carousel children.
+        List<String> mediaUrls = mediaFiles.stream().map(fileService::publicUrl).toList();
 
-        InstagramGraphClient.ApiMode apiMode = apiMode(account);
-        String accountId = account.getPageId();
         if (mediaFiles.size() == 1) {
             UploadedFile media = mediaFiles.get(0);
             String containerId = isVideo(media)
                     ? instagramClient.createVideoContainer(
-                            accountId, accessToken, fileService.publicUrl(media), caption, false, apiMode)
+                            accountId, accessToken, mediaUrls.get(0), caption, false, apiMode)
                     : instagramClient.createImageContainer(
-                            accountId, accessToken, fileService.publicUrl(media), caption, false, apiMode);
+                            accountId, accessToken, mediaUrls.get(0), caption, false, apiMode);
             instagramClient.awaitContainerReady(containerId, accessToken, apiMode);
-            return instagramClient.publishContainer(accountId, accessToken, containerId, apiMode);
+            return containerId;
         }
 
         List<String> childIds = new ArrayList<>();
-        for (UploadedFile media : mediaFiles) {
+        for (int index = 0; index < mediaFiles.size(); index++) {
+            UploadedFile media = mediaFiles.get(index);
             String childId = isVideo(media)
                     ? instagramClient.createVideoContainer(
-                            accountId, accessToken, fileService.publicUrl(media), null, true, apiMode)
+                            accountId, accessToken, mediaUrls.get(index), null, true, apiMode)
                     : instagramClient.createImageContainer(
-                            accountId, accessToken, fileService.publicUrl(media), null, true, apiMode);
+                            accountId, accessToken, mediaUrls.get(index), null, true, apiMode);
             instagramClient.awaitContainerReady(childId, accessToken, apiMode);
             childIds.add(childId);
         }
         String containerId = instagramClient.createCarouselContainer(
                 accountId, accessToken, childIds, caption, apiMode);
         instagramClient.awaitContainerReady(containerId, accessToken, apiMode);
-        return instagramClient.publishContainer(accountId, accessToken, containerId, apiMode);
+        return containerId;
     }
 
     private InstagramGraphClient.ApiMode apiMode(SocialAccount account) {
