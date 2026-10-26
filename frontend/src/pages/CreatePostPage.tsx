@@ -147,6 +147,21 @@ export function CreatePostPage() {
   const [isPublishing, setIsPublishing] = useState(false)
   const [step, setStep] = useState(0)
   const [stepNotice, setStepNotice] = useState('')
+  const stepsAnchorRef = useRef<HTMLDivElement>(null)
+  const hasMountedRef = useRef(false)
+
+  // After changing step, bring the stepper back to the top of the viewport so the new step is visible without scrolling.
+  useEffect(() => {
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true
+      return
+    }
+    const anchor = stepsAnchorRef.current
+    if (anchor && anchor.getBoundingClientRect().top < 0) {
+      const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      anchor.scrollIntoView({ block: 'start', behavior: reduceMotion ? 'auto' : 'smooth' })
+    }
+  }, [step])
 
   useEffect(() => {
     if (channelsState.loading || didInitializeTargets.current) {
@@ -538,8 +553,8 @@ export function CreatePostPage() {
   }
 
   return (
-    <section className="create-post-page -mx-4 min-h-[calc(100svh-8rem)] rounded-[8px] bg-gradient-to-br from-rose-50 via-violet-50 to-cyan-50 px-4 py-3 sm:-mx-6 sm:px-6 lg:mx-0">
-      <div className="mb-5 flex items-center justify-between gap-4">
+    <section className="create-post-page -mx-4 min-h-[calc(100svh-8rem)] rounded-[8px] bg-gradient-to-br from-rose-50 via-violet-50 to-cyan-50 px-4 py-3 sm:-mx-6 sm:px-6 lg:mx-0 lg:flex lg:h-[calc(100svh-4rem)] lg:min-h-0 lg:flex-col">
+      <div className="mb-3 flex shrink-0 items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <button
             type="button"
@@ -572,14 +587,15 @@ export function CreatePostPage() {
       </div>
 
       {!channelsState.loading && !channelsState.error && availablePlatforms.length === 0 && (
-        <div role="status" className="mb-5 flex flex-col gap-3 rounded-[8px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between">
+        <div role="status" className="mb-3 flex shrink-0 flex-col gap-2 rounded-[8px] border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between">
           <p>Bạn chưa kết nối kênh nào nên chưa thể chọn nơi đăng. Hãy kết nối một kênh trước khi bắt đầu.</p>
           <Link to="/app/connections" className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full bg-amber-700 px-4 text-sm font-bold text-white hover:bg-amber-800">
             Kết nối kênh
           </Link>
         </div>
       )}
-      <nav aria-label="Các bước tạo bài" className="mb-5">
+      <div ref={stepsAnchorRef} aria-hidden="true" className="scroll-mt-[64px] lg:scroll-mt-4" />
+      <nav aria-label="Các bước tạo bài" className="sticky top-[64px] z-10 mb-3 shrink-0 lg:static">
         <ol className="grid grid-cols-5 gap-1 rounded-[8px] border border-slate-200 bg-white p-1.5 shadow-sm">
           {STEPS.map((item, index) => {
             const active = index === step
@@ -610,13 +626,10 @@ export function CreatePostPage() {
             )
           })}
         </ol>
-        {CAN_SKIP_REQUIRED_STEPS && (
-          <p className="mt-2 text-xs text-slate-600">Chế độ dev: có thể bỏ qua mọi bước, kể cả bước bắt buộc. Bản chạy thật vẫn chặn.</p>
-        )}
       </nav>
-      <div className="grid gap-6 lg:grid-cols-2 lg:items-start lg:gap-8">
-        <div className="min-w-0 space-y-4">
-          <div className="space-y-4">
+      <div className="grid gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-2 lg:items-stretch lg:gap-8">
+        <div className="min-w-0 space-y-3 lg:flex lg:min-h-0 lg:flex-col lg:space-y-0 lg:gap-3">
+          <div className="space-y-3 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-1">
             {stepNotice && stepIssue(step) && (
               <p role="alert" className="rounded-[6px] border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-800">
                 {stepNotice}
@@ -751,11 +764,11 @@ export function CreatePostPage() {
                 <textarea
                   value={sourceContent}
                   onChange={(event) => setSourceContent(event.target.value)}
-                  className="mt-2 h-24 w-full resize-none rounded-[6px] border border-slate-300 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-blue-500"
+                  className="mt-2 h-20 w-full resize-none rounded-[6px] border border-slate-300 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-blue-500"
                   placeholder={t('Nhập nội dung chính...', 'Enter the main content...')}
                 />
               </label>
-              <div className="mt-3 flex justify-end">
+              <div className="mt-2 flex justify-end">
                 <button
                   type="button"
                   onClick={() => void applyPlatformTemplates()}
@@ -766,7 +779,7 @@ export function CreatePostPage() {
                   {isGeneratingContent ? t('Đang gen...', 'Generating...') : t('Tự gen bài', 'Generate')}
                 </button>
               </div>
-              <div className="my-4 border-t border-slate-100" />
+              <div className="my-3 border-t border-slate-100" />
               <label className="block text-sm font-bold">
                 {t(`Bản ${PLATFORM_LABELS[activePreviewPlatform]}`, `${PLATFORM_LABELS[activePreviewPlatform]} version`)}
                 <textarea
@@ -776,7 +789,7 @@ export function CreatePostPage() {
                     [activePreviewPlatform]: event.target.value,
                   }))}
                   disabled={!selectedPlatforms.includes(activePreviewPlatform)}
-                  className="mt-2 h-28 w-full resize-none rounded-[6px] border border-slate-300 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-blue-500"
+                  className="mt-2 h-24 w-full resize-none rounded-[6px] border border-slate-300 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-blue-500 lg:h-20"
                   placeholder={getPlatformPlaceholder(activePreviewPlatform, t)}
                 />
                 <span className={cn(
@@ -817,12 +830,14 @@ export function CreatePostPage() {
             </ComposerSection>
             )}
 
-            <p className={cn('rounded-[6px] border px-3 py-2 text-sm', statusTone === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : statusTone === 'error' ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-slate-200 bg-slate-50 text-slate-700')}>
-              {status}
-            </p>
+            {(step >= 3 || statusTone !== 'info') && (
+              <p className={cn('rounded-[6px] border px-3 py-2 text-sm', statusTone === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : statusTone === 'error' ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-slate-200 bg-slate-50 text-slate-700')}>
+                {status}
+              </p>
+            )}
           </div>
 
-          <div className="sticky bottom-[88px] z-10 flex items-center justify-end gap-2 rounded-[6px] border border-slate-200 bg-white px-4 py-3 shadow-lg shadow-slate-200/70 lg:bottom-4">
+          <div className="sticky bottom-[88px] z-10 flex items-center justify-end gap-2 rounded-[6px] border border-slate-200 bg-white px-4 py-2 shadow-lg shadow-slate-200/70 lg:static lg:shrink-0 lg:shadow-sm">
             {step === 0 ? (
               <Link to="/app/schedule" className="mr-auto inline-flex min-h-11 items-center justify-center rounded-[6px] border border-slate-300 px-4 text-sm font-semibold hover:bg-slate-50">
                 {t('Hủy', 'Cancel')}
@@ -869,8 +884,8 @@ export function CreatePostPage() {
           </div>
         </div>
 
-        <div className="min-w-0 lg:sticky lg:top-6">
-          <div className="mb-3 flex flex-wrap justify-center gap-2">
+        <div className="min-w-0 lg:flex lg:min-h-0 lg:flex-col">
+          <div className="mb-3 flex shrink-0 flex-wrap justify-center gap-2">
             {selectedPlatforms.map((platform) => (
               <button
                 key={platform}
@@ -916,8 +931,8 @@ function ComposerSection({
   children: ReactNode
 }) {
   return (
-    <section className="rounded-[6px] border border-slate-100 bg-white p-4 shadow-sm">
-      <div className="mb-3 flex items-center justify-between gap-3">
+    <section className="rounded-[6px] border border-slate-100 bg-white p-4 shadow-sm lg:p-3">
+      <div className="mb-3 flex items-center justify-between gap-3 lg:mb-2">
         <h2 className="text-lg font-bold">{title}</h2>
         {headerAction}
       </div>
@@ -1063,10 +1078,10 @@ function SocialFeedPreview({
 
   return (
     <article
-      className={cn('mx-auto overflow-hidden rounded-[6px] bg-white shadow-xl shadow-slate-200/80', compact ? 'max-w-[360px]' : 'max-w-[620px]')}
+      className={cn('mx-auto flex w-full flex-col overflow-hidden rounded-[6px] bg-white shadow-xl shadow-slate-200/80 lg:min-h-0 lg:flex-1', compact ? 'max-w-[360px]' : 'max-w-[620px]')}
     >
-      <div aria-hidden className="h-1" style={{ backgroundColor: getPlatformColor(platform) }} />
-      <header className="flex items-center gap-3 px-5 py-4">
+      <div aria-hidden className="h-1 shrink-0" style={{ backgroundColor: getPlatformColor(platform) }} />
+      <header className="flex shrink-0 items-center gap-3 px-5 py-3">
         <PageIdentity channel={channel} platform={platform} large />
         <div className="min-w-0">
           <p className="truncate text-sm font-bold">{channel?.name ?? labels.account}</p>
@@ -1078,26 +1093,26 @@ function SocialFeedPreview({
       </header>
 
       {caption.trim() ? (
-        <p className="whitespace-pre-wrap px-5 pb-4 text-sm leading-6 text-slate-900">{caption}</p>
+        <p className="shrink-0 whitespace-pre-wrap px-5 pb-3 text-sm leading-6 text-slate-900 lg:max-h-28 lg:overflow-y-auto">{caption}</p>
       ) : (
-        <div className="space-y-3 px-5 pb-5">
+        <div className="shrink-0 space-y-3 px-5 pb-4">
           <div className="h-3 w-full rounded-full bg-slate-100" />
           <div className="h-3 w-1/3 rounded-full bg-slate-100" />
         </div>
       )}
 
-      <div className={cn('bg-slate-100', previewMedia.length > 1 ? '' : 'flex min-h-[430px] items-center justify-center')}>
+      <div className="relative min-h-[430px] overflow-hidden bg-slate-100 lg:min-h-0 lg:flex-1">
         {previewMedia.length > 0 ? (
-          <div className={cn('grid w-full', visiblePreviewMedia.length > 1 ? 'grid-cols-2 gap-0.5' : 'grid-cols-1')}>
+          <div className={cn('grid w-full lg:absolute lg:inset-0 lg:place-content-center', visiblePreviewMedia.length > 1 ? 'grid-cols-2 gap-0.5' : 'grid-cols-1')}>
             {visiblePreviewMedia.map((media, index) => (
               <div key={media.url + '-' + index} className="relative">
                 {media.type.startsWith('video/') ? (
-                  <ProtectedMediaVideo src={media.url} controls className="mx-auto max-h-[430px] w-full bg-slate-950 object-contain" />
+                  <ProtectedMediaVideo src={media.url} controls className="mx-auto max-h-[430px] w-full bg-slate-950 object-contain lg:max-h-[26vh]" />
                 ) : (
                   <ProtectedMediaImage
                     src={media.url}
                     alt={`${PLATFORM_LABELS[platform]} post media preview ${index + 1}`}
-                    className="mx-auto h-auto max-h-[430px] w-full object-contain"
+                    className="mx-auto h-auto max-h-[430px] w-full object-contain lg:max-h-[26vh]"
                   />
                 )}
                 {index === visiblePreviewMedia.length - 1 && hiddenImageCount > 0 && (
@@ -1109,11 +1124,13 @@ function SocialFeedPreview({
             ))}
           </div>
         ) : (
-          <EmptyMediaPlaceholder />
+          <div className="flex h-full min-h-[430px] items-center justify-center lg:absolute lg:inset-0 lg:min-h-0">
+            <EmptyMediaPlaceholder />
+          </div>
         )}
       </div>
 
-      <footer className="grid grid-cols-3 border-t border-slate-100 px-6 py-4 text-sm font-semibold text-slate-500">
+      <footer className="grid shrink-0 grid-cols-3 border-t border-slate-100 px-6 py-3 text-sm font-semibold text-slate-500">
         <button type="button" className="flex items-center justify-center gap-2">
           <ThumbsUp size={20} />
           {labels.like}
@@ -1133,8 +1150,8 @@ function SocialFeedPreview({
 
 function EmptyMediaPlaceholder() {
   return (
-    <div className="flex h-56 w-72 items-center justify-center border-[6px] border-dashed border-slate-200 text-slate-200">
-      <Image size={120} strokeWidth={1.2} />
+    <div className="flex h-56 max-h-[80%] w-72 max-w-[80%] items-center justify-center border-[6px] border-dashed border-slate-200 text-slate-200">
+      <Image size={96} strokeWidth={1.2} />
     </div>
   )
 }

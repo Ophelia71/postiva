@@ -11,7 +11,7 @@ import {
   Rocket,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { Link, Navigate, NavLink, Route, Routes } from 'react-router-dom'
+import { Link, Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom'
 import { api } from './lib/api'
 import { identifyWebAnalyticsUser, WebAnalyticsTracker } from './lib/webAnalytics'
 import { AdminShell } from './components/AdminShell'
@@ -289,6 +289,8 @@ function AccountMenu({ session, onLogout, placement }: { session: AuthSession; o
 
 function AppShell({ session, onLogout, onPasswordChanged }: ShellProps) {
   const { t } = usePreferences()
+  // The "Tạo bài mới" shortcut is pointless while the user is already on the create page.
+  const isCreatePage = useLocation().pathname.startsWith('/app/create')
 
   return (
     <div className="app-shell min-h-svh bg-[var(--app-bg)] text-[var(--app-text)]">
@@ -348,15 +350,17 @@ function AppShell({ session, onLogout, onPasswordChanged }: ShellProps) {
 
       <main className="pb-24 lg:pb-0 lg:pl-[272px]">
         <div className="mx-auto min-h-svh max-w-[1320px] px-4 py-5 sm:px-6 lg:px-10 lg:py-8">
-          <div className="mb-8 hidden items-center justify-end lg:flex">
-            <NavLink
-              to="/app/create"
-              className="flex h-11 items-center justify-center gap-2 rounded-full bg-[#6672d8] px-4 text-sm font-semibold text-white hover:-translate-y-0.5 hover:bg-[#505db8]"
-            >
-              <PlusCircle size={16} aria-hidden="true" />
-              {t('Tạo bài mới')}
-            </NavLink>
-          </div>
+          {!isCreatePage && (
+            <div className="mb-8 hidden items-center justify-end lg:flex">
+              <NavLink
+                to="/app/create"
+                className="flex h-11 items-center justify-center gap-2 rounded-full bg-[#6672d8] px-4 text-sm font-semibold text-white hover:-translate-y-0.5 hover:bg-[#505db8]"
+              >
+                <PlusCircle size={16} aria-hidden="true" />
+                {t('Tạo bài mới')}
+              </NavLink>
+            </div>
+          )}
           <Routes>
             <Route path="/" element={<AppIndexRedirect />} />
             <Route path="/start" element={<StartPage session={session} />} />
