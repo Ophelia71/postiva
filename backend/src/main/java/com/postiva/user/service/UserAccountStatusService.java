@@ -2,10 +2,12 @@ package com.postiva.user.service;
 
 import com.postiva.admin.entity.AdminAuditLog;
 import com.postiva.admin.repository.AdminAuditLogRepository;
+import com.postiva.automation.AutomationPauser;
 import com.postiva.auth.service.CurrentUserService;
 import com.postiva.scheduler.service.PublishingService;
 import com.postiva.user.entity.User;
 import com.postiva.user.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
@@ -20,13 +22,22 @@ public class UserAccountStatusService {
     private final AdminAuditLogRepository auditRepository;
     private final CurrentUserService currentUserService;
     private final PublishingService publishingService;
+    private final AutomationPauser automationPauser;
 
     public UserAccountStatusService(UserRepository userRepository, AdminAuditLogRepository auditRepository,
                                     CurrentUserService currentUserService, PublishingService publishingService) {
+        this(userRepository, auditRepository, currentUserService, publishingService, null);
+    }
+
+    @Autowired
+    public UserAccountStatusService(UserRepository userRepository, AdminAuditLogRepository auditRepository,
+                                    CurrentUserService currentUserService, PublishingService publishingService,
+                                    AutomationPauser automationPauser) {
         this.userRepository = userRepository;
         this.auditRepository = auditRepository;
         this.currentUserService = currentUserService;
         this.publishingService = publishingService;
+        this.automationPauser = automationPauser;
     }
 
     @Transactional
@@ -63,6 +74,9 @@ public class UserAccountStatusService {
         if (nextStatus == User.Status.LOCKED) {
             target.lock(actor.getId(), normalizedReason);
             publishingService.cancelPendingPostsForUser(target.getId());
+            if (automationPauser != null) {
+                automationPauser.pauseAllForUser(target.getId(), AutomationPauser.REASON_USER_LOCKED);
+            }
         } else {
             target.unlock();
         }

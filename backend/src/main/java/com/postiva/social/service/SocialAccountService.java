@@ -1,6 +1,7 @@
 package com.postiva.social.service;
 
 import com.postiva.auth.service.CurrentUserService;
+import com.postiva.automation.AutomationPauser;
 import com.postiva.common.Platform;
 import com.postiva.social.client.FacebookGraphClient;
 import com.postiva.social.client.InstagramGraphClient;
@@ -19,6 +20,7 @@ import com.postiva.scheduler.ScheduledPostStatus;
 import com.postiva.scheduler.entity.ScheduledPost;
 import com.postiva.scheduler.repository.PublishLogRepository;
 import com.postiva.scheduler.repository.ScheduledPostRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -61,6 +63,7 @@ public class SocialAccountService {
     private final PublishLogRepository publishLogRepository;
     private final GeneratedPostRepository generatedPostRepository;
     private final ProductBriefRepository productBriefRepository;
+    private final AutomationPauser automationPauser;
 
     public SocialAccountService(SocialAccountRepository repository,
                                 CurrentUserService currentUserService,
@@ -72,6 +75,24 @@ public class SocialAccountService {
                                 PublishLogRepository publishLogRepository,
                                 GeneratedPostRepository generatedPostRepository,
                                 ProductBriefRepository productBriefRepository) {
+        this(repository, currentUserService, tokenCipher, facebookGraphClient, instagramGraphClient,
+                threadsGraphClient, scheduledPostRepository, publishLogRepository, generatedPostRepository,
+                productBriefRepository, null);
+    }
+
+    @Autowired
+    public SocialAccountService(SocialAccountRepository repository,
+                                CurrentUserService currentUserService,
+                                TokenCipher tokenCipher,
+                                FacebookGraphClient facebookGraphClient,
+                                InstagramGraphClient instagramGraphClient,
+                                ThreadsGraphClient threadsGraphClient,
+                                ScheduledPostRepository scheduledPostRepository,
+                                PublishLogRepository publishLogRepository,
+                                GeneratedPostRepository generatedPostRepository,
+                                ProductBriefRepository productBriefRepository,
+                                AutomationPauser automationPauser) {
+        this.automationPauser = automationPauser;
         this.repository = repository;
         this.currentUserService = currentUserService;
         this.tokenCipher = tokenCipher;
@@ -243,6 +264,7 @@ public class SocialAccountService {
     public void disconnect(UUID accountId) {
         SocialAccount account = requireCurrentUserAccount(accountId);
         stopAccountSchedules(account);
+        pauseAutomation(account);
         account.setAccessTokenEncrypted(null);
         account.setTokenExpiresAt(null);
         account.setDisconnectedAt(LocalDateTime.now());
@@ -259,12 +281,14 @@ public class SocialAccountService {
                 .filter(account -> belongsToProviderUser(account, normalizedUserId))
                 .toList();
         if (hardDelete) {
+            accounts.forEach(this::pauseAutomation);
             accounts.forEach(this::purgeProviderAccountData);
             repository.deleteAll(accounts);
         } else {
             LocalDateTime disconnectedAt = LocalDateTime.now();
             accounts.forEach(account -> {
                 stopAccountSchedules(account);
+                pauseAutomation(account);
                 account.setAccessTokenEncrypted(null);
                 account.setTokenExpiresAt(null);
                 account.setDisconnectedAt(disconnectedAt);
@@ -272,6 +296,12 @@ public class SocialAccountService {
             repository.saveAll(accounts);
         }
         return accounts.size();
+    }
+
+    private void pauseAutomation(SocialAccount account) {
+        if (automationPauser != null && account.getId() != null) {
+            automationPauser.pauseForAccount(account.getId(), AutomationPauser.REASON_CHANNEL_DISCONNECTED);
+        }
     }
 
     private void stopAccountSchedules(SocialAccount account) {
@@ -359,6 +389,13 @@ public class SocialAccountService {
     public SocialAccount requireCurrentUserAccount(UUID accountId) {
         return repository.findByIdAndUserIdAndDisconnectedAtIsNull(
                         accountId, currentUserService.requireCurrentUserId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy tài khoản Meta"));
+    }
+
+    /** Ownership-checked lookup for callers without an HTTP session (the daily automation). */
+    @Transactional(readOnly = true)
+    public SocialAccount requireUserAccount(UUID userId, UUID accountId) {
+        return repository.findByIdAndUserIdAndDisconnectedAtIsNull(accountId, userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy tài khoản Meta"));
     }
 

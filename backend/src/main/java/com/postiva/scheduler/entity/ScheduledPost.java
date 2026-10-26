@@ -39,6 +39,8 @@ public class ScheduledPost {
     @Column(columnDefinition = "TEXT")
     private String lastError;
     private Instant publishedAt;
+    @Column(length = 40)
+    private String failureCode;
     private Instant createdAt = Instant.now();
     private Instant updatedAt = Instant.now();
 
@@ -66,6 +68,8 @@ public class ScheduledPost {
     public void setLeaseUntil(Instant leaseUntil) { this.leaseUntil = leaseUntil; }
     public String getLastError() { return lastError; }
     public void setLastError(String lastError) { this.lastError = lastError; }
+    public String getFailureCode() { return failureCode; }
+    public void setFailureCode(String failureCode) { this.failureCode = failureCode; }
     public Instant getPublishedAt() { return publishedAt; }
     public void setPublishedAt(Instant publishedAt) { this.publishedAt = publishedAt; }
 }

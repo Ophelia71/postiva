@@ -58,6 +58,13 @@ public class ScheduledPostStateService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public boolean retryOrFail(Claim claim, String error, boolean retryable,
                                int maxAttempts, Instant nextAttemptAt) {
+        return retryOrFail(claim, error, retryable, maxAttempts, nextAttemptAt, null);
+    }
+
+    /** {@code failureCode} (for example {@code TOKEN}) is stored only when the schedule becomes FAILED. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean retryOrFail(Claim claim, String error, boolean retryable,
+                               int maxAttempts, Instant nextAttemptAt, String failureCode) {
         Optional<ScheduledPost> item = claimed(claim);
         if (item.isEmpty()) return false;
 
@@ -65,6 +72,7 @@ public class ScheduledPostStateService {
         boolean canRetry = retryable && scheduled.getAttemptCount() < maxAttempts;
         scheduled.setStatus(canRetry ? ScheduledPostStatus.SCHEDULED : ScheduledPostStatus.FAILED);
         scheduled.setNextAttemptAt(canRetry ? nextAttemptAt : null);
+        scheduled.setFailureCode(canRetry ? null : failureCode);
         scheduled.setLastError(error);
         clearClaim(scheduled);
         schedules.save(scheduled);

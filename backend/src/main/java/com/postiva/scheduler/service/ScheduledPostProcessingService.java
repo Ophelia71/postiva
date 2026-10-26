@@ -105,7 +105,7 @@ public class ScheduledPostProcessingService {
         } catch (RuntimeException exception) {
             boolean retryable = isSafeToRetry(exception);
             states.retryOrFail(claim, errorMessage(exception), retryable, maxAttempts,
-                    retryable ? nextAttemptAt(scheduled.getAttemptCount()) : null);
+                    retryable ? nextAttemptAt(scheduled.getAttemptCount()) : null, failureCode(exception));
             return;
         }
 
@@ -115,7 +115,8 @@ public class ScheduledPostProcessingService {
         } catch (PublishPreparationException exception) {
             boolean retryable = isSafeToRetry(exception);
             states.retryOrFail(claim, errorMessage(exception.getCause()), retryable, maxAttempts,
-                    retryable ? nextAttemptAt(scheduled.getAttemptCount()) : null);
+                    retryable ? nextAttemptAt(scheduled.getAttemptCount()) : null,
+                    failureCode(exception.getCause()));
             return;
         } catch (RuntimeException exception) {
             handleProviderFailure(claim, scheduled, exception);
@@ -139,7 +140,7 @@ public class ScheduledPostProcessingService {
             return;
         }
         if (status != null && status >= 400 && status < 500 && status != 408) {
-            states.retryOrFail(claim, errorMessage(exception), false, maxAttempts, null);
+            states.retryOrFail(claim, errorMessage(exception), false, maxAttempts, null, failureCode(exception));
             return;
         }
         states.markUnknown(claim,
@@ -169,6 +170,13 @@ public class ScheduledPostProcessingService {
             if (cause instanceof ResponseStatusException response) return response.getStatusCode().value();
         }
         return null;
+    }
+
+    /** Structured reason stored with a FAILED schedule; automation pauses a rule on TOKEN. */
+    static final String FAILURE_TOKEN = "TOKEN";
+
+    private String failureCode(Throwable exception) {
+        return exception != null && containsTokenOrPermissionFailure(exception) ? FAILURE_TOKEN : null;
     }
 
     private boolean containsTokenOrPermissionFailure(Throwable exception) {

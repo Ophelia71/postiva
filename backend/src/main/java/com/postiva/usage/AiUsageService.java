@@ -58,15 +58,15 @@ public class AiUsageService {
         costs.ensureEnabled();
         Summary period = currentPeriod(userId, now);
         Integer running = jdbc.queryForObject("SELECT count(*) FROM ai_usage_requests WHERE user_id = ? AND status = 'RESERVED'", Integer.class, userId);
-        if (running != null && running > 0) throw new RateLimitException("Một yêu cầu AI khác đang xử lý. Vui lòng chờ.", 5);
-        if (period.remaining() <= 0) throw new RateLimitException("Bạn đã dùng hết lượt AI trong kỳ hiện tại.", Duration.between(now, period.endsAt()).toSeconds());
+        if (running != null && running > 0) throw new RateLimitException("Một yêu cầu AI khác đang xử lý. Vui lòng chờ.", 5, RateLimitException.Reason.AI_IN_FLIGHT);
+        if (period.remaining() <= 0) throw new RateLimitException("Bạn đã dùng hết lượt AI trong kỳ hiện tại.", Duration.between(now, period.endsAt()).toSeconds(), RateLimitException.Reason.AI_PERIOD_QUOTA);
         LocalDate day = now.atOffset(ZoneOffset.UTC).toLocalDate();
         Instant midnight = day.atStartOfDay(ZoneOffset.UTC).toInstant();
         long untilTomorrow = Duration.between(now, midnight.plusSeconds(86400)).toSeconds();
         Integer attempts = jdbc.queryForObject("SELECT count(*) FROM ai_usage_requests WHERE user_id = ? AND created_at >= ?",
                 Integer.class, userId, Timestamp.from(midnight));
         if (attempts != null && attempts >= properties.getUserDailyAttempts()) {
-            throw new RateLimitException("Bạn đã đạt giới hạn yêu cầu AI trong ngày. Vui lòng thử lại vào ngày mai.", untilTomorrow);
+            throw new RateLimitException("Bạn đã đạt giới hạn yêu cầu AI trong ngày. Vui lòng thử lại vào ngày mai.", untilTomorrow, RateLimitException.Reason.AI_USER_DAILY);
         }
         if (properties.getGlobalDailyAttempts() == 0) throw error(HttpStatus.SERVICE_UNAVAILABLE, "Tạo nội dung AI đang tạm dừng.");
         List<Integer> budget = jdbc.queryForList("""
@@ -74,7 +74,7 @@ public class AiUsageService {
                 ON CONFLICT (usage_day) DO UPDATE SET attempts = budget.attempts + 1
                 WHERE budget.attempts < ? RETURNING attempts
                 """, Integer.class, day, properties.getGlobalDailyAttempts());
-        if (budget.isEmpty()) throw new RateLimitException("Dịch vụ AI đã đạt giới hạn sử dụng hôm nay. Vui lòng thử lại vào ngày mai.", untilTomorrow);
+        if (budget.isEmpty()) throw new RateLimitException("Dịch vụ AI đã đạt giới hạn sử dụng hôm nay. Vui lòng thử lại vào ngày mai.", untilTomorrow, RateLimitException.Reason.AI_GLOBAL_DAILY);
         UUID id = UUID.randomUUID();
         var reservedCost = costs.reserveBudget(now);
         jdbc.update("UPDATE subscription_periods SET ai_reserved = ai_reserved + 1 WHERE id = ?", period.periodId());

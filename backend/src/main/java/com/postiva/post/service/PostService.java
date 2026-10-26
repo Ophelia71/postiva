@@ -66,7 +66,14 @@ public class PostService {
     }
 
     public GeneratePostResponse generate(GeneratePostRequest request, UUID idempotencyKey) {
-        UUID userId = currentUserService.requireCurrentUserId();
+        return generateForUser(currentUserService.requireCurrentUserId(), request, idempotencyKey);
+    }
+
+    /**
+     * Same flow as {@link #generate} for a caller that has no HTTP session (the daily automation).
+     * Quota, budgets, the AI switch and idempotency are enforced exactly as for a manual request.
+     */
+    public GeneratePostResponse generateForUser(UUID userId, GeneratePostRequest request, UUID idempotencyKey) {
         if (idempotencyKey == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Thiếu Idempotency-Key");
         if (!openAiProperties.enabled()) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Dịch vụ AI chưa sẵn sàng");
         fileService.validateAttachments(request.imageIds(), userId);

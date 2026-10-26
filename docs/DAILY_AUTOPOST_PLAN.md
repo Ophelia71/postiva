@@ -1,7 +1,6 @@
-# Plan đăng bài tự động hằng ngày
+# Daily: đăng bài tự động hằng ngày
 
-> Trạng thái: **chỉ là plan, chưa triển khai.** Cần sửa backend (migration, job, API) nên khác với đợt onboarding chỉ chạm frontend. Bản này đã được một subagent Plan rà lại với mã nguồn (đọc code, không chạy ứng dụng); các điểm chưa kiểm chứng được ghi rõ ở cuối.
-
+> Trạng thái: **đã triển khai bản đầu trên nhánh `feature/onboarding-daily-autopost`**, phía sau cờ `POSTIVA_AUTOMATION_ENABLED` (mặc định tắt). Tên trong giao diện là **Daily**. Bản này chỉ hỗ trợ Facebook Page, mỗi rule một Page, chế độ duyệt trước; chế độ tự động đăng (`AUTO`) có cờ riêng `POSTIVA_AUTOMATION_AUTO_ENABLED` (mặc định tắt) và chưa nên bật cho tới khi đã diễn tập trên staging. Tài liệu bên dưới là plan gốc đã rà với mã nguồn; mục "Đã làm và khác plan" ở cuối ghi những chỗ bản triển khai khác.
 ## Mục tiêu
 
 Người dùng đặt một lần: "mỗi ngày lúc 19:00 đăng một bài về chủ đề X lên Facebook Page Y". Postiva tự soạn nội dung, đưa vào hàng đợi và đăng đúng giờ.
@@ -174,3 +173,16 @@ Xác thực theo `SecurityConfig` (`anyRequest().hasRole("USER")`); người dù
 - Việc `MediaOrphanCleanupService` có xóa nhầm media dùng làm `default_media_ids` hay không (`FileService.java:96-100`); cần đọc kỹ trước khi cho rule dùng ảnh mặc định.
 - API chi tiết của các component frontend ngoài việc chúng tồn tại.
 - Các số dòng trích dẫn ở trên lấy từ lúc rà soát; có thể lệch nếu code đổi.
+
+## Đã làm và khác plan
+
+- **Backend** (`com.postiva.automation`): `V13__daily_autoposting.sql`, `AutomationService` (rule, planner, duyệt/bỏ qua), `AutomationPlanner` (`@Scheduled`, chỉ tạo bean khi cờ bật), `AutomationStore` (JDBC, các câu lệnh có điều kiện), `AutomationPauser` (chỉ JDBC để tránh phụ thuộc vòng), `AutomationController` (`/api/automation`).
+- **Tách theo `userId`:** `PostService.generateForUser`, `PublishingService.scheduleForUser`, `SocialAccountService.requireUserAccount`. `scheduleForUser` gọi `flush()` vì dòng `scheduled_posts` do JPA tạo phải có trong DB trước khi `automation_runs` trỏ tới nó bằng JDBC (lỗi này do test tích hợp phát hiện).
+- **`failure_code`:** cột mới trên `scheduled_posts`, ghi `TOKEN` khi đăng thất bại vì token/quyền. Chỉ lỗi mới hơn lần bật lại gần nhất mới làm rule tạm dừng.
+- **`RateLimitException`** có `limit()` (không dùng tên `getReason` vì trùng với `ResponseStatusException`) để phân biệt hết quota kỳ với các giới hạn tạm thời.
+- **Móc tạm dừng:** khóa người dùng (`UserAccountStatusService`) và ngắt kênh (`SocialAccountService`). Hai service giữ constructor cũ (truyền `null`) nên test hiện có không đổi.
+- **Không có `default_media_ids`:** bỏ khỏi bản đầu vì chưa kiểm chứng tương tác với `MediaOrphanCleanupService`. Bài chỉ có chữ.
+- **API thêm** `GET /api/automation/status` (cờ bật/tắt và giới hạn) để giao diện biết hiển thị gì.
+- **Khi người dùng tự tạm dừng**, bản nháp chờ duyệt được giữ lại (đã tốn lượt AI); tạm dừng tự động thì bỏ qua cả bản nháp.
+- **Giao diện:** `/app/daily` (mục "Daily" trong thanh bên và menu tài khoản trên mobile), wizard 4 bước dùng component `Stepper` chung, hàng đợi duyệt có sửa bản nháp trước khi duyệt.
+- **Chưa làm:** sửa rule bằng giao diện (API `PUT` đã có), thông báo email, Instagram/Threads, ảnh mặc định, chạy `AUTO` thật trên staging.

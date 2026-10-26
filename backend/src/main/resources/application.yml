@@ -146,6 +146,14 @@ postiva:
     backoff-base-seconds: ${POSTIVA_SCHEDULER_BACKOFF_BASE_SECONDS:60}
     backoff-max-seconds: ${POSTIVA_SCHEDULER_BACKOFF_MAX_SECONDS:3600}
 
+  # Daily auto-posting. Off by default; AUTO (unattended publishing) has its own second switch.
+  automation:
+    enabled: ${POSTIVA_AUTOMATION_ENABLED:false}
+    auto-enabled: ${POSTIVA_AUTOMATION_AUTO_ENABLED:false}
+    max-rules-per-user: ${POSTIVA_AUTOMATION_MAX_RULES_PER_USER:3}
+    manual-quota-reserve: ${POSTIVA_AUTOMATION_MANUAL_QUOTA_RESERVE:3}
+    planner-delay-ms: ${POSTIVA_AUTOMATION_PLANNER_DELAY_MS:300000}
+
   mail:
     enabled: ${POSTIVA_MAIL_ENABLED:false}
     from: ${MAIL_FROM:no-reply@postiva.local}

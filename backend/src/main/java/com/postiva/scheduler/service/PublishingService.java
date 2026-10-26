@@ -95,14 +95,31 @@ public class PublishingService {
         if (!request.scheduledTime().isAfter(now)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Thời gian đăng phải ở tương lai");
         }
-        return response(create(request.postId(), request.socialAccountId(), request.platform(), request.scheduledTime()));
+        return response(create(currentUserService.requireCurrentUserId(), request.postId(),
+                request.socialAccountId(), request.platform(), request.scheduledTime()));
+    }
+
+    /**
+     * Schedules a post for a user without an HTTP session (the daily automation). Applies the same
+     * ownership, platform and future-time checks as {@link #schedule}.
+     */
+    @Transactional
+    public ScheduledPostResponse scheduleForUser(UUID userId, SchedulePostRequest request) {
+        if (!request.scheduledTime().isAfter(Instant.now())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Thời gian đăng phải ở tương lai");
+        }
+        ScheduledPost scheduled = create(userId, request.postId(), request.socialAccountId(),
+                request.platform(), request.scheduledTime());
+        // The caller links this row from a JDBC table in the same transaction, so it must exist in the database first.
+        scheduledRepository.flush();
+        return response(scheduled);
     }
 
     public ScheduledPostResponse publishNow(PublishNowRequest request) {
         if (TransactionSynchronizationManager.isActualTransactionActive()
                 && TransactionSynchronizationManager.isSynchronizationActive()) {
-            ScheduledPost scheduled = create(request.postId(), request.socialAccountId(),
-                    request.platform(), Instant.now());
+            ScheduledPost scheduled = create(currentUserService.requireCurrentUserId(), request.postId(),
+                    request.socialAccountId(), request.platform(), Instant.now());
             UUID scheduledId = scheduled.getId();
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
@@ -113,7 +130,7 @@ public class PublishingService {
             return response(scheduled, ScheduledPostStatus.PUBLISHING);
         }
 
-        UUID scheduledId = transactionTemplate.execute(status -> create(
+        UUID scheduledId = transactionTemplate.execute(status -> create(currentUserService.requireCurrentUserId(),
                 request.postId(), request.socialAccountId(), request.platform(), Instant.now()).getId());
         if (scheduledId == null) throw new IllegalStateException("Không thể tạo yêu cầu đăng bài");
         processNow(scheduledId);
@@ -125,11 +142,10 @@ public class PublishingService {
         claims.claimSpecific(scheduledId, Instant.now(), lease).ifPresent(processor::process);
     }
 
-    private ScheduledPost create(UUID postId, UUID accountId, Platform platform, Instant time) {
-        UUID userId = currentUserService.requireCurrentUserId();
+    private ScheduledPost create(UUID userId, UUID postId, UUID accountId, Platform platform, Instant time) {
         GeneratedPost post = postRepository.findByIdAndUserId(postId, userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy bài viết"));
-        SocialAccount account = accountService.requireCurrentUserAccount(accountId);
+        SocialAccount account = accountService.requireUserAccount(userId, accountId);
         if (account.getProvider() != platform) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tài khoản không đúng nền tảng");
         }
@@ -169,6 +185,7 @@ public class PublishingService {
         scheduled.setClaimToken(null);
         scheduled.setLeaseUntil(null);
         scheduled.setLastError(null);
+        scheduled.setFailureCode(null);
         ScheduledPost saved = scheduledRepository.save(scheduled);
         states.refreshPostStatus(saved.getPostId());
         return response(saved);

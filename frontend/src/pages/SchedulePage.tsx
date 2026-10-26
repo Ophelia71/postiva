@@ -2,6 +2,7 @@ import { CalendarDays, ChevronLeft, ChevronRight, Eye, Pencil, Trash2 } from 'lu
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { EditPostModal } from '../components/EditPostModal'
 import { EmptyState } from '../components/EmptyState'
+import { SetupReminder } from '../components/SetupReminder'
 import { DeletePostConfirmModal } from '../components/DeletePostConfirmModal'
 import { getPaginatedItems, PaginationControls } from '../components/PaginationControls'
 import { PostDetailModal, PostSummary } from '../components/PostDetails'
@@ -118,6 +119,7 @@ export function SchedulePage() {
   return (
     <section className="space-y-6">
       <PageHeader title={t('Lịch đăng')} />
+      <SetupReminder />
 
       {publishNotice && (
         <div
