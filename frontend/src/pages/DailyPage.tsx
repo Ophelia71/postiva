@@ -29,6 +29,8 @@ const STEPS = [
   { label: 'Duyệt' },
 ] as const
 const DAY_ORDER = [1, 2, 3, 4, 5, 6, 7]
+const SUPPORTED_BADGES = ['Facebook', 'Instagram', 'Threads']
+const PLATFORM_NAMES: Record<string, string> = { FACEBOOK: 'Facebook', INSTAGRAM: 'Instagram', THREADS: 'Threads' }
 const TIMEZONES = ['Asia/Ho_Chi_Minh', 'Asia/Bangkok', 'Asia/Singapore']
 
 type Form = {
@@ -43,6 +45,9 @@ type Form = {
   highlights: string
   mode: 'REVIEW' | 'AUTO'
   acknowledged: boolean
+  mediaIds: string[]
+  /** Names of files uploaded in this session; ids restored from a saved rule have no name. */
+  mediaNames: Record<string, string>
 }
 
 const blankForm = (channelId: string): Form => ({
@@ -57,6 +62,24 @@ const blankForm = (channelId: string): Form => ({
   highlights: '',
   mode: 'REVIEW',
   acknowledged: false,
+  mediaIds: [],
+  mediaNames: {},
+})
+
+const formFromRule = (rule: DailyRule): Form => ({
+  name: rule.name,
+  socialAccountId: rule.socialAccountId ?? '',
+  timeOfDay: rule.timeOfDay.slice(0, 5),
+  days: rule.daysOfWeek,
+  timezone: rule.timezone,
+  productName: rule.brief.productName,
+  productDescription: rule.brief.productDescription,
+  targetAudience: rule.brief.targetAudience,
+  highlights: rule.brief.highlights,
+  mode: rule.approvalMode,
+  acknowledged: rule.approvalMode === 'AUTO',
+  mediaIds: rule.mediaIds ?? [],
+  mediaNames: {},
 })
 
 function browserZone() {
@@ -95,6 +118,7 @@ function DailyHome({ status }: { status: DailyStatus }) {
   const rulesState = useAppDataResource<DailyRule[]>('/automation/rules')
   const runsState = useAppDataResource<DailyRun[]>('/automation/runs')
   const [creating, setCreating] = useState(false)
+  const [editing, setEditing] = useState<DailyRule | null>(null)
   const [notice, setNotice] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null)
 
   if (channelsState.loading || rulesState.loading || runsState.loading) {
@@ -110,7 +134,7 @@ function DailyHome({ status }: { status: DailyStatus }) {
     )
   }
 
-  const facebookChannels = channelsState.data.filter((channel) => channel.active && channel.badge === 'Facebook')
+  const channels = channelsState.data.filter((channel) => channel.active && SUPPORTED_BADGES.includes(channel.badge))
   const rules = rulesState.data
   const runs = runsState.data
   const pending = runs.filter((run) => run.status === 'PENDING_REVIEW')
@@ -121,15 +145,15 @@ function DailyHome({ status }: { status: DailyStatus }) {
     runsState.reload()
   }
 
-  if (facebookChannels.length === 0 && rules.length === 0) {
+  if (channels.length === 0 && rules.length === 0) {
     return (
       <section>
         <PageHeader title="Daily" subtitle="Tự soạn và đăng một bài mỗi ngày." />
         <div className="rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] shadow-sm">
           <EmptyState
             icon={<Link2 size={20} />}
-            title="Cần kết nối Facebook Page trước"
-            description="Daily hiện đăng lên một Facebook Page. Kết nối Page rồi quay lại để tạo rule đầu tiên."
+            title="Cần kết nối một kênh trước"
+            description="Daily đăng lên một Page hoặc tài khoản đã kết nối. Facebook Page ổn định nhất; Instagram và Threads đang thử nghiệm."
             actionLabel="Kết nối kênh"
             actionTo="/app/connections"
           />
@@ -138,15 +162,18 @@ function DailyHome({ status }: { status: DailyStatus }) {
     )
   }
 
-  if (creating) {
+  if (creating || editing) {
     return (
       <RuleWizard
+        key={editing?.id ?? 'new'}
         status={status}
-        channels={facebookChannels}
-        onCancel={() => setCreating(false)}
-        onCreated={() => {
+        channels={channels}
+        rule={editing ?? undefined}
+        onCancel={() => { setCreating(false); setEditing(null) }}
+        onSaved={(wasEdit) => {
           setCreating(false)
-          setNotice({ tone: 'ok', text: 'Đã lưu rule. Daily sẽ soạn bản nháp trước giờ đăng để bạn duyệt.' })
+          setEditing(null)
+          setNotice({ tone: 'ok', text: wasEdit ? 'Đã cập nhật rule. Thay đổi áp dụng từ bản nháp kế tiếp.' : 'Đã lưu rule. Daily sẽ soạn bản nháp trước giờ đăng để bạn duyệt.' })
           refresh()
         }}
       />
@@ -196,7 +223,7 @@ function DailyHome({ status }: { status: DailyStatus }) {
             </div>
           </div>
         ) : (
-          rules.map((rule) => <RuleCard key={rule.id} rule={rule} onChanged={refresh} onNotice={setNotice} />)
+          rules.map((rule) => <RuleCard key={rule.id} rule={rule} onEdit={() => setEditing(rule)} onChanged={refresh} onNotice={setNotice} />)
         )}
       </section>
 
@@ -207,7 +234,7 @@ function DailyHome({ status }: { status: DailyStatus }) {
         {pending.length === 0 ? (
           <p className="text-sm text-[var(--muted-text)]">Chưa có bản nháp nào chờ duyệt. Bản nháp xuất hiện trước giờ đăng của rule.</p>
         ) : (
-          pending.map((run) => <DraftCard key={run.id} run={run} onChanged={refresh} onNotice={setNotice} />)
+          pending.map((run) => <DraftCard key={run.id} run={run} platform={rules.find((rule) => rule.id === run.ruleId)?.platform ?? 'FACEBOOK'} onChanged={refresh} onNotice={setNotice} />)
         )}
       </section>
 
@@ -232,7 +259,7 @@ function DailyHome({ status }: { status: DailyStatus }) {
 
 type NoticeSetter = (notice: { tone: 'ok' | 'error'; text: string } | null) => void
 
-function RuleCard({ rule, onChanged, onNotice }: { rule: DailyRule; onChanged: () => void; onNotice: NoticeSetter }) {
+function RuleCard({ rule, onEdit, onChanged, onNotice }: { rule: DailyRule; onEdit: () => void; onChanged: () => void; onNotice: NoticeSetter }) {
   const [busy, setBusy] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [preview, setPreview] = useState<DailyPreviewItem[] | null>(null)
@@ -276,6 +303,7 @@ function RuleCard({ rule, onChanged, onNotice }: { rule: DailyRule; onChanged: (
           </p>
         </div>
         <div className="flex gap-2">
+          <span className="rounded-full bg-[var(--soft-bg)] px-3 py-1 text-xs font-semibold">{PLATFORM_NAMES[rule.platform] ?? rule.platform}</span>
           <span className="rounded-full bg-[var(--soft-bg)] px-3 py-1 text-xs font-semibold">{rule.approvalMode === 'AUTO' ? 'Tự động đăng' : 'Duyệt trước'}</span>
           <span className={`rounded-full px-3 py-1 text-xs font-semibold ${paused ? 'bg-rose-50 text-rose-800' : 'bg-emerald-50 text-emerald-800'}`}>{paused ? 'Tạm dừng' : 'Đang chạy'}</span>
         </div>
@@ -293,6 +321,9 @@ function RuleCard({ rule, onChanged, onNotice }: { rule: DailyRule; onChanged: (
           className="min-h-11 rounded-full border border-[var(--app-border)] px-4 text-sm font-bold hover:bg-[var(--soft-bg)] disabled:opacity-50"
         >
           {paused ? 'Bật lại' : 'Tạm dừng'}
+        </button>
+        <button type="button" onClick={onEdit} className="min-h-11 rounded-full border border-[var(--app-border)] px-4 text-sm font-bold hover:bg-[var(--soft-bg)]">
+          Sửa
         </button>
         <button type="button" onClick={() => void togglePreview()} aria-expanded={preview !== null} className="min-h-11 rounded-full border border-[var(--app-border)] px-4 text-sm font-bold hover:bg-[var(--soft-bg)]">
           Xem 7 ngày tới
@@ -326,7 +357,7 @@ function RuleCard({ rule, onChanged, onNotice }: { rule: DailyRule; onChanged: (
   )
 }
 
-function DraftCard({ run, onChanged, onNotice }: { run: DailyRun; onChanged: () => void; onNotice: NoticeSetter }) {
+function DraftCard({ run, platform, onChanged, onNotice }: { run: DailyRun; platform: string; onChanged: () => void; onNotice: NoticeSetter }) {
   const original = run.draft?.content ?? ''
   const [content, setContent] = useState(original)
   const [busy, setBusy] = useState(false)
@@ -339,7 +370,8 @@ function DraftCard({ run, onChanged, onNotice }: { run: DailyRun; onChanged: () 
         // Editing goes through the existing post endpoint; hashtags and CTA are sent back unchanged.
         await api.put(`/posts/${run.postId}`, {
           title: run.draft.title ?? undefined,
-          platformContents: { FACEBOOK: { content: content.trim() } },
+          // Instagram stores its text as caption; Facebook and Threads use content.
+          platformContents: { [platform]: platform === 'INSTAGRAM' ? { caption: content.trim() } : { content: content.trim() } },
           hashtags: run.draft.hashtags,
           cta: run.draft.cta ?? undefined,
         })
@@ -397,26 +429,33 @@ function DraftCard({ run, onChanged, onNotice }: { run: DailyRun; onChanged: () 
 function RuleWizard({
   status,
   channels,
+  rule,
   onCancel,
-  onCreated,
+  onSaved,
 }: {
   status: DailyStatus
   channels: AppChannel[]
+  /** When set the wizard edits this rule instead of creating a new one. */
+  rule?: DailyRule
   onCancel: () => void
-  onCreated: () => void
+  onSaved: (wasEdit: boolean) => void
 }) {
   const [step, setStep] = useState(0)
-  const [form, setForm] = useState<Form>(() => blankForm(channels.length === 1 ? channels[0].id : ''))
+  const [form, setForm] = useState<Form>(() => rule ? formFromRule(rule) : blankForm(channels.length === 1 ? channels[0].id : ''))
   const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const selectedBadge = channels.find((channel) => channel.id === form.socialAccountId)?.badge
+  const needsMedia = selectedBadge === 'Instagram'
 
   function issue(index: number): string | null {
-    if (index === 0 && !form.socialAccountId) return 'Chọn Page để đăng.'
+    if (index === 0 && !form.socialAccountId) return 'Chọn kênh để đăng.'
     if (index === 1 && (!form.timeOfDay || form.days.length === 0)) return 'Chọn giờ đăng và ít nhất một ngày trong tuần.'
     if (index === 2 && (!form.productName.trim() || !form.productDescription.trim() || !form.targetAudience.trim() || !form.highlights.trim())) {
       return 'Điền đủ tên sản phẩm, mô tả, khách hàng mục tiêu và điểm nổi bật.'
     }
+    if (index === 2 && needsMedia && form.mediaIds.length === 0) return 'Instagram cần ít nhất một ảnh hoặc video mặc định.'
     if (index === 3 && form.mode === 'AUTO' && !form.acknowledged) return 'Xác nhận bạn hiểu bài sẽ đăng công khai không qua bước duyệt.'
     return null
   }
@@ -460,12 +499,14 @@ function RuleWizard({
         targetAudience: form.targetAudience.trim(),
         highlights: form.highlights.trim(),
       },
+      mediaIds: form.mediaIds,
     }
     setSaving(true)
     setError('')
     try {
-      await api.post('/automation/rules', request)
-      onCreated()
+      if (rule) await api.put(`/automation/rules/${rule.id}`, request)
+      else await api.post('/automation/rules', request)
+      onSaved(Boolean(rule))
     } catch (saveError) {
       setError(getErrorMessage(saveError, 'Không lưu được rule. Vui lòng thử lại.'))
     } finally {
@@ -474,13 +515,36 @@ function RuleWizard({
   }
 
   const set = <K extends keyof Form>(key: K, value: Form[K]) => setForm((current) => ({ ...current, [key]: value }))
+
+  async function upload(files: FileList | null) {
+    if (!files || files.length === 0) return
+    setUploading(true)
+    setError('')
+    try {
+      const added = await Promise.all(Array.from(files).map(async (file) => {
+        const data = new FormData()
+        data.append('file', file)
+        const response = await api.post<{ id: string; fileName: string }>('/files/upload', data, { headers: { 'Content-Type': 'multipart/form-data' } })
+        return response.data
+      }))
+      setForm((current) => ({
+        ...current,
+        mediaIds: [...current.mediaIds, ...added.map((item) => item.id)].slice(0, 10),
+        mediaNames: { ...current.mediaNames, ...Object.fromEntries(added.map((item) => [item.id, item.fileName])) },
+      }))
+    } catch (uploadError) {
+      setError(getErrorMessage(uploadError, 'Không tải được ảnh hoặc video.'))
+    } finally {
+      setUploading(false)
+    }
+  }
   const showNotice = notice && issue(step)
   const inputClass = 'mt-1 h-11 w-full rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] px-3 text-sm font-normal'
   const last = step === STEPS.length - 1
 
   return (
     <section className="mx-auto max-w-3xl space-y-4">
-      <PageHeader title="Tạo rule Daily" subtitle="Bốn bước, mỗi bước một quyết định." />
+      <PageHeader title={rule ? 'Sửa rule Daily' : 'Tạo rule Daily'} subtitle="Bốn bước, mỗi bước một quyết định." />
       <Stepper label="Các bước tạo rule" steps={STEPS} current={step} isDone={(index) => index < step && !issue(index)} onGo={go} />
       {showNotice && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-800">{notice}</p>}
       {error && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-800">{error}</p>}
@@ -499,11 +563,11 @@ function RuleWizard({
                   className={`flex min-h-14 flex-col justify-center rounded-xl border px-4 py-2 text-left ${form.socialAccountId === channel.id ? 'border-[#8594ea] bg-[var(--soft-bg)]' : 'border-[var(--app-border)] hover:bg-[var(--soft-bg)]'}`}
                 >
                   <b className="text-sm">{channel.name}</b>
-                  <span className="text-xs text-[var(--muted-text)]">Facebook Page{form.socialAccountId === channel.id ? ' · Đã chọn' : ''}</span>
+                  <span className="text-xs text-[var(--muted-text)]">{channel.badge === 'Facebook' ? 'Facebook Page' : channel.badge}{form.socialAccountId === channel.id ? ' · Đã chọn' : ''}</span>
                 </button>
               ))}
             </div>
-            <p className="text-sm text-[var(--muted-text)]">Mỗi rule đăng lên một Page. Muốn đăng nhiều Page, tạo nhiều rule.</p>
+            <p className="text-sm text-[var(--muted-text)]">Mỗi rule đăng lên một kênh. Muốn đăng nhiều kênh, tạo nhiều rule. Facebook Page ổn định nhất; Instagram và Threads đang thử nghiệm giới hạn.</p>
           </>
         )}
 
@@ -548,6 +612,24 @@ function RuleWizard({
             <label className="block text-sm font-bold">Mô tả *<textarea value={form.productDescription} onChange={(event) => set('productDescription', event.target.value)} rows={3} className="mt-1 w-full rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] px-3 py-2 text-sm font-normal" /></label>
             <label className="block text-sm font-bold">Khách hàng mục tiêu *<input value={form.targetAudience} onChange={(event) => set('targetAudience', event.target.value)} className={inputClass} /></label>
             <label className="block text-sm font-bold">Điểm nổi bật *<input value={form.highlights} onChange={(event) => set('highlights', event.target.value)} className={inputClass} /></label>
+            <div className="space-y-2 rounded-lg border border-[var(--app-border)] p-3">
+              <p className="text-sm font-bold">Ảnh hoặc video mặc định {needsMedia ? '*' : '(tùy chọn)'}</p>
+              <p className="text-xs text-[var(--muted-text)]">Gắn vào mọi bài của rule này. {needsMedia ? 'Instagram không đăng được bài chỉ có chữ.' : 'Bỏ trống để đăng bài chỉ có chữ.'}</p>
+              <label className="inline-flex min-h-11 cursor-pointer items-center rounded-full border border-[var(--app-border)] px-4 text-sm font-bold hover:bg-[var(--soft-bg)]">
+                {uploading ? 'Đang tải...' : 'Thêm ảnh hoặc video'}
+                <input type="file" multiple accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm" disabled={uploading} className="sr-only" onChange={(event) => { void upload(event.target.files); event.target.value = '' }} />
+              </label>
+              {form.mediaIds.length > 0 && (
+                <ul className="space-y-1 text-sm">
+                  {form.mediaIds.map((id) => (
+                    <li key={id} className="flex items-center justify-between gap-2 rounded-lg bg-[var(--soft-bg)] px-3 py-2">
+                      <span className="truncate">{form.mediaNames[id] ?? 'Tệp đã chọn trước đó'}</span>
+                      <button type="button" onClick={() => set('mediaIds', form.mediaIds.filter((value) => value !== id))} aria-label={`Bỏ ${form.mediaNames[id] ?? 'tệp này'}`} className="min-h-11 px-3 text-sm font-semibold underline underline-offset-4">Bỏ</button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </>
         )}
 
@@ -594,7 +676,7 @@ function RuleWizard({
           ? <button type="button" onClick={onCancel} className="mr-auto min-h-11 rounded-lg border border-[var(--app-border)] px-4 text-sm font-semibold hover:bg-[var(--soft-bg)]">Hủy</button>
           : <button type="button" onClick={() => go(step - 1)} className="mr-auto min-h-11 rounded-lg border border-[var(--app-border)] px-4 text-sm font-semibold hover:bg-[var(--soft-bg)]">Quay lại</button>}
         {last
-          ? <button type="button" disabled={saving} onClick={() => void save()} className="min-h-11 rounded-lg bg-blue-600 px-5 text-sm font-bold text-white hover:bg-blue-700 disabled:bg-blue-300">{saving ? 'Đang lưu...' : 'Lưu rule'}</button>
+          ? <button type="button" disabled={saving} onClick={() => void save()} className="min-h-11 rounded-lg bg-blue-600 px-5 text-sm font-bold text-white hover:bg-blue-700 disabled:bg-blue-300">{saving ? 'Đang lưu...' : rule ? 'Lưu thay đổi' : 'Lưu rule'}</button>
           : (
             <>
               {CAN_SKIP && <button type="button" onClick={() => go(step + 1)} className="min-h-11 px-4 text-sm font-semibold underline underline-offset-4">Bỏ qua bước này</button>}

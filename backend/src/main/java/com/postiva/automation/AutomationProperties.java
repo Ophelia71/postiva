@@ -24,6 +24,8 @@ public class AutomationProperties {
     /** After this many generation attempts a day is skipped instead of retried again. */
     @Min(1) @Max(10) private int maxGenerationAttempts = 3;
     @Min(60) private long retryDelaySeconds = 600;
+    /** Email the owner when a draft is waiting for review. It only sends when mail itself is configured. */
+    private boolean notifyEmail = true;
 
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
@@ -39,6 +41,8 @@ public class AutomationProperties {
     public void setLeaseSeconds(long value) { this.leaseSeconds = value; }
     public int getMaxGenerationAttempts() { return maxGenerationAttempts; }
     public void setMaxGenerationAttempts(int value) { this.maxGenerationAttempts = value; }
+    public boolean isNotifyEmail() { return notifyEmail; }
+    public void setNotifyEmail(boolean value) { this.notifyEmail = value; }
     public long getRetryDelaySeconds() { return retryDelaySeconds; }
     public void setRetryDelaySeconds(long value) { this.retryDelaySeconds = value; }
 }

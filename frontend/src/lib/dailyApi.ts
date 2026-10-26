@@ -30,6 +30,8 @@ export type DailyRule = {
   approvalMode: 'REVIEW' | 'AUTO'
   leadMinutes: number
   brief: DailyBrief
+  /** Default images or videos attached to every generated post. */
+  mediaIds: string[]
   createdAt: string
   updatedAt: string
 }
@@ -45,6 +47,7 @@ export type DailyRun = {
   id: string
   ruleId: string
   ruleName: string
+  platform?: string
   runDate: string
   plannedFor: string
   status: 'GENERATING' | 'PENDING_REVIEW' | 'SCHEDULED' | 'SKIPPED' | 'FAILED'
@@ -64,6 +67,7 @@ export type DailyRuleRequest = {
   daysOfWeek: number[]
   approvalMode: 'REVIEW' | 'AUTO'
   brief: DailyBrief
+  mediaIds: string[]
 }
 
 export const WEEKDAY_LABELS: Record<number, string> = { 1: 'T2', 2: 'T3', 3: 'T4', 4: 'T5', 5: 'T6', 6: 'T7', 7: 'CN' }
@@ -74,6 +78,7 @@ export const PAUSE_REASON_LABELS: Record<string, string> = {
   CHANNEL_DISCONNECTED: 'Kênh đã bị ngắt. Kết nối lại kênh rồi tạo rule mới hoặc bật lại rule.',
   UNKNOWN_RESULT: 'Bài gần nhất có kết quả chưa xác định. Đối soát ở Lịch đăng trước khi bật lại.',
   USER_LOCKED: 'Tài khoản đang bị khóa.',
+  MEDIA_MISSING: 'Ảnh hoặc video mặc định của rule không còn. Chọn lại rồi bật lại rule.',
   AI_QUOTA_EXHAUSTED: 'Còn quá ít lượt AI, Daily giữ lại phần còn lại cho bạn dùng tay.',
 }
 

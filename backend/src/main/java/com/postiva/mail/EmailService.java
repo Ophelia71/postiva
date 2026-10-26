@@ -102,6 +102,22 @@ public class EmailService {
         sendEmail(recipient, "Hướng dẫn đặt lại mật khẩu Postiva", content);
     }
 
+    /** Tells the owner that a daily draft is waiting for review. Sent only when mail is configured. */
+    public void sendDailyDraftReady(String recipient, String fullName, String ruleName, String plannedAt, String reviewUrl) {
+        String link = StringUtils.hasText(reviewUrl) ? "\n\nMở Daily để xem và duyệt: " + reviewUrl : "";
+        String content = """
+                Xin chào %s,
+
+                Bản nháp hằng ngày của rule "%s" đã sẵn sàng và đang chờ bạn duyệt. Bài sẽ được đăng lúc %s.
+
+                Nếu bạn không duyệt trước giờ đăng, ngày hôm nay sẽ được bỏ qua.%s
+
+                Trân trọng,
+                Postiva
+                """.formatted(fullName, ruleName, plannedAt, link);
+        sendEmail(recipient, "Bản nháp Daily đang chờ bạn duyệt", content);
+    }
+
     private void requireConfiguredMail() {
         if (!enabled || !StringUtils.hasText(username) || !StringUtils.hasText(password)) {
             throw new IllegalStateException("Dịch vụ email khôi phục chưa được cấu hình");

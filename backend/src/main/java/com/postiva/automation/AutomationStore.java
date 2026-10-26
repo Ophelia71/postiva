@@ -29,18 +29,19 @@ import java.util.UUID;
 public class AutomationStore {
     public record Rule(UUID id, UUID userId, UUID accountId, String platform, String name, String status,
                        String pausedReason, String timezone, LocalTime timeOfDay, int daysMask, String approvalMode,
-                       int leadMinutes, Brief brief, int version, Instant createdAt, Instant updatedAt) { }
+                       int leadMinutes, Brief brief, List<UUID> mediaIds, int version, Instant createdAt, Instant updatedAt) { }
 
     public record Run(UUID id, UUID ruleId, LocalDate runDate, Instant plannedFor, String status, UUID claimToken,
                       int attemptCount, UUID idempotencyKey, UUID postId, UUID scheduledPostId, String error) { }
 
-    public record RunView(Run run, String ruleName, Draft draft) { }
+    public record RunView(Run run, String ruleName, String platform, Draft draft) { }
 
     public record AccountState(boolean disconnected, boolean tokenMissing, LocalDateTime tokenExpiresAt, String pageName) { }
 
     public record LastPublish(String status, String failureCode, Instant updatedAt) { }
 
     private static final TypeReference<List<String>> STRINGS = new TypeReference<>() { };
+    private static final TypeReference<List<UUID>> UUIDS = new TypeReference<>() { };
 
     private final JdbcTemplate jdbc;
     private final ObjectMapper json;
@@ -53,27 +54,29 @@ public class AutomationStore {
     // ---------------------------------------------------------------- rules
 
     public UUID insertRule(UUID userId, UUID accountId, String platform, String name, String timezone,
-                           LocalTime timeOfDay, int daysMask, String approvalMode, int leadMinutes, Brief brief) {
+                           LocalTime timeOfDay, int daysMask, String approvalMode, int leadMinutes, Brief brief,
+                           List<UUID> mediaIds) {
         UUID id = UUID.randomUUID();
         jdbc.update("""
                 INSERT INTO automation_rules (id, user_id, social_account_id, platform, name, timezone, time_of_day,
-                    days_of_week, approval_mode, lead_minutes, brief)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb)
+                    days_of_week, approval_mode, lead_minutes, brief, default_media_ids)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb)
                 """, id, userId, accountId, platform, name, timezone, timeOfDay, daysMask, approvalMode,
-                leadMinutes, write(brief));
+                leadMinutes, write(brief), write(mediaIds));
         return id;
     }
 
-    public boolean updateRule(UUID userId, UUID ruleId, UUID accountId, String name, String timezone,
-                              LocalTime timeOfDay, int daysMask, String approvalMode, int leadMinutes, Brief brief) {
+    public boolean updateRule(UUID userId, UUID ruleId, UUID accountId, String platform, String name, String timezone,
+                              LocalTime timeOfDay, int daysMask, String approvalMode, int leadMinutes, Brief brief,
+                              List<UUID> mediaIds) {
         return jdbc.update("""
                 UPDATE automation_rules
-                SET social_account_id = ?, name = ?, timezone = ?, time_of_day = ?, days_of_week = ?,
-                    approval_mode = ?, lead_minutes = ?, brief = ?::jsonb,
+                SET social_account_id = ?, platform = ?, name = ?, timezone = ?, time_of_day = ?, days_of_week = ?,
+                    approval_mode = ?, lead_minutes = ?, brief = ?::jsonb, default_media_ids = ?::jsonb,
                     version = version + 1, updated_at = clock_timestamp()
                 WHERE id = ? AND user_id = ?
-                """, accountId, name, timezone, timeOfDay, daysMask, approvalMode, leadMinutes, write(brief),
-                ruleId, userId) > 0;
+                """, accountId, platform, name, timezone, timeOfDay, daysMask, approvalMode, leadMinutes, write(brief),
+                write(mediaIds), ruleId, userId) > 0;
     }
 
     public Optional<Rule> findRule(UUID userId, UUID ruleId) {
@@ -247,8 +250,9 @@ public class AutomationStore {
 
     private String viewSql(String extraWhere, String limit) {
         return """
-                SELECT run.*, r.name AS rule_name,
-                       p.platform_contents -> 'FACEBOOK' ->> 'content' AS draft_content,
+                SELECT run.*, r.name AS rule_name, r.platform AS rule_platform,
+                       COALESCE(p.platform_contents -> r.platform ->> 'content',
+                                p.platform_contents -> r.platform ->> 'caption') AS draft_content,
                        p.platform_contents ->> '_title' AS draft_title,
                        p.hashtags::text AS draft_hashtags, p.cta AS draft_cta
                 FROM automation_runs run
@@ -301,7 +305,7 @@ public class AutomationStore {
                 rs.getString("status"), rs.getString("paused_reason"), rs.getString("timezone"),
                 rs.getObject("time_of_day", LocalTime.class), rs.getInt("days_of_week"),
                 rs.getString("approval_mode"), rs.getInt("lead_minutes"), readBrief(rs.getString("brief")),
-                rs.getInt("version"), rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("updated_at").toInstant());
+                readIds(rs.getString("default_media_ids")), rs.getInt("version"), rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("updated_at").toInstant());
     }
 
     private RowMapper<Run> run() {
@@ -322,7 +326,7 @@ public class AutomationStore {
             Draft draft = content == null ? null
                     : new Draft(rs.getString("draft_title"), content, readStrings(rs.getString("draft_hashtags")),
                     rs.getString("draft_cta"));
-            return new RunView(toRun(rs), rs.getString("rule_name"), draft);
+            return new RunView(toRun(rs), rs.getString("rule_name"), rs.getString("rule_platform"), draft);
         };
     }
 
@@ -339,6 +343,26 @@ public class AutomationStore {
             return json.readValue(value, Brief.class);
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("Nội dung rule không đọc được", e);
+        }
+    }
+
+    /** How many of the given uploaded files still exist for this user (a deleted default image pauses the rule). */
+    public int countExistingMedia(UUID userId, List<UUID> ids) {
+        if (ids == null || ids.isEmpty()) return 0;
+        String placeholders = String.join(", ", java.util.Collections.nCopies(ids.size(), "?"));
+        Object[] args = new Object[ids.size() + 1];
+        args[0] = userId;
+        for (int i = 0; i < ids.size(); i++) args[i + 1] = ids.get(i);
+        Integer count = jdbc.queryForObject("SELECT count(*) FROM uploaded_files WHERE user_id = ? AND id IN (" + placeholders + ")", Integer.class, args);
+        return count == null ? 0 : count;
+    }
+
+    private List<UUID> readIds(String value) {
+        if (value == null || value.isBlank()) return List.of();
+        try {
+            return json.readValue(value, UUIDS);
+        } catch (JsonProcessingException e) {
+            return List.of();
         }
     }
 

@@ -36,7 +36,9 @@ public final class AutomationDtos {
             @NotEmpty @Size(max = 7) List<@NotNull @Min(1) @Max(7) Integer> daysOfWeek,
             @NotBlank String approvalMode,
             @Min(60) @Max(1440) Integer leadMinutes,
-            @NotNull @Valid Brief brief
+            @NotNull @Valid Brief brief,
+            /** Default images or videos attached to every generated post. Required for Instagram. */
+            @Size(max = 10) List<@NotNull UUID> mediaIds
     ) { }
 
     public record RuleResponse(
@@ -53,6 +55,7 @@ public final class AutomationDtos {
             String approvalMode,
             int leadMinutes,
             Brief brief,
+            List<UUID> mediaIds,
             Instant createdAt,
             Instant updatedAt
     ) { }
@@ -63,6 +66,7 @@ public final class AutomationDtos {
             UUID id,
             UUID ruleId,
             String ruleName,
+            String platform,
             LocalDate runDate,
             Instant plannedFor,
             String status,

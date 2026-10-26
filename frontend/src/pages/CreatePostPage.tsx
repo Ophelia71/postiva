@@ -25,6 +25,7 @@ import { PageState } from '../components/PageUi'
 import { api } from '../lib/api'
 import { type AppChannel, type AppOverview, normalizeAppOverview, useAppDataResource } from '../lib/appDataApi'
 import { dismissOnboarding } from '../lib/onboarding'
+import { trackOnboardingStep } from '../lib/webAnalytics'
 import { getErrorMessage } from '../lib/errors'
 import { formatFileSize } from '../lib/format'
 import { resolveMediaUrl } from '../lib/media'
@@ -397,7 +398,10 @@ function CreatePostForm({ onNewPost }: { onNewPost: () => void }) {
       } else {
         setStatusTone('success')
         setStatus(formatTargetResults(response.data.targets, publishMode, t))
-        if (isFirstPost) dismissOnboarding()
+        if (isFirstPost) {
+          dismissOnboarding()
+          trackOnboardingStep('first-success')
+        }
         setResult({ first: isFirstPost, scheduled: publishMode === 'SCHEDULE', when: scheduleLabel })
       }
     } catch (error) {

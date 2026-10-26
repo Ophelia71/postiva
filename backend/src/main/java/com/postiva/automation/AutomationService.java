@@ -12,6 +12,7 @@ import com.postiva.automation.AutomationStore.Run;
 import com.postiva.automation.AutomationStore.RunView;
 import com.postiva.common.Platform;
 import com.postiva.common.RateLimitException;
+import com.postiva.file.service.FileService;
 import com.postiva.post.dto.GeneratePostRequest;
 import com.postiva.post.dto.GeneratePostResponse;
 import com.postiva.post.service.PostService;
@@ -38,6 +39,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -60,11 +62,16 @@ public class AutomationService {
     private final PublishingService publishing;
     private final SocialAccountService accounts;
     private final AiUsageService usage;
+    private final FileService files;
+    private final AutomationNotifier notifier;
     private final TransactionTemplate transactions;
 
     public AutomationService(AutomationStore store, AutomationProperties properties, AutomationPauser pauser,
                              PostService posts, PublishingService publishing, SocialAccountService accounts,
-                             AiUsageService usage, PlatformTransactionManager transactionManager) {
+                             AiUsageService usage, FileService files, AutomationNotifier notifier,
+                             PlatformTransactionManager transactionManager) {
+        this.files = files;
+        this.notifier = notifier;
         this.store = store;
         this.properties = properties;
         this.pauser = pauser;
@@ -92,8 +99,9 @@ public class AutomationService {
                     "Bạn đã đạt số rule tối đa (" + properties.getMaxRulesPerUser() + "). Hãy xóa rule không dùng.");
         }
         Parsed parsed = parse(userId, request);
-        UUID id = store.insertRule(userId, request.socialAccountId(), Platform.FACEBOOK.name(), request.name().trim(),
-                parsed.zone().getId(), parsed.time(), parsed.mask(), parsed.mode(), parsed.lead(), parsed.brief());
+        UUID id = store.insertRule(userId, request.socialAccountId(), parsed.platform().name(), request.name().trim(),
+                parsed.zone().getId(), parsed.time(), parsed.mask(), parsed.mode(), parsed.lead(), parsed.brief(),
+                parsed.mediaIds());
         return response(store.findRule(userId, id).orElseThrow());
     }
 
@@ -102,8 +110,9 @@ public class AutomationService {
         requireEnabled();
         findOwned(userId, ruleId);
         Parsed parsed = parse(userId, request);
-        store.updateRule(userId, ruleId, request.socialAccountId(), request.name().trim(), parsed.zone().getId(),
-                parsed.time(), parsed.mask(), parsed.mode(), parsed.lead(), parsed.brief());
+        store.updateRule(userId, ruleId, request.socialAccountId(), parsed.platform().name(), request.name().trim(),
+                parsed.zone().getId(), parsed.time(), parsed.mask(), parsed.mode(), parsed.lead(), parsed.brief(),
+                parsed.mediaIds());
         return response(findOwned(userId, ruleId));
     }
 
@@ -178,7 +187,7 @@ public class AutomationService {
                 run.postId(), rule.accountId(), Platform.valueOf(rule.platform()), run.plannedFor()));
         store.setScheduledPost(run.id(), scheduled.id());
         return store.findRunView(userId, runId).map(this::response)
-                .orElse(response(new RunView(run, existing.ruleName(), existing.draft())));
+                .orElse(response(new RunView(run, existing.ruleName(), existing.platform(), existing.draft())));
     }
 
     @Transactional
@@ -287,7 +296,7 @@ public class AutomationService {
         if (!store.attachPost(run.id(), claim, postId)) return;
         if (REVIEW.equals(rule.approvalMode()) || !properties.isAutoEnabled()) {
             // AUTO needs its own switch; without it the draft simply waits for review.
-            store.markPendingReview(run.id(), claim, postId);
+            if (store.markPendingReview(run.id(), claim, postId)) notifyDraft(rule, run);
             return;
         }
         scheduleAutomatically(rule, run, claim, postId);
@@ -305,8 +314,14 @@ public class AutomationService {
         } catch (RuntimeException e) {
             log.warn("Daily automation could not schedule run {}", run.id(), e);
             // The transaction rolled back, so the run is still GENERATING under our claim: park it for review.
-            store.markPendingReview(run.id(), claim, postId);
+            if (store.markPendingReview(run.id(), claim, postId)) notifyDraft(rule, run);
         }
+    }
+
+    private void notifyDraft(Rule rule, Run run) {
+        String when = DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy").withZone(ZoneId.of(rule.timezone()))
+                .format(run.plannedFor()) + " (" + rule.timezone() + ")";
+        notifier.draftReady(rule.userId(), rule.name(), when);
     }
 
     private void defer(Run run, UUID claim, Instant now, String error) {
@@ -321,7 +336,8 @@ public class AutomationService {
                 + (recent.isEmpty() ? "" : " Không lặp lại các tiêu đề gần đây: " + String.join("; ", recent) + ".");
         return new GeneratePostRequest(brief.productName(), brief.productDescription(), brief.price(), null,
                 brief.targetAudience(), brief.highlights(), orDefault(brief.goal(), DEFAULT_GOAL),
-                orDefault(brief.tone(), DEFAULT_TONE), List.of(Platform.valueOf(rule.platform())), note, null);
+                orDefault(brief.tone(), DEFAULT_TONE), List.of(Platform.valueOf(rule.platform())), note,
+                rule.mediaIds().isEmpty() ? null : rule.mediaIds());
     }
 
     static UUID idempotencyKey(Rule rule, LocalDate runDate) {
@@ -344,6 +360,10 @@ public class AutomationService {
         if (state.tokenMissing() || (state.tokenExpiresAt() != null && state.tokenExpiresAt().isBefore(LocalDateTime.now()))) {
             return new Verdict(AutomationPauser.REASON_TOKEN, false);
         }
+        if (!rule.mediaIds().isEmpty()
+                && store.countExistingMedia(rule.userId(), rule.mediaIds()) < rule.mediaIds().size()) {
+            return new Verdict(AutomationPauser.REASON_MEDIA_MISSING, false);
+        }
         Optional<LastPublish> last = store.lastPublish(rule.id());
         if (last.isPresent()) {
             LastPublish publish = last.get();
@@ -364,13 +384,15 @@ public class AutomationService {
             case AutomationPauser.REASON_UNKNOWN_RESULT -> "Bài gần nhất có kết quả chưa xác định. Hãy đối soát ở Lịch đăng trước khi bật lại.";
             case AutomationPauser.REASON_USER_LOCKED -> "Tài khoản đang bị khóa.";
             case AutomationPauser.REASON_AI_QUOTA -> "Đã hết lượt AI cần giữ cho dùng tay.";
+            case AutomationPauser.REASON_MEDIA_MISSING -> "Ảnh hoặc video mặc định của rule không còn. Hãy chọn lại rồi bật lại rule.";
             default -> "Rule đang tạm dừng.";
         };
     }
 
     // ----------------------------------------------------------------- helpers
 
-    private record Parsed(ZoneId zone, LocalTime time, int mask, String mode, int lead, Brief brief) { }
+    private record Parsed(ZoneId zone, LocalTime time, int mask, String mode, int lead, Brief brief,
+                          Platform platform, List<UUID> mediaIds) { }
 
     private Parsed parse(UUID userId, RuleRequest request) {
         ZoneId zone;
@@ -395,15 +417,19 @@ public class AutomationService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chế độ tự động đăng chưa được mở. Hãy dùng chế độ duyệt trước.");
         }
         SocialAccount account = accounts.requireUserAccount(userId, request.socialAccountId());
-        if (account.getProvider() != Platform.FACEBOOK) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Hiện Daily chỉ hỗ trợ Facebook Page");
+        Platform platform = account.getProvider();
+        List<UUID> mediaIds = request.mediaIds() == null ? List.of() : request.mediaIds().stream().distinct().toList();
+        if (platform == Platform.INSTAGRAM && mediaIds.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Instagram cần ít nhất một ảnh hoặc video mặc định cho mỗi bài.");
         }
+        files.validateAttachments(mediaIds, userId);
         Brief brief = request.brief();
         Brief clean = new Brief(brief.productName().trim(), brief.productDescription().trim(), blankToNull(brief.price()),
                 brief.targetAudience().trim(), brief.highlights().trim(), orDefault(brief.goal(), DEFAULT_GOAL),
                 orDefault(brief.tone(), DEFAULT_TONE));
         int lead = request.leadMinutes() == null ? 720 : request.leadMinutes();
-        return new Parsed(zone, time, mask, mode, lead, clean);
+        return new Parsed(zone, time, mask, mode, lead, clean, platform, mediaIds);
     }
 
     private Rule findOwned(UUID userId, UUID ruleId) {
@@ -421,12 +447,12 @@ public class AutomationService {
         return new RuleResponse(rule.id(), rule.accountId(), accountName, rule.platform(), rule.name(), rule.status(),
                 rule.pausedReason(), rule.timezone(), rule.timeOfDay().toString(),
                 AutomationSchedule.toDays(rule.daysMask()), rule.approvalMode(), rule.leadMinutes(), rule.brief(),
-                rule.createdAt(), rule.updatedAt());
+                rule.mediaIds(), rule.createdAt(), rule.updatedAt());
     }
 
     private RunResponse response(RunView view) {
         Run run = view.run();
-        return new RunResponse(run.id(), run.ruleId(), view.ruleName(), run.runDate(), run.plannedFor(), run.status(),
+        return new RunResponse(run.id(), run.ruleId(), view.ruleName(), view.platform(), run.runDate(), run.plannedFor(), run.status(),
                 run.postId(), run.scheduledPostId(), run.error(), view.draft());
     }
 

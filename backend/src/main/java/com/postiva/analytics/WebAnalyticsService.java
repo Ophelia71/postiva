@@ -31,7 +31,10 @@ public class WebAnalyticsService {
                 || !List.of(25, 50, 75, 100).contains(event.scrollDepth()))) {
             throw badRequest();
         }
-        if (event.type() == Type.PAGE_VIEW) {
+        // Product milestones (onboarding) are sent as page views under /virtual/. They are recorded, but never start a
+        // session and never count toward a session's page views, so bounce rate and page-view totals stay honest.
+        boolean virtual = event.type() == Type.PAGE_VIEW && isVirtualPath(event.path());
+        if (event.type() == Type.PAGE_VIEW && !virtual) {
             // A repeated delivery keeps the same IDs, so it cannot increase the page-view count.
             jdbc.update("""
                     INSERT INTO web_analytics_sessions (id, visitor_id, user_id, landing_path, source, is_new_visitor)
@@ -53,12 +56,15 @@ public class WebAnalyticsService {
         if (session.lastSeenAt().isBefore(now.minus(30, ChronoUnit.MINUTES))) return;
 
         if (event.type() == Type.PAGE_VIEW) {
-            if (session.pageViews() >= 100) return;
+            if (session.pageViews() >= 100 && !virtual) return;
             int inserted = jdbc.update("""
                     INSERT INTO web_analytics_page_views (id, session_id, path)
                     VALUES (?, ?, ?) ON CONFLICT (id) DO NOTHING
                     """, event.viewId(), event.sessionId(), event.path());
-            if (inserted == 1) {
+            if (inserted == 1 && virtual) {
+                jdbc.update("UPDATE web_analytics_sessions SET last_seen_at = clock_timestamp(), user_id = COALESCE(?, user_id) WHERE id = ?",
+                        authenticatedUserId, event.sessionId());
+            } else if (inserted == 1) {
                 jdbc.update("""
                         UPDATE web_analytics_sessions SET page_views = page_views + 1,
                             last_seen_at = clock_timestamp(), user_id = COALESCE(?, user_id)
@@ -102,6 +108,10 @@ public class WebAnalyticsService {
     @Transactional
     public void removeExpired() {
         jdbc.update("DELETE FROM web_analytics_sessions WHERE started_at < clock_timestamp() - INTERVAL '180 days'");
+    }
+
+    static boolean isVirtualPath(String path) {
+        return path != null && path.startsWith("/virtual/");
     }
 
     private boolean validPath(String path) {

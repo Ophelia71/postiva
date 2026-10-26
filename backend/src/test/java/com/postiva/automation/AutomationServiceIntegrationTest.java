@@ -60,6 +60,7 @@ class AutomationServiceIntegrationTest {
     @Autowired AutomationStore store;
     @MockBean PublishingScheduler scheduler;
     @MockBean PostService posts;
+    @MockBean AutomationNotifier notifier;
 
     @DynamicPropertySource
     static void database(DynamicPropertyRegistry registry) {
@@ -93,10 +94,27 @@ class AutomationServiceIntegrationTest {
     }
 
     private UUID account(UUID userId, String token) {
+        return account(userId, token, "FACEBOOK");
+    }
+
+    private UUID account(UUID userId, String token, String provider) {
         UUID id = UUID.randomUUID();
         jdbc.update("INSERT INTO social_accounts (id, user_id, provider, page_id, page_name, access_token_encrypted) "
-                + "VALUES (?, ?, 'FACEBOOK', ?, 'Cửa hàng thử', ?)", id, userId, "page-" + id, token);
+                + "VALUES (?, ?, ?, ?, 'Cửa hàng thử', ?)", id, userId, provider, "page-" + id, token);
         return id;
+    }
+
+    private UUID media(UUID userId) {
+        UUID id = UUID.randomUUID();
+        jdbc.update("INSERT INTO uploaded_files (id, user_id, file_url, file_name, mime_type, file_size, public_id, storage_provider) "
+                + "VALUES (?, ?, '/api/files/x', 'hoa.jpg', 'image/jpeg', 100, ?, 'LOCAL')", id, userId, "public-" + id);
+        return id;
+    }
+
+    private RuleRequest requestFor(UUID account, List<UUID> mediaIds) {
+        return new RuleRequest("Bài mỗi ngày", account, "UTC", Instant.now().plusSeconds(2 * 3600).atZone(ZoneOffset.UTC)
+                .toLocalTime().withSecond(0).withNano(0).toString(), List.of(1, 2, 3, 4, 5, 6, 7), "REVIEW", 720,
+                new Brief("Bó hoa", "Hoa tươi", null, "Khách", "Giao nhanh", null, null), mediaIds);
     }
 
     private RuleResponse rule(UUID userId, UUID accountId, Instant publishAt) {
@@ -104,7 +122,7 @@ class AutomationServiceIntegrationTest {
         return service.create(userId, new RuleRequest("Bài mỗi ngày", accountId, "UTC", time.toString(),
                 List.of(1, 2, 3, 4, 5, 6, 7), "REVIEW", 720,
                 new Brief("Bó hoa hướng dương", "Hoa tươi giao trong ngày", null, "Người mua quà",
-                        "Tươi lâu, giao nhanh", null, null)));
+                        "Tươi lâu, giao nhanh", null, null), List.of()));
     }
 
     /** The AI is mocked: each call stores a draft the way PostService would and returns it. */
@@ -115,7 +133,8 @@ class AutomationServiceIntegrationTest {
             UUID postId = UUID.randomUUID();
             jdbc.update("INSERT INTO product_briefs (id, user_id, product_name) VALUES (?, ?, 'Bó hoa')", briefId, userId);
             jdbc.update("INSERT INTO generated_posts (id, brief_id, user_id, platform_contents) VALUES (?, ?, ?, "
-                    + "'{\"FACEBOOK\":{\"content\":\"Hoa tươi hôm nay\"},\"_title\":\"Hoa tươi\"}'::jsonb)", postId, briefId, userId);
+                    + "'{\"FACEBOOK\":{\"content\":\"Hoa tươi hôm nay\"},\"INSTAGRAM\":{\"caption\":\"Hoa tươi hôm nay\"},"
+                    + "\"THREADS\":{\"content\":\"Hoa tươi hôm nay\"},\"_title\":\"Hoa tươi\"}'::jsonb)", postId, briefId, userId);
             return new GeneratePostResponse(postId, briefId, "Hoa tươi", java.util.Map.of(), List.of(), null, null, null, "DRAFT");
         });
     }
@@ -292,7 +311,7 @@ class AutomationServiceIntegrationTest {
         UUID account = account(user, "token");
         var thrown = assertThrows(ResponseStatusException.class, () -> service.create(user, new RuleRequest(
                 "Tự động", account, "UTC", "19:00", List.of(1, 2, 3), "AUTO", 720,
-                new Brief("Bó hoa", "Hoa tươi", null, "Khách", "Giao nhanh", null, null))));
+                new Brief("Bó hoa", "Hoa tươi", null, "Khách", "Giao nhanh", null, null), null)));
         assertEquals(400, thrown.getStatusCode().value());
     }
 
@@ -342,8 +361,96 @@ class AutomationServiceIntegrationTest {
     }
 
     @Test
-    void pauserSkipsAutomaticallyButKeepsDraftsOnUserPause() {
+    void instagramRulesNeedDefaultMediaAndPassItToTheAi() {
         fakeAi();
+        UUID user = user("ACTIVE");
+        UUID instagram = account(user, "token", "INSTAGRAM");
+        assertEquals(400, assertThrows(ResponseStatusException.class,
+                () -> service.create(user, requestFor(instagram, List.of()))).getStatusCode().value());
+
+        UUID image = media(user);
+        RuleResponse rule = service.create(user, requestFor(instagram, List.of(image)));
+        assertEquals("INSTAGRAM", rule.platform());
+        assertEquals(List.of(image), rule.mediaIds());
+
+        service.planOnce(Instant.now());
+        var captor = org.mockito.ArgumentCaptor.forClass(com.postiva.post.dto.GeneratePostRequest.class);
+        verify(posts).generateForUser(eq(user), captor.capture(), any());
+        assertEquals(List.of(image), captor.getValue().imageIds());
+        assertEquals(List.of(com.postiva.common.Platform.INSTAGRAM), captor.getValue().platforms());
+
+        // Instagram keeps its text under "caption"; the review queue must still show it.
+        var draft = service.runs(user, "PENDING_REVIEW").getFirst();
+        assertEquals("INSTAGRAM", draft.platform());
+        assertEquals("Hoa tươi hôm nay", draft.draft().content());
+    }
+
+    @Test
+    void threadsRulesNeedNoMedia() {
+        UUID user = user("ACTIVE");
+        RuleResponse rule = service.create(user, requestFor(account(user, "token", "THREADS"), null));
+        assertEquals("THREADS", rule.platform());
+        assertTrue(rule.mediaIds().isEmpty());
+    }
+
+    @Test
+    void aRuleCannotUseAnotherUsersMedia() {
+        UUID owner = user("ACTIVE");
+        UUID other = user("ACTIVE");
+        UUID foreign = media(other);
+        assertEquals(400, assertThrows(ResponseStatusException.class,
+                () -> service.create(owner, requestFor(account(owner, "token"), List.of(foreign)))).getStatusCode().value());
+    }
+
+    @Test
+    void aDeletedDefaultImagePausesTheRule() {
+        fakeAi();
+        UUID user = user("ACTIVE");
+        UUID image = media(user);
+        RuleResponse rule = service.create(user, requestFor(account(user, "token"), List.of(image)));
+        jdbc.update("DELETE FROM uploaded_files WHERE id = ?", image);
+
+        service.planOnce(Instant.now());
+
+        assertEquals("MEDIA_MISSING", jdbc.queryForObject(
+                "SELECT paused_reason FROM automation_rules WHERE id = ?", String.class, rule.id()));
+        verify(posts, never()).generateForUser(eq(user), any(), any());
+    }
+
+    @Test
+    void theOwnerIsEmailedOnceWhenADraftIsReadyForReview() {
+        fakeAi();
+        UUID user = user("ACTIVE");
+        rule(user, account(user, "token"), Instant.now().plusSeconds(2 * 3600));
+
+        service.planOnce(Instant.now());
+        service.planOnce(Instant.now());
+
+        verify(notifier, org.mockito.Mockito.times(1)).draftReady(eq(user), eq("Bài mỗi ngày"), any());
+    }
+
+    @Test
+    void ruleCanBeEditedAndKeepsItsOwnership() {
+        UUID user = user("ACTIVE");
+        UUID account = account(user, "token");
+        RuleResponse rule = rule(user, account, Instant.now().plusSeconds(2 * 3600));
+        var edited = new RuleRequest("Đổi tên", account, "UTC", "08:30", List.of(1, 3, 5), "REVIEW", 360,
+                new Brief("Sản phẩm mới", "Mô tả mới", null, "Khách mới", "Nổi bật mới", null, null), List.of());
+
+        RuleResponse updated = service.update(user, rule.id(), edited);
+
+        assertEquals("Đổi tên", updated.name());
+        assertEquals("08:30", updated.timeOfDay());
+        assertEquals(List.of(1, 3, 5), updated.daysOfWeek());
+        assertEquals(360, updated.leadMinutes());
+        assertEquals("Sản phẩm mới", updated.brief().productName());
+        UUID other = user("ACTIVE");
+        assertEquals(404, assertThrows(ResponseStatusException.class,
+                () -> service.update(other, rule.id(), edited)).getStatusCode().value());
+    }
+
+    @Test
+    void pauserSkipsAutomaticallyButKeepsDraftsOnUserPause() {        fakeAi();
         UUID user = user("ACTIVE");
         RuleResponse rule = rule(user, account(user, "token"), Instant.now().plusSeconds(2 * 3600));
         service.planOnce(Instant.now());

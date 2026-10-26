@@ -51,6 +51,41 @@ class WebAnalyticsIntegrationTest {
     }
 
     @Test
+    void onboardingMilestonesAreStoredButDoNotInflateSessionOrScrollMetrics() {
+        WebAnalyticsService tracker = new WebAnalyticsService(jdbc);
+        AdminWebAnalyticsService reports = new AdminWebAnalyticsService(jdbc);
+        UUID visitor = UUID.randomUUID(), session = UUID.randomUUID();
+        long sessionsBefore = reports.dashboard(7).sessions().sessions();
+        long viewsBefore = reports.dashboard(7).sessions().pageViews();
+        long scrollViewsBefore = reports.dashboard(7).scroll().views();
+        UUID orphanSession = UUID.randomUUID();
+        try {
+        // A milestone without any real page view must not start a session.
+        tracker.record(new WebAnalyticsService.Event(WebAnalyticsService.Type.PAGE_VIEW, visitor, orphanSession,
+                UUID.randomUUID(), "/virtual/onboarding/step/connect", WebAnalyticsService.Source.DIRECT, null), null);
+        assertEquals(sessionsBefore, reports.dashboard(7).sessions().sessions());
+
+        tracker.record(new WebAnalyticsService.Event(WebAnalyticsService.Type.PAGE_VIEW, visitor, session,
+                UUID.randomUUID(), "/app/start", WebAnalyticsService.Source.DIRECT, null), null);
+        UUID milestone = UUID.randomUUID();
+        var event = new WebAnalyticsService.Event(WebAnalyticsService.Type.PAGE_VIEW, visitor, session,
+                milestone, "/virtual/onboarding/step/connect", WebAnalyticsService.Source.DIRECT, null);
+        tracker.record(event, null);
+        tracker.record(event, null);
+
+        var report = reports.dashboard(7);
+        assertEquals(sessionsBefore + 1, report.sessions().sessions());
+        assertEquals(viewsBefore + 1, report.sessions().pageViews());
+        assertEquals(scrollViewsBefore + 1, report.scroll().views());
+        assertEquals(1, jdbc.queryForObject(
+                "SELECT count(*) FROM web_analytics_page_views WHERE path = '/virtual/onboarding/step/connect'", Integer.class));
+        } finally {
+            // The other test in this class counts sessions, so leave nothing behind.
+            jdbc.update("DELETE FROM web_analytics_sessions WHERE id IN (?, ?)", session, orphanSession);
+        }
+    }
+
+    @Test
     void deduplicatesPageViewsAndReportsBehaviourTrafficAndVerifiedConversions() {
         WebAnalyticsService tracker = new WebAnalyticsService(jdbc);
         AdminWebAnalyticsService reports = new AdminWebAnalyticsService(jdbc);

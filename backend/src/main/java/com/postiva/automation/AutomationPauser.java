@@ -19,6 +19,7 @@ public class AutomationPauser {
     public static final String REASON_TOKEN = "TOKEN";
     public static final String REASON_UNKNOWN_RESULT = "UNKNOWN_RESULT";
     public static final String REASON_AI_QUOTA = "AI_QUOTA_EXHAUSTED";
+    public static final String REASON_MEDIA_MISSING = "MEDIA_MISSING";
 
     private final JdbcTemplate jdbc;
 

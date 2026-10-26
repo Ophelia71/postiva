@@ -7,6 +7,7 @@ import { HelpTip } from '../components/HelpTip'
 import { api, FACEBOOK_SYNC_TIMEOUT_MS } from '../lib/api'
 import { type AppChannel, useAppDataResource } from '../lib/appDataApi'
 import { getErrorMessage } from '../lib/errors'
+import { trackOnboardingStep } from '../lib/webAnalytics'
 import { usePreferences } from '../lib/preferences'
 import { PageHeader, PageState } from '../components/PageUi'
 
@@ -158,6 +159,7 @@ export function ConnectionsPage() {
       setConnectStatus(`${t('Đã kết nối')} ${response.data.pageName} (ID ${response.data.pageId}). Bước tiếp theo: tạo bài đầu tiên.`)
       reload()
     } catch (error) {
+      trackOnboardingStep(`connect-failed/${platform}`)
       setConnectStatusTone('error')
       setConnectStatus(getSocialErrorMessage(error, `Không thể kết nối ${title}.`))
     } finally {

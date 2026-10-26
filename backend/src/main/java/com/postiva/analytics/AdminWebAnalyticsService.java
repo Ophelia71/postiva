@@ -65,7 +65,7 @@ public class AdminWebAnalyticsService {
                        COUNT(*) FILTER (WHERE max_scroll >= 50) AS depth_50,
                        COUNT(*) FILTER (WHERE max_scroll >= 75) AS depth_75,
                        COUNT(*) FILTER (WHERE max_scroll >= 100) AS depth_100
-                FROM web_analytics_page_views WHERE viewed_at >= ? AND viewed_at < ?
+                FROM web_analytics_page_views WHERE viewed_at >= ? AND viewed_at < ? AND path NOT LIKE '/virtual/%'
                 """, (rs, row) -> new ScrollTotals(rs.getLong("views"), rs.getLong("depth_25"),
                 rs.getLong("depth_50"), rs.getLong("depth_75"), rs.getLong("depth_100")), from, to);
 
