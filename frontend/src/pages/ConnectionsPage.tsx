@@ -88,7 +88,6 @@ export function ConnectionsPage() {
   const [deletingPageId, setDeletingPageId] = useState<string | null>(null)
   const [syncingPageId, setSyncingPageId] = useState<string | null>(null)
   const [connectingType, setConnectingType] = useState<SocialPlatform | null>(null)
-  const [selectedPlatform, setSelectedPlatform] = useState<SocialPlatform>('facebook')
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null)
   const [manualConnections, setManualConnections] = useState<Record<SocialPlatform, ManualConnectionForm>>({
     facebook: emptyManualConnection(),
@@ -105,8 +104,6 @@ export function ConnectionsPage() {
   }
 
   const connectedChannels = channels.filter((channel) => ['Facebook', 'Instagram', 'Threads'].includes(channel.badge))
-  const selectedType = channelTypes.find((type) => type.platform === selectedPlatform) ?? channelTypes[0]
-  const form = manualConnections[selectedType.platform]
 
   async function handleTestPost(channel: AppChannel) {
     const isFacebook = channel.badge === 'Facebook'
@@ -227,10 +224,10 @@ export function ConnectionsPage() {
     setPendingConfirm(null)
   }
 
-  function updateForm(field: keyof ManualConnectionForm, value: string) {
+  function updateForm(platform: SocialPlatform, field: keyof ManualConnectionForm, value: string) {
     setManualConnections((connections) => ({
       ...connections,
-      [selectedType.platform]: { ...connections[selectedType.platform], [field]: value },
+      [platform]: { ...connections[platform], [field]: value },
     }))
   }
 
@@ -250,7 +247,7 @@ export function ConnectionsPage() {
             <EmptyState
               icon={<Link2 size={20} />}
               title="Chưa có kênh nào"
-              description="Chọn một nền tảng ở dưới và làm theo 3 bước. Facebook Page là lựa chọn ổn định nhất hiện nay."
+              description="Điền thông tin vào một trong ba thẻ bên dưới; bấm dấu ? ở mỗi thẻ để xem cách lấy token. Facebook Page là lựa chọn ổn định nhất hiện nay."
             />
           ) : (
             connectedChannels.map((channel) => {
@@ -342,114 +339,104 @@ export function ConnectionsPage() {
         </div>
       )}
 
-      <section className="rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] p-5 shadow-sm" aria-labelledby="add-channel-heading">
-        <h2 id="add-channel-heading" className="text-base font-bold">Thêm kênh mới</h2>
-
-        <div role="group" aria-label="Chọn nền tảng" className="mt-4 grid gap-2 sm:grid-cols-3">
+      <section aria-labelledby="add-channel-heading">
+        <h2 id="add-channel-heading" className="mb-3 text-base font-bold">Thêm kênh mới</h2>
+        <div className="grid gap-4 md:grid-cols-3">
           {channelTypes.map((type) => {
             const Icon = type.icon
             const count = connectedChannels.filter((channel) => channel.type === type.type).length
-            const selected = type.platform === selectedPlatform
+            const form = manualConnections[type.platform]
+            const idPrefix = `connect-${type.platform}`
             return (
-              <button
-                key={type.platform}
-                type="button"
-                aria-pressed={selected}
-                onClick={() => setSelectedPlatform(type.platform)}
-                className={`flex min-h-14 items-center gap-3 rounded-xl border px-4 text-left text-sm font-bold ${selected ? 'border-[#8594ea] bg-[var(--soft-bg)]' : 'border-[var(--app-border)] hover:bg-[var(--soft-bg)]'}`}
-              >
-                <Icon size={20} aria-hidden="true" className="shrink-0 text-blue-600" />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate">{type.title}</span>
-                  <span className={`block text-xs font-semibold ${count > 0 ? 'text-emerald-700' : 'text-[var(--muted-text)]'}`}>
-                    {count > 0 ? `${count} ${t('kết nối')}` : t('Chưa kết nối')}
-                  </span>
-                </span>
-                {count > 0 && <Check size={18} aria-hidden="true" className="shrink-0 text-emerald-600" />}
-              </button>
+              <div key={type.platform} className="rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] p-4 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <Icon className="text-blue-600" size={22} aria-hidden="true" />
+                  <div className="flex items-center gap-1">
+                    {count > 0 && <Check className="text-emerald-600" size={18} aria-label="Đã kết nối" />}
+                    <HelpTip label={`Cách lấy thông tin cho ${type.title}`}>
+                      <ol className="space-y-2">
+                        {type.steps.map((step, index) => (
+                          <li key={step}>
+                            <span className="font-bold">Bước {index + 1}.</span> {step}
+                          </li>
+                        ))}
+                      </ol>
+                      <p className="mt-3 text-xs text-[var(--muted-text)]">{type.note}</p>
+                      <p className="mt-2 text-xs text-[var(--muted-text)]">Chỉ dán token của Page hoặc tài khoản do bạn quản trị. Postiva mã hóa token khi lưu và không hiển thị lại.</p>
+                    </HelpTip>
+                  </div>
+                </div>
+                <h3 className="text-sm font-bold">{type.title}</h3>
+                <p className={`mt-1 text-xs font-semibold ${count > 0 ? 'text-emerald-700' : 'text-[var(--muted-text)]'}`}>
+                  {count > 0 ? `${count} ${t('kết nối')}` : t('Chưa kết nối')}
+                </p>
+
+                <form
+                  autoComplete="off"
+                  data-form-type="other"
+                  className="mt-3 space-y-3"
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    void handleManualConnect(type.platform, type.title, type.manualPath)
+                  }}
+                >
+                  <div>
+                    <label htmlFor={`${idPrefix}-account-id`} className="block text-xs font-semibold">{type.idLabel}</label>
+                    <input
+                      id={`${idPrefix}-account-id`}
+                      name={`${type.platform}-connection-id`}
+                      type="text"
+                      autoComplete="off"
+                      spellCheck={false}
+                      required
+                      value={form.accountId}
+                      onChange={(event) => updateForm(type.platform, 'accountId', event.target.value)}
+                      data-1p-ignore="true"
+                      data-bwignore="true"
+                      data-lpignore="true"
+                      className={`mt-1 ${inputClass}`}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor={`${idPrefix}-account-name`} className="block text-xs font-semibold">{type.nameLabel}</label>
+                    <input
+                      id={`${idPrefix}-account-name`}
+                      type="text"
+                      autoComplete="off"
+                      required
+                      value={form.accountName}
+                      onChange={(event) => updateForm(type.platform, 'accountName', event.target.value)}
+                      className={`mt-1 ${inputClass}`}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor={`${idPrefix}-access-token`} className="block text-xs font-semibold">{type.tokenLabel}</label>
+                    <input
+                      id={`${idPrefix}-access-token`}
+                      name={`${type.platform}-connection-token`}
+                      type="password"
+                      autoComplete="new-password"
+                      spellCheck={false}
+                      required
+                      value={form.accessToken}
+                      onChange={(event) => updateForm(type.platform, 'accessToken', event.target.value)}
+                      data-1p-ignore="true"
+                      data-bwignore="true"
+                      data-lpignore="true"
+                      className={`mt-1 ${inputClass}`}
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={connectingType !== null}
+                    className="min-h-11 w-full rounded-full bg-blue-600 px-4 text-sm font-bold text-white hover:bg-blue-700 disabled:bg-slate-300"
+                  >
+                    {connectingType === type.platform ? t('Đang kết nối...') : `${t('Kết nối')} ${type.title}`}
+                  </button>
+                </form>
+              </div>
             )
           })}
-        </div>
-
-        <div className="mt-6 max-w-xl">
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <h3 className="text-sm font-bold">Thông tin {selectedType.title}</h3>
-            <HelpTip label={`Cách lấy thông tin cho ${selectedType.title}`}>
-              <ol className="space-y-2">
-                {selectedType.steps.map((step, index) => (
-                  <li key={step}>
-                    <span className="font-bold">Bước {index + 1}.</span> {step}
-                  </li>
-                ))}
-              </ol>
-              <p className="mt-3 text-xs text-[var(--muted-text)]">{selectedType.note}</p>
-              <p className="mt-2 text-xs text-[var(--muted-text)]">Chỉ dán token của Page hoặc tài khoản do bạn quản trị. Postiva mã hóa token khi lưu và không hiển thị lại.</p>
-            </HelpTip>
-          </div>
-
-          <form
-            autoComplete="off"
-            data-form-type="other"
-            className="space-y-4"
-            onSubmit={(event) => {
-              event.preventDefault()
-              void handleManualConnect(selectedType.platform, selectedType.title, selectedType.manualPath)
-            }}
-          >
-            <div>
-              <label htmlFor="connect-account-id" className="block text-sm font-semibold">{selectedType.idLabel}</label>
-              <input
-                id="connect-account-id"
-                name={`${selectedType.platform}-connection-id`}
-                type="text"
-                autoComplete="off"
-                spellCheck={false}
-                required
-                value={form.accountId}
-                onChange={(event) => updateForm('accountId', event.target.value)}
-                data-1p-ignore="true"
-                data-bwignore="true"
-                data-lpignore="true"
-                className={`mt-1 ${inputClass}`}
-              />
-            </div>
-            <div>
-              <label htmlFor="connect-account-name" className="block text-sm font-semibold">{selectedType.nameLabel}</label>
-              <input
-                id="connect-account-name"
-                type="text"
-                autoComplete="off"
-                required
-                value={form.accountName}
-                onChange={(event) => updateForm('accountName', event.target.value)}
-                className={`mt-1 ${inputClass}`}
-              />
-            </div>
-            <div>
-              <label htmlFor="connect-access-token" className="block text-sm font-semibold">{selectedType.tokenLabel}</label>
-              <input
-                id="connect-access-token"
-                name={`${selectedType.platform}-connection-token`}
-                type="password"
-                autoComplete="new-password"
-                spellCheck={false}
-                required
-                value={form.accessToken}
-                onChange={(event) => updateForm('accessToken', event.target.value)}
-                data-1p-ignore="true"
-                data-bwignore="true"
-                data-lpignore="true"
-                className={`mt-1 ${inputClass}`}
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={connectingType !== null}
-              className="min-h-11 w-full rounded-full bg-blue-600 px-4 text-sm font-bold text-white hover:bg-blue-700 disabled:bg-slate-300"
-            >
-              {connectingType === selectedType.platform ? t('Đang kết nối...') : `${t('Kết nối')} ${selectedType.title}`}
-            </button>
-          </form>
         </div>
       </section>
     </section>

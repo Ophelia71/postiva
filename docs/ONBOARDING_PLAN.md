@@ -58,7 +58,7 @@ Nguyên tắc:
 
 ### G3. Kết nối kênh dễ hơn (xong)
 
-- Chọn một nền tảng mỗi lần; form chỉ có 3 ô. Hướng dẫn 3 bước và ghi chú giới hạn nằm trong tooltip `HelpTip` (nút `?`): mở bằng hover, focus bàn phím hoặc bấm, đóng bằng Esc hoặc bấm ra ngoài.
+- Giữ bố cục 3 thẻ (Facebook, Instagram, Threads) hiện cùng lúc, mỗi thẻ một form 3 ô. Hướng dẫn 3 bước và ghi chú giới hạn nằm trong tooltip `HelpTip` (nút `?` của từng thẻ): mở bằng hover, focus bàn phím hoặc bấm, đóng bằng Esc hoặc bấm ra ngoài.
 - Dấu tick chỉ hiện khi đã có kết nối.
 - Xác nhận ngay trong dòng, thay cho `window.confirm`: xóa kết nối, và **nút Kiểm tra Facebook** (tạo bài thử không công khai, `published=false`).
 - Kết nối thành công → nút "Tạo bài đầu tiên".
