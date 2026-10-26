@@ -17,7 +17,7 @@ import {
   X,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { FacebookBadge } from '../components/FacebookBadge'
 import { ProtectedMediaImage, ProtectedMediaVideo } from '../components/ProtectedMedia'
 import { PageState } from '../components/PageUi'
@@ -79,6 +79,7 @@ const PLATFORM_LABELS: Record<Platform, string> = {
 
 export function CreatePostPage() {
   const { t } = usePreferences()
+  const navigate = useNavigate()
   const channelsState = useAppDataResource<AppChannel[]>('/app-data/channels')
   const activeChannels = useMemo(
     () => (channelsState.data ?? EMPTY_CHANNELS).filter((channel) => channel.active),
@@ -485,12 +486,17 @@ export function CreatePostPage() {
   }
 
   return (
-    <section className="create-post-page -mx-4 min-h-[calc(100svh-56px)] rounded-[8px] bg-gradient-to-br from-rose-50 via-violet-50 to-cyan-50 px-4 py-3">
+    <section className="create-post-page -mx-4 min-h-[calc(100svh-8rem)] rounded-[8px] bg-gradient-to-br from-rose-50 via-violet-50 to-cyan-50 px-4 py-3 sm:-mx-6 sm:px-6 lg:mx-0">
       <div className="mb-5 flex items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <Link to="/app" className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700">
-            <ArrowLeft size={18} />
-          </Link>
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            aria-label={t('Quay lại', 'Go back')}
+            className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700"
+          >
+            <ArrowLeft size={18} aria-hidden="true" />
+          </button>
           <h1 className="text-2xl font-bold tracking-tight">{t('Tạo bài đăng', 'Create post')}</h1>
         </div>
         <div className="flex overflow-hidden rounded-[6px] border border-slate-300 bg-white">
@@ -513,6 +519,14 @@ export function CreatePostPage() {
         </div>
       </div>
 
+      {!channelsState.loading && !channelsState.error && availablePlatforms.length === 0 && (
+        <div role="status" className="mb-5 flex flex-col gap-3 rounded-[8px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between">
+          <p>Bạn chưa kết nối kênh nào nên chưa thể đăng. Bạn vẫn có thể soạn nội dung với AI trước.</p>
+          <Link to="/app/connections" className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full bg-amber-700 px-4 text-sm font-bold text-white hover:bg-amber-800">
+            Kết nối kênh
+          </Link>
+        </div>
+      )}
       <UsagePanel refreshVersion={usageVersion} />
       <div className="grid gap-8 lg:grid-cols-[minmax(0,520px)_minmax(420px,1fr)]">
         <div className="overflow-hidden rounded-[8px] border border-slate-200 bg-white shadow-xl shadow-slate-200/70">
@@ -696,7 +710,7 @@ export function CreatePostPage() {
           </div>
 
           <div className="flex items-center justify-end gap-2 border-t border-slate-200 bg-white px-5 py-4">
-            <Link to="/app" className="inline-flex h-10 items-center justify-center rounded-[6px] border border-slate-300 px-4 text-sm font-semibold hover:bg-slate-50">
+            <Link to="/app/schedule" className="inline-flex min-h-11 items-center justify-center rounded-[6px] border border-slate-300 px-4 text-sm font-semibold hover:bg-slate-50">
               {t('Hủy', 'Cancel')}
             </Link>
             <button
@@ -832,12 +846,12 @@ function PlatformPicker({
     <div className="flex flex-wrap gap-2">
       {ALL_PLATFORMS.map((platform) => (
         <label key={platform} className={cn(
-          'inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition',
+          'inline-flex min-h-11 items-center gap-2 rounded-full border px-4 py-1.5 text-xs font-semibold transition focus-within:ring-2 focus-within:ring-violet-400',
           !available.includes(platform)
-            ? 'cursor-not-allowed border-slate-100 bg-slate-50 text-slate-300'
+            ? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-600'
             : selected.includes(platform)
               ? 'cursor-pointer border-violet-300 bg-violet-50 text-violet-700'
-              : 'cursor-pointer border-slate-200 bg-white text-slate-500 hover:border-violet-200',
+              : 'cursor-pointer border-slate-300 bg-white text-slate-600 hover:border-violet-300',
         )}>
           <input
             type="checkbox"
@@ -899,9 +913,9 @@ function SocialFeedPreview({
 
   return (
     <article
-      className={cn('mx-auto overflow-hidden rounded-[6px] border-t-4 bg-white shadow-xl shadow-slate-200/80', compact ? 'max-w-[360px]' : 'max-w-[620px]')}
-      style={{ borderTopColor: getPlatformColor(platform) }}
+      className={cn('mx-auto overflow-hidden rounded-[6px] bg-white shadow-xl shadow-slate-200/80', compact ? 'max-w-[360px]' : 'max-w-[620px]')}
     >
+      <div aria-hidden className="h-1" style={{ backgroundColor: getPlatformColor(platform) }} />
       <header className="flex items-center gap-3 px-5 py-4">
         <PageIdentity channel={channel} platform={platform} large />
         <div className="min-w-0">

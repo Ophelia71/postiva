@@ -25,7 +25,7 @@ export function UsagePanel({ refreshVersion }: { refreshVersion: number }) {
           {showHistory ? t('Ẩn lịch sử', 'Hide history') : t('Lịch sử sử dụng', 'Usage history')}
         </button>
       </div>
-      <p className="text-slate-600">{t('Kỳ hiện tại kết thúc', 'Current period ends')} {new Date(data.endsAt).toLocaleString()}.</p>
+      <p className="text-slate-600">{t('Kỳ hiện tại kết thúc', 'Current period ends')} {new Date(data.endsAt).toLocaleString('vi-VN')}.</p>
       <p className="mt-2 text-xs leading-5 text-slate-600">{t('Dùng thử Free: 30 lượt tạo bài AI mỗi kỳ 30 ngày. Pro có 50 lượt mỗi kỳ; chỉ bài được lưu thành công mới trừ lượt.', 'Free trial: 30 AI generations per 30-day period. Pro includes 50 per period; only saved posts use a generation.')}</p>
       {data.remaining === 0 && <p className="mt-2 font-medium">{t('Đã hết lượt AI khả dụng. Bạn vẫn có thể chỉnh sửa, đăng và lên lịch bài viết.', 'No AI generations available. You can still edit, publish and schedule posts.')}</p>}
     </>}
@@ -48,7 +48,7 @@ function UsageHistory() {
     </p> : <>
       {data?.items.length === 0 && <p>{t('Chưa có yêu cầu AI trong lịch sử.', 'No AI requests yet.')}</p>}
       <ul className="space-y-2">{data?.items.map((item) => <li key={item.id} className="flex flex-wrap justify-between gap-2">
-        <time dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleString()}</time><span>{labels[item.status]}</span>
+        <time dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleString('vi-VN')}</time><span>{labels[item.status]}</span>
       </li>)}</ul>
       {(data?.total ?? 0) > 10 && <div className="mt-2 flex items-center gap-4">
         <button type="button" disabled={page === 0} onClick={() => setPage(page - 1)} className="min-h-11 underline disabled:opacity-40">{t('Trước', 'Previous')}</button>

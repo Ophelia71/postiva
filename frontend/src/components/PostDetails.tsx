@@ -175,7 +175,7 @@ export function PostDetailModal({
           <div className="flex flex-wrap items-center gap-3 text-sm">
             <StatusBadge status={post.status} />
             {post.attemptCount > 0 && <span className="text-slate-500">Đã thử {post.attemptCount} lần</span>}
-            {post.nextAttemptAt && <span className="text-amber-700">Thử lại lúc {new Date(post.nextAttemptAt).toLocaleString()}</span>}
+            {post.nextAttemptAt && <span className="text-amber-700">Thử lại lúc {new Date(post.nextAttemptAt).toLocaleString('vi-VN')}</span>}
           </div>
           {post.lastError && (
             <p role="status" className={`rounded-lg p-3 text-sm ${post.status === 'Unknown' ? 'bg-amber-50 text-amber-900' : 'bg-rose-50 text-rose-800'}`}>

@@ -6,9 +6,11 @@ import {
   KeyRound,
   Link2,
   LogOut,
+  PenLine,
   PlusCircle,
+  Rocket,
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, Navigate, NavLink, Route, Routes } from 'react-router-dom'
 import { api } from './lib/api'
 import { identifyWebAnalyticsUser, WebAnalyticsTracker } from './lib/webAnalytics'
@@ -34,12 +36,21 @@ import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { ChangePasswordPage } from './pages/ChangePasswordPage'
 import { BillingPage } from './pages/BillingPage'
+import { AppIndexRedirect, StartPage } from './pages/StartPage'
 
 const navItems = [
   { to: '/app/schedule', label: 'Lịch đăng', icon: CalendarDays },
   { to: '/app/reports', label: 'Báo cáo', icon: BarChart3 },
   { to: '/app/connections', label: 'Kết nối', icon: Link2 },
   { to: '/app/billing', label: 'Gói & thanh toán', icon: CreditCard },
+]
+
+// Billing lives in the account menu on small screens; the create action is the primary thumb target.
+const mobileNavItems = [
+  { to: '/app/schedule', label: 'Lịch đăng', icon: CalendarDays },
+  { to: '/app/create', label: 'Tạo bài', icon: PenLine },
+  { to: '/app/reports', label: 'Báo cáo', icon: BarChart3 },
+  { to: '/app/connections', label: 'Kết nối', icon: Link2 },
 ]
 
 type UserResponse = {
@@ -193,29 +204,108 @@ function SessionLoading() {
   )
 }
 
-function AppShell({ session, onLogout, onPasswordChanged }: { session: AuthSession; onLogout: () => void; onPasswordChanged: () => void }) {
-  const [userMenuOpen, setUserMenuOpen] = useState(false)
+type ShellProps = { session: AuthSession; onLogout: () => void; onPasswordChanged: () => void }
+
+function AccountMenu({ session, onLogout, placement }: { session: AuthSession; onLogout: () => void; placement: 'above' | 'below' }) {
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
   const { t } = usePreferences()
-  const profileName = session.fullName
-  const profileEmail = session.email
+
+  useEffect(() => {
+    if (!open) return
+    const onPointer = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
+    }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('pointerdown', onPointer)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', onPointer)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  const itemClass = 'flex min-h-11 w-full items-center gap-2 rounded-md px-3 text-sm font-semibold text-[var(--app-text)] hover:bg-[var(--soft-bg)]'
+  const compact = placement === 'below'
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-label={`Tài khoản của ${session.fullName}`}
+        className={compact
+          ? 'flex h-11 w-11 items-center justify-center rounded-full bg-[#d8ddfb] text-sm font-bold text-[#344260]'
+          : 'flex min-h-12 w-full items-center gap-3 rounded-xl px-2 text-left text-sm hover:bg-[var(--soft-bg)]'}
+      >
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#d8ddfb] text-xs font-bold text-[#344260]" aria-hidden="true">
+          {session.fullName.charAt(0)}
+        </span>
+        {!compact && (
+          <>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate font-bold">{session.fullName}</span>
+              <span className="block truncate text-xs text-[var(--muted-text)]">{session.email}</span>
+            </span>
+            <ChevronDown size={14} aria-hidden="true" className={`shrink-0 text-[var(--muted-text)] transition ${open ? 'rotate-180' : ''}`} />
+          </>
+        )}
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          className={`absolute z-30 w-64 rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] p-2 shadow-xl shadow-slate-200/40 ${placement === 'above' ? 'bottom-14 left-0' : 'right-0 top-12'}`}
+        >
+          <div className="border-b border-[var(--app-border)] px-3 py-3">
+            <p className="truncate text-sm font-bold">{session.fullName}</p>
+            <p className="mt-1 truncate text-xs text-[var(--muted-text)]">{session.email}</p>
+          </div>
+          <Link role="menuitem" to="/app/start" onClick={() => setOpen(false)} className={`${itemClass} mt-2`}>
+            <Rocket size={16} aria-hidden="true" />
+            Hướng dẫn bắt đầu
+          </Link>
+          <Link role="menuitem" to="/app/billing" onClick={() => setOpen(false)} className={itemClass}>
+            <CreditCard size={16} aria-hidden="true" />
+            Gói &amp; thanh toán
+          </Link>
+          <Link role="menuitem" to="/app/security" onClick={() => setOpen(false)} className={itemClass}>
+            <KeyRound size={16} aria-hidden="true" />
+            Bảo mật tài khoản
+          </Link>
+          <button role="menuitem" type="button" onClick={onLogout} className={itemClass}>
+            <LogOut size={16} aria-hidden="true" />
+            {t('Đăng xuất')}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function AppShell({ session, onLogout, onPasswordChanged }: ShellProps) {
+  const { t } = usePreferences()
 
   return (
     <div className="app-shell min-h-svh bg-[var(--app-bg)] text-[var(--app-text)]">
-      <aside className="fixed inset-y-0 left-0 z-20 flex w-[272px] flex-col border-r border-[var(--app-border)] bg-[var(--panel-bg)] p-3">
+      <aside className="fixed inset-y-0 left-0 z-20 hidden w-[272px] flex-col border-r border-[var(--app-border)] bg-[var(--panel-bg)] p-3 lg:flex">
         <div className="flex h-20 items-center gap-3 px-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#6672d8] text-white">
-            <PlusCircle size={18} />
+            <PlusCircle size={18} aria-hidden="true" />
           </div>
           <div>
-            <h1 className="text-lg font-bold tracking-tight">Postiva</h1>
+            <p className="text-lg font-bold tracking-tight">Postiva</p>
             <p className="text-xs font-semibold text-[var(--muted-text)]">Quản lý nội dung</p>
           </div>
         </div>
 
-        <nav className="flex-1 space-y-2 py-5">
+        <nav aria-label="Điều hướng chính" className="flex-1 space-y-2 py-5">
           {navItems.map((item) => {
             const Icon = item.icon
-
             return (
               <NavLink
                 key={item.to}
@@ -231,11 +321,9 @@ function AppShell({ session, onLogout, onPasswordChanged }: { session: AuthSessi
               >
                 {({ isActive }) => (
                   <>
-                    <Icon size={17} />
+                    <Icon size={17} aria-hidden="true" />
                     <span>{item.label}</span>
-                    {isActive && (
-                      <span className="ml-auto h-1.5 w-1.5 rounded-full bg-[#6672d8]" />
-                    )}
+                    {isActive && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-[#6672d8]" />}
                   </>
                 )}
               </NavLink>
@@ -243,67 +331,35 @@ function AppShell({ session, onLogout, onPasswordChanged }: { session: AuthSessi
           })}
         </nav>
 
-        <div className="relative border-t border-[var(--app-border)] pt-3">
-          <button
-            type="button"
-            onClick={() => setUserMenuOpen((value) => !value)}
-            className="flex h-12 w-full items-center gap-3 rounded-xl px-2 text-left text-sm hover:bg-[var(--soft-bg)]"
-            title={profileName}
-          >
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#d8ddfb] text-xs font-bold text-[#344260]">
-              {profileName.charAt(0)}
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate font-bold">{profileName}</span>
-              <span className="block truncate text-xs text-[var(--muted-text)]">{profileEmail}</span>
-            </span>
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--soft-bg)]">
-              <ChevronDown size={12} className={`text-[var(--muted-text)] transition ${userMenuOpen ? 'rotate-180' : ''}`} />
-            </span>
-          </button>
-
-          {userMenuOpen && (
-            <div className="absolute bottom-14 left-0 z-30 w-full rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] p-2 shadow-xl shadow-slate-200/20">
-              <div className="border-b border-[var(--app-border)] px-3 py-3">
-                <p className="truncate text-sm font-bold">{profileName}</p>
-                <p className="mt-1 truncate text-xs text-[var(--muted-text)]">{profileEmail}</p>
-              </div>
-              <Link
-                to="/app/security"
-                onClick={() => setUserMenuOpen(false)}
-                className="mt-2 flex h-10 w-full items-center gap-2 rounded-md px-3 text-sm font-semibold text-[var(--app-text)] hover:bg-[var(--soft-bg)]"
-              >
-                <KeyRound size={16} />
-                Bảo mật tài khoản
-              </Link>
-              <button
-                type="button"
-                onClick={onLogout}
-                className="mt-2 flex h-10 w-full items-center gap-2 rounded-md px-3 text-sm font-semibold text-[var(--app-text)] hover:bg-[var(--soft-bg)]"
-              >
-                <LogOut size={16} />
-                {t('Đăng xuất')}
-              </button>
-            </div>
-          )}
+        <div className="border-t border-[var(--app-border)] pt-3">
+          <AccountMenu session={session} onLogout={onLogout} placement="above" />
         </div>
       </aside>
 
-      <main className="pl-[272px]">
-        <div className="mx-auto min-h-svh max-w-[1320px] px-10 py-8">
-          <div className="mb-8 flex items-center justify-end">
-            <div className="flex items-center gap-3">
-              <NavLink
-                to="/app/create"
-                className="flex h-11 items-center justify-center gap-2 rounded-full bg-[#6672d8] px-4 text-sm font-semibold text-white hover:-translate-y-0.5 hover:bg-[#505db8]"
-              >
-                <PlusCircle size={16} />
-                {t('Tạo bài mới')}
-              </NavLink>
-            </div>
+      <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-[var(--app-border)] bg-[var(--panel-bg)] px-4 lg:hidden">
+        <Link to="/app" className="flex items-center gap-2 text-base font-bold tracking-tight">
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#6672d8] text-white">
+            <PlusCircle size={16} aria-hidden="true" />
+          </span>
+          Postiva
+        </Link>
+        <AccountMenu session={session} onLogout={onLogout} placement="below" />
+      </header>
+
+      <main className="pb-24 lg:pb-0 lg:pl-[272px]">
+        <div className="mx-auto min-h-svh max-w-[1320px] px-4 py-5 sm:px-6 lg:px-10 lg:py-8">
+          <div className="mb-8 hidden items-center justify-end lg:flex">
+            <NavLink
+              to="/app/create"
+              className="flex h-11 items-center justify-center gap-2 rounded-full bg-[#6672d8] px-4 text-sm font-semibold text-white hover:-translate-y-0.5 hover:bg-[#505db8]"
+            >
+              <PlusCircle size={16} aria-hidden="true" />
+              {t('Tạo bài mới')}
+            </NavLink>
           </div>
           <Routes>
-            <Route path="/" element={<Navigate to="/app/reports" replace />} />
+            <Route path="/" element={<AppIndexRedirect />} />
+            <Route path="/start" element={<StartPage session={session} />} />
             <Route path="/products" element={<Navigate to="/app/reports" replace />} />
             <Route path="/schedule" element={<SchedulePage />} />
             <Route path="/reports" element={<ReportsPage />} />
@@ -315,6 +371,33 @@ function AppShell({ session, onLogout, onPasswordChanged }: { session: AuthSessi
           </Routes>
         </div>
       </main>
+
+      <nav
+        aria-label="Điều hướng chính"
+        className="fixed inset-x-0 bottom-0 z-20 grid h-[72px] grid-cols-4 border-t border-[var(--app-border)] bg-[var(--panel-bg)] px-2 pb-[env(safe-area-inset-bottom)] lg:hidden"
+      >
+        {mobileNavItems.map((item) => {
+          const Icon = item.icon
+          return (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              className={({ isActive }) =>
+                `flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl text-xs font-semibold ${isActive ? 'text-[#344260]' : 'text-[var(--muted-text)]'}`
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <span className={`flex h-8 w-14 items-center justify-center rounded-full ${isActive ? 'bg-[#d8ddfb]' : ''}`}>
+                    <Icon size={18} aria-hidden="true" />
+                  </span>
+                  {item.label}
+                </>
+              )}
+            </NavLink>
+          )
+        })}
+      </nav>
     </div>
   )
 }

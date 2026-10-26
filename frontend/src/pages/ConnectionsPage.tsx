@@ -1,6 +1,9 @@
-import { Camera, CheckCircle2, Music, RefreshCw, Smartphone, Trash2 } from 'lucide-react'
+import { Camera, Check, Link2, Music, RefreshCw, Smartphone, Trash2 } from 'lucide-react'
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
+import { EmptyState } from '../components/EmptyState'
 import { FacebookBadge } from '../components/FacebookBadge'
+import { HelpTip } from '../components/HelpTip'
 import { api, FACEBOOK_SYNC_TIMEOUT_MS } from '../lib/api'
 import { type AppChannel, useAppDataResource } from '../lib/appDataApi'
 import { getErrorMessage } from '../lib/errors'
@@ -9,17 +12,62 @@ import { PageHeader, PageState } from '../components/PageUi'
 
 type StatusTone = 'info' | 'success' | 'error'
 type SocialPlatform = 'facebook' | 'instagram' | 'threads'
-type ProtectedManualField = 'accountId' | 'accessToken'
 type ManualConnectionForm = {
   accountId: string
   accountName: string
   accessToken: string
 }
+type PendingConfirm = { kind: 'delete' | 'test'; channelId: string }
 
 const channelTypes = [
-  { title: 'Trang Facebook', type: 'Facebook Page', icon: Smartphone, platform: 'facebook', manualPath: '/social/meta/facebook/manual' },
-  { title: 'Instagram Business', type: 'Instagram Business', icon: Camera, platform: 'instagram', manualPath: '/social/instagram/manual' },
-  { title: 'Threads Business', type: 'Threads', icon: Music, platform: 'threads', manualPath: '/social/threads/manual' },
+  {
+    title: 'Trang Facebook',
+    type: 'Facebook Page',
+    icon: Smartphone,
+    platform: 'facebook',
+    manualPath: '/social/meta/facebook/manual',
+    idLabel: 'Page ID',
+    nameLabel: 'Tên Page',
+    tokenLabel: 'Page Access Token',
+    steps: [
+      'Mở Meta for Developers, chọn đúng ứng dụng của Postiva và mở Graph API Explorer.',
+      'Lấy danh sách Page qua /me/accounts (trường id, name, access_token), rồi chọn Page của bạn.',
+      'Dán Page ID, tên Page và Page Access Token của đúng Page đó vào form. Đừng dán token người dùng.',
+    ],
+    note: 'Postiva kiểm tra token với Meta trước khi lưu. Nút Kiểm tra sau đó tạo một bài thử không công khai để xác nhận quyền đăng.',
+  },
+  {
+    title: 'Instagram Business',
+    type: 'Instagram Business',
+    icon: Camera,
+    platform: 'instagram',
+    manualPath: '/social/instagram/manual',
+    idLabel: 'Account ID',
+    nameLabel: 'Tên tài khoản',
+    tokenLabel: 'Access Token',
+    steps: [
+      'Dùng tài khoản Instagram Business hoặc Creator đã liên kết trong ứng dụng Meta của bạn.',
+      'Tạo access token có quyền đăng nội dung cho tài khoản đó.',
+      'Dán Account ID, tên tài khoản và token vào form.',
+    ],
+    note: 'Instagram cần ảnh hoặc video, không đăng được bài chỉ có chữ. Hiện đang thử nghiệm giới hạn.',
+  },
+  {
+    title: 'Threads Business',
+    type: 'Threads',
+    icon: Music,
+    platform: 'threads',
+    manualPath: '/social/threads/manual',
+    idLabel: 'Account ID',
+    nameLabel: 'Tên tài khoản',
+    tokenLabel: 'Access Token',
+    steps: [
+      'Mở ứng dụng Meta có sản phẩm Threads và tạo token cho tài khoản Threads của bạn.',
+      'Chọn quyền đăng nội dung cho token.',
+      'Dán Account ID, tên tài khoản và token vào form.',
+    ],
+    note: 'Threads đăng được chữ, ảnh và video. Hiện đang thử nghiệm giới hạn.',
+  },
 ] as const
 
 type ConnectedAccount = { pageId: string; pageName: string }
@@ -28,6 +76,8 @@ const emptyManualConnection = (): ManualConnectionForm => ({
   accountName: '',
   accessToken: '',
 })
+
+const inputClass = 'h-11 w-full rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20'
 
 export function ConnectionsPage() {
   const { t } = usePreferences()
@@ -38,7 +88,8 @@ export function ConnectionsPage() {
   const [deletingPageId, setDeletingPageId] = useState<string | null>(null)
   const [syncingPageId, setSyncingPageId] = useState<string | null>(null)
   const [connectingType, setConnectingType] = useState<SocialPlatform | null>(null)
-  const [activeManualField, setActiveManualField] = useState<string | null>(null)
+  const [selectedPlatform, setSelectedPlatform] = useState<SocialPlatform>('facebook')
+  const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null)
   const [manualConnections, setManualConnections] = useState<Record<SocialPlatform, ManualConnectionForm>>({
     facebook: emptyManualConnection(),
     instagram: emptyManualConnection(),
@@ -46,7 +97,7 @@ export function ConnectionsPage() {
   })
 
   if (loading) {
-    return <PageState title={t('Đang tải kênh kết nối...', )} />
+    return <PageState title={t('Đang tải kênh kết nối...')} />
   }
 
   if (error || !channels) {
@@ -54,9 +105,12 @@ export function ConnectionsPage() {
   }
 
   const connectedChannels = channels.filter((channel) => ['Facebook', 'Instagram', 'Threads'].includes(channel.badge))
+  const selectedType = channelTypes.find((type) => type.platform === selectedPlatform) ?? channelTypes[0]
+  const form = manualConnections[selectedType.platform]
 
   async function handleTestPost(channel: AppChannel) {
     const isFacebook = channel.badge === 'Facebook'
+    setPendingConfirm(null)
     setPostingPageId(channel.id)
     setConnectStatusTone('info')
     setConnectStatus(`${t('Đang kiểm tra kết nối với')} ${channel.name}...`)
@@ -83,10 +137,10 @@ export function ConnectionsPage() {
   }
 
   async function handleManualConnect(platform: SocialPlatform, title: string, path: string) {
-    const form = manualConnections[platform]
-    const accountId = form.accountId.trim()
-    const accountName = form.accountName.trim()
-    const accessToken = form.accessToken.trim()
+    const current = manualConnections[platform]
+    const accountId = current.accountId.trim()
+    const accountName = current.accountName.trim()
+    const accessToken = current.accessToken.trim()
     if (!accountId || !accountName || !accessToken) {
       return
     }
@@ -103,9 +157,8 @@ export function ConnectionsPage() {
         ...connections,
         [platform]: emptyManualConnection(),
       }))
-      setActiveManualField(null)
       setConnectStatusTone('success')
-      setConnectStatus(`${t('Đã kết nối')} ${response.data.pageName} (ID ${response.data.pageId}).`)
+      setConnectStatus(`${t('Đã kết nối')} ${response.data.pageName} (ID ${response.data.pageId}). Bước tiếp theo: tạo bài đầu tiên.`)
       reload()
     } catch (error) {
       setConnectStatusTone('error')
@@ -116,11 +169,7 @@ export function ConnectionsPage() {
   }
 
   async function handleDelete(channel: AppChannel) {
-    const confirmed = window.confirm(`${t('Xóa kết nối')} "${channel.name}"?`)
-    if (!confirmed) {
-      return
-    }
-
+    setPendingConfirm(null)
     setDeletingPageId(channel.id)
     setConnectStatusTone('info')
     setConnectStatus(`${t('Đang xóa kết nối')} ${channel.name}...`)
@@ -175,179 +224,236 @@ export function ConnectionsPage() {
     setPostingPageId(null)
     setSyncingPageId(null)
     setConnectingType(null)
-    setActiveManualField(null)
+    setPendingConfirm(null)
+  }
+
+  function updateForm(field: keyof ManualConnectionForm, value: string) {
+    setManualConnections((connections) => ({
+      ...connections,
+      [selectedType.platform]: { ...connections[selectedType.platform], [field]: value },
+    }))
   }
 
   return (
     <section className="space-y-6">
-      <PageHeader title={t('Kết nối tài khoản')} />
+      <PageHeader
+        title={t('Kết nối tài khoản')}
+        subtitle="Thêm kênh để Postiva đăng bài thay bạn. Mỗi kênh cần một token do Meta cấp."
+      />
 
-      <section className="rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] shadow-sm">
-          <div className="border-b border-[var(--app-border)] p-5">
-            <h2 className="text-base font-bold">{t('Kênh đã thêm', )} ({connectedChannels.length})</h2>
-          </div>
-          <div className="divide-y divide-[var(--app-border)]">
-            {connectedChannels.length === 0 ? (
-              <div className="px-5 py-6 text-sm text-[var(--muted-text)]">{t('Chưa có kênh nào được kết nối.')}</div>
-            ) : (
-              connectedChannels.map((channel) => (
-                <div key={channel.id} className="grid gap-4 px-5 py-4 md:grid-cols-[40px_minmax(0,1fr)_max-content_max-content_40px] md:items-center">
-                  <ChannelAvatar channel={channel} />
-                  <div className="min-w-0">
-                    <h3 className="truncate text-sm font-bold">{channel.name}</h3>
-                    <p className="mt-1 truncate text-xs text-[var(--muted-text)]">
-                      {channel.type} · ID {channel.accountId}
-                    </p>
-                  </div>
-                  <span className={`w-fit whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold ${channel.active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-                    {channel.active ? 'Đã lưu · cần kiểm tra hiệu lực' : t('Tạm ngừng')}
-                  </span>
-                  <div className="flex items-center gap-2 md:justify-end">
+      <section className="rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] shadow-sm" aria-labelledby="connected-heading">
+        <div className="border-b border-[var(--app-border)] p-5">
+          <h2 id="connected-heading" className="text-base font-bold">{t('Kênh đã thêm')} ({connectedChannels.length})</h2>
+        </div>
+        <div className="divide-y divide-[var(--app-border)]">
+          {connectedChannels.length === 0 ? (
+            <EmptyState
+              icon={<Link2 size={20} />}
+              title="Chưa có kênh nào"
+              description="Chọn một nền tảng ở dưới và làm theo 3 bước. Facebook Page là lựa chọn ổn định nhất hiện nay."
+            />
+          ) : (
+            connectedChannels.map((channel) => {
+              const confirming = pendingConfirm?.channelId === channel.id ? pendingConfirm.kind : null
+              return (
+                <div key={channel.id} className="px-5 py-4">
+                  <div className="grid gap-4 md:grid-cols-[40px_minmax(0,1fr)_max-content_max-content_44px] md:items-center">
+                    <ChannelAvatar channel={channel} />
+                    <div className="min-w-0">
+                      <h3 className="truncate text-sm font-bold">{channel.name}</h3>
+                      <p className="mt-1 truncate text-xs text-[var(--muted-text)]">
+                        {channel.type} · ID {channel.accountId}
+                      </p>
+                    </div>
+                    <span className={`w-fit whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold ${channel.active ? 'bg-emerald-50 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>
+                      {channel.active ? 'Đã lưu · cần kiểm tra hiệu lực' : t('Tạm ngừng')}
+                    </span>
+                    <div className="flex items-center gap-2 md:justify-end">
+                      <button
+                        type="button"
+                        onClick={() => void handleSync(channel)}
+                        disabled={syncingPageId === channel.id}
+                        className="inline-flex h-11 items-center gap-1 rounded-lg border border-[var(--app-border)] px-3 text-xs font-bold text-[var(--muted-text)] hover:bg-[var(--soft-bg)] disabled:bg-slate-100"
+                      >
+                        <RefreshCw size={13} aria-hidden="true" className={syncingPageId === channel.id ? 'animate-spin' : ''} />
+                        {syncingPageId === channel.id ? t('Đang cập nhật') : t('Cập nhật')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => channel.badge === 'Facebook'
+                          ? setPendingConfirm({ kind: 'test', channelId: channel.id })
+                          : void handleTestPost(channel)}
+                        disabled={postingPageId === channel.id}
+                        className="h-11 rounded-lg bg-blue-600 px-3 text-xs font-bold text-white hover:bg-blue-700 disabled:bg-slate-300"
+                      >
+                        {postingPageId === channel.id ? t('Đang kiểm tra') : t('Kiểm tra')}
+                      </button>
+                    </div>
                     <button
                       type="button"
-                      onClick={() => void handleSync(channel)}
-                      disabled={syncingPageId === channel.id}
-                      className="inline-flex h-8 items-center gap-1 rounded-lg border border-[var(--app-border)] px-3 text-xs font-bold text-[var(--muted-text)] hover:bg-[var(--soft-bg)] disabled:bg-slate-100"
+                      onClick={() => setPendingConfirm({ kind: 'delete', channelId: channel.id })}
+                      disabled={deletingPageId === channel.id}
+                      className="flex h-11 w-11 items-center justify-center rounded-lg text-slate-600 hover:bg-rose-50 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-50"
+                      aria-label={`${t('Xóa kết nối')} ${channel.name}`}
                     >
-                      <RefreshCw size={13} className={syncingPageId === channel.id ? 'animate-spin' : ''} />
-                      {syncingPageId === channel.id ? t('Đang cập nhật') : t('Cập nhật')}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void handleTestPost(channel)}
-                      disabled={postingPageId === channel.id}
-                      className="h-8 rounded-lg bg-blue-600 px-3 text-xs font-bold text-white hover:bg-blue-700 disabled:bg-slate-300"
-                    >
-                      {postingPageId === channel.id ? t('Đang kiểm tra') : t('Kiểm tra')}
+                      <Trash2 size={16} aria-hidden="true" />
                     </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => void handleDelete(channel)}
-                    disabled={deletingPageId === channel.id}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-300 hover:bg-rose-50 hover:text-rose-500 disabled:cursor-not-allowed disabled:opacity-50"
-                    title={t('Xóa kết nối')}
-                  >
-                    <Trash2 size={16} />
-                  </button>
+
+                  {confirming && (
+                    <div role="alertdialog" aria-label="Xác nhận" className="mt-3 flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between">
+                      <p>
+                        {confirming === 'delete'
+                          ? `Xóa kết nối "${channel.name}"? Lịch đăng đang chờ của kênh này sẽ không chạy nữa.`
+                          : 'Postiva sẽ tạo một bài thử không công khai trên Page này để kiểm tra quyền đăng. Tiếp tục?'}
+                      </p>
+                      <div className="flex gap-2">
+                        <button type="button" onClick={() => setPendingConfirm(null)} className="min-h-11 rounded-lg border border-amber-300 px-4 text-sm font-semibold hover:bg-amber-100">
+                          Hủy
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void (confirming === 'delete' ? handleDelete(channel) : handleTestPost(channel))}
+                          className={`min-h-11 rounded-lg px-4 text-sm font-bold text-white ${confirming === 'delete' ? 'bg-rose-600 hover:bg-rose-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+                        >
+                          {confirming === 'delete' ? 'Xóa kết nối' : 'Tạo bài thử'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              ))
-            )}
-          </div>
+              )
+            })
+          )}
+        </div>
       </section>
 
       {connectStatus && (
-        <p
+        <div
           role="status"
-          className={`rounded-lg px-3 py-2 text-sm font-semibold ${getStatusClassName(connectStatusTone)}`}
+          className={`flex flex-wrap items-center justify-between gap-3 rounded-lg px-4 py-3 text-sm font-semibold ${getStatusClassName(connectStatusTone)}`}
         >
-          {connectStatus}
-        </p>
+          <p>{connectStatus}</p>
+          {connectStatusTone === 'success' && connectStatus.startsWith(t('Đã kết nối')) && (
+            <Link to="/app/create" className="inline-flex min-h-11 items-center rounded-full bg-emerald-700 px-4 text-sm font-bold text-white hover:bg-emerald-800">
+              Tạo bài đầu tiên
+            </Link>
+          )}
+        </div>
       )}
 
-      <div className="grid gap-4 md:grid-cols-3">
-        {channelTypes.map((type) => {
-          const Icon = type.icon
-          const count = connectedChannels.filter((channel) => channel.type === type.type).length
-          const accountIdField = manualFieldKey(type.platform, 'accountId')
-          const accessTokenField = manualFieldKey(type.platform, 'accessToken')
-          return (
-            <div key={type.title} className="rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] p-4 shadow-sm">
-              <div className="mb-4 flex items-center justify-between">
-                <Icon className="text-blue-600" size={22} />
-                <CheckCircle2 className="text-emerald-500" size={18} />
-              </div>
-              <h2 className="text-sm font-bold">{type.title}</h2>
-              <p className={`mt-2 text-xs font-semibold ${count > 0 ? 'text-emerald-600' : 'text-[var(--muted-text)]'}`}>
-                {count > 0 ? `${count} ${t('kết nối')}` : t('Chưa kết nối')}
-              </p>
+      <section className="rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] p-5 shadow-sm" aria-labelledby="add-channel-heading">
+        <h2 id="add-channel-heading" className="text-base font-bold">Thêm kênh mới</h2>
 
-              <form autoComplete="off" data-form-type="other" className="mt-3 space-y-3" onSubmit={(event) => {
-                event.preventDefault()
-                void handleManualConnect(type.platform, type.title, type.manualPath)
-              }}>
-                <label htmlFor={`${type.platform}-account-id`} className="block text-xs font-semibold">
-                  {type.platform === 'facebook' ? t('Page ID') : t('Account ID')}
-                </label>
-                <input
-                  id={`${type.platform}-account-id`}
-                  name={`${type.platform}-connection-id`}
-                  type="text"
-                  autoComplete="off"
-                  spellCheck={false}
-                  required
-                  readOnly={!manualConnections[type.platform].accountId && activeManualField !== accountIdField}
-                  value={manualConnections[type.platform].accountId}
-                  onFocus={() => setActiveManualField(accountIdField)}
-                  onBlur={() => setActiveManualField((field) => field === accountIdField ? null : field)}
-                  onChange={(event) => setManualConnections((connections) => ({
-                    ...connections,
-                    [type.platform]: { ...connections[type.platform], accountId: event.target.value },
-                  }))}
-                  data-1p-ignore="true"
-                  data-bwignore="true"
-                  data-lpignore="true"
-                  className="h-9 w-full rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] px-3 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                  placeholder={type.platform === 'facebook' ? t('Nhập Page ID') : t('Nhập Account ID')}
-                />
-                <label htmlFor={`${type.platform}-account-name`} className="block text-xs font-semibold">
-                  {type.platform === 'facebook' ? t('Tên Page') : t('Tên tài khoản')}
-                </label>
-                <input
-                  id={`${type.platform}-account-name`}
-                  type="text"
-                  autoComplete="off"
-                  required
-                  value={manualConnections[type.platform].accountName}
-                  onChange={(event) => setManualConnections((connections) => ({
-                    ...connections,
-                    [type.platform]: { ...connections[type.platform], accountName: event.target.value },
-                  }))}
-                  className="h-9 w-full rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] px-3 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                  placeholder={type.platform === 'facebook' ? t('Nhập tên Page') : t('Nhập tên tài khoản')}
-                />
-                <label htmlFor={`${type.platform}-access-token`} className="block text-xs font-semibold">
-                  {type.platform === 'facebook' ? t('Page Access Token') : t('Access Token')}
-                </label>
-                <input
-                  id={`${type.platform}-access-token`}
-                  name={`${type.platform}-connection-token`}
-                  type="password"
-                  autoComplete="new-password"
-                  spellCheck={false}
-                  required
-                  readOnly={!manualConnections[type.platform].accessToken && activeManualField !== accessTokenField}
-                  value={manualConnections[type.platform].accessToken}
-                  onFocus={() => setActiveManualField(accessTokenField)}
-                  onBlur={() => setActiveManualField((field) => field === accessTokenField ? null : field)}
-                  onChange={(event) => setManualConnections((connections) => ({
-                    ...connections,
-                    [type.platform]: { ...connections[type.platform], accessToken: event.target.value },
-                  }))}
-                  data-1p-ignore="true"
-                  data-bwignore="true"
-                  data-lpignore="true"
-                  className="h-9 w-full rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] px-3 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                  placeholder={t('Dán access token vào đây')}
-                />
-                <button
-                  type="submit"
-                  disabled={connectingType !== null}
-                  className="h-9 w-full rounded-lg bg-blue-600 px-3 text-xs font-bold text-white hover:bg-blue-700 disabled:bg-slate-300"
-                >
-                  {connectingType === type.platform ? t('Đang kết nối...') : `${t('Kết nối')} ${type.title}`}
-                </button>
-              </form>
+        <div role="group" aria-label="Chọn nền tảng" className="mt-4 grid gap-2 sm:grid-cols-3">
+          {channelTypes.map((type) => {
+            const Icon = type.icon
+            const count = connectedChannels.filter((channel) => channel.type === type.type).length
+            const selected = type.platform === selectedPlatform
+            return (
+              <button
+                key={type.platform}
+                type="button"
+                aria-pressed={selected}
+                onClick={() => setSelectedPlatform(type.platform)}
+                className={`flex min-h-14 items-center gap-3 rounded-xl border px-4 text-left text-sm font-bold ${selected ? 'border-[#8594ea] bg-[var(--soft-bg)]' : 'border-[var(--app-border)] hover:bg-[var(--soft-bg)]'}`}
+              >
+                <Icon size={20} aria-hidden="true" className="shrink-0 text-blue-600" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate">{type.title}</span>
+                  <span className={`block text-xs font-semibold ${count > 0 ? 'text-emerald-700' : 'text-[var(--muted-text)]'}`}>
+                    {count > 0 ? `${count} ${t('kết nối')}` : t('Chưa kết nối')}
+                  </span>
+                </span>
+                {count > 0 && <Check size={18} aria-hidden="true" className="shrink-0 text-emerald-600" />}
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="mt-6 max-w-xl">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <h3 className="text-sm font-bold">Thông tin {selectedType.title}</h3>
+            <HelpTip label={`Cách lấy thông tin cho ${selectedType.title}`}>
+              <ol className="space-y-2">
+                {selectedType.steps.map((step, index) => (
+                  <li key={step}>
+                    <span className="font-bold">Bước {index + 1}.</span> {step}
+                  </li>
+                ))}
+              </ol>
+              <p className="mt-3 text-xs text-[var(--muted-text)]">{selectedType.note}</p>
+              <p className="mt-2 text-xs text-[var(--muted-text)]">Chỉ dán token của Page hoặc tài khoản do bạn quản trị. Postiva mã hóa token khi lưu và không hiển thị lại.</p>
+            </HelpTip>
+          </div>
+
+          <form
+            autoComplete="off"
+            data-form-type="other"
+            className="space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault()
+              void handleManualConnect(selectedType.platform, selectedType.title, selectedType.manualPath)
+            }}
+          >
+            <div>
+              <label htmlFor="connect-account-id" className="block text-sm font-semibold">{selectedType.idLabel}</label>
+              <input
+                id="connect-account-id"
+                name={`${selectedType.platform}-connection-id`}
+                type="text"
+                autoComplete="off"
+                spellCheck={false}
+                required
+                value={form.accountId}
+                onChange={(event) => updateForm('accountId', event.target.value)}
+                data-1p-ignore="true"
+                data-bwignore="true"
+                data-lpignore="true"
+                className={`mt-1 ${inputClass}`}
+              />
             </div>
-          )
-        })}
-      </div>
+            <div>
+              <label htmlFor="connect-account-name" className="block text-sm font-semibold">{selectedType.nameLabel}</label>
+              <input
+                id="connect-account-name"
+                type="text"
+                autoComplete="off"
+                required
+                value={form.accountName}
+                onChange={(event) => updateForm('accountName', event.target.value)}
+                className={`mt-1 ${inputClass}`}
+              />
+            </div>
+            <div>
+              <label htmlFor="connect-access-token" className="block text-sm font-semibold">{selectedType.tokenLabel}</label>
+              <input
+                id="connect-access-token"
+                name={`${selectedType.platform}-connection-token`}
+                type="password"
+                autoComplete="new-password"
+                spellCheck={false}
+                required
+                value={form.accessToken}
+                onChange={(event) => updateForm('accessToken', event.target.value)}
+                data-1p-ignore="true"
+                data-bwignore="true"
+                data-lpignore="true"
+                className={`mt-1 ${inputClass}`}
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={connectingType !== null}
+              className="min-h-11 w-full rounded-full bg-blue-600 px-4 text-sm font-bold text-white hover:bg-blue-700 disabled:bg-slate-300"
+            >
+              {connectingType === selectedType.platform ? t('Đang kết nối...') : `${t('Kết nối')} ${selectedType.title}`}
+            </button>
+          </form>
+        </div>
+      </section>
     </section>
   )
-}
-
-function manualFieldKey(platform: SocialPlatform, field: ProtectedManualField) {
-  return `${platform}:${field}`
 }
 
 function ChannelAvatar({ channel }: { channel: AppChannel }) {
@@ -357,6 +463,7 @@ function ChannelAvatar({ channel }: { channel: AppChannel }) {
     <span
       className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--soft-bg)] text-sm font-bold leading-none"
       style={{ color: channel.color }}
+      aria-hidden="true"
     >
       {initial}
       {channel.badge === 'Facebook' && <FacebookBadge className="absolute -bottom-1 -right-1 h-[18px] w-[18px] rounded-full ring-2 ring-white" />}
@@ -366,7 +473,7 @@ function ChannelAvatar({ channel }: { channel: AppChannel }) {
 
 function getStatusClassName(tone: StatusTone) {
   if (tone === 'success') {
-    return 'border border-emerald-200 bg-emerald-50 text-emerald-700'
+    return 'border border-emerald-200 bg-emerald-50 text-emerald-800'
   }
   if (tone === 'error') {
     return 'border border-rose-200 bg-rose-50 text-rose-700'

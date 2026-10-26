@@ -1,5 +1,6 @@
-import { Eye, X } from 'lucide-react'
+import { BarChart3, Eye, X } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
+import { EmptyState } from '../components/EmptyState'
 import { EditPostModal } from '../components/EditPostModal'
 import { DeletePostConfirmModal } from '../components/DeletePostConfirmModal'
 import { getPaginatedItems, PaginationControls } from '../components/PaginationControls'
@@ -66,6 +67,25 @@ export function ReportsPage() {
   }
 
   const normalizedOverview = normalizeAppOverview(overview)
+  if (normalizedOverview.totalPosts === 0 && postsState.data.length === 0) {
+    const hasChannel = normalizedOverview.channels.some((channel) => channel.active)
+    return (
+      <section>
+        <PageHeader title={t('Báo cáo trạng thái đăng', 'Publishing status report')} />
+        <div className="rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] shadow-sm">
+          <EmptyState
+            icon={<BarChart3 size={20} />}
+            title="Báo cáo sẽ xuất hiện sau bài đăng đầu tiên"
+            description={hasChannel
+              ? 'Bạn đã có kênh. Tạo và đăng một bài để thấy lịch sử, tỷ lệ thành công và số bài theo nền tảng.'
+              : 'Kết nối một kênh, rồi đăng bài đầu tiên để thấy lịch sử, tỷ lệ thành công và số bài theo nền tảng.'}
+            actionLabel={hasChannel ? 'Tạo bài đầu tiên' : 'Xem hướng dẫn bắt đầu'}
+            actionTo={hasChannel ? '/app/create' : '/app/start'}
+          />
+        </div>
+      </section>
+    )
+  }
   const reportPosts = sortPostsNewestFirst(postsState.data
     .filter((post) => post.status === 'Published' || post.status === 'Failed'))
   const paginatedReports = getPaginatedItems(reportPosts, reportPage, reportPageSize)
@@ -101,7 +121,7 @@ export function ReportsPage() {
                     setChartPeriod(value)
                     setSelectedChartBucket(null)
                   }}
-                  className={`flex h-10 w-10 items-center justify-center rounded-full p-0 text-[10px] font-bold transition ${chartPeriod === value ? 'bg-blue-600 text-white shadow-sm' : 'text-[var(--muted-text)] hover:bg-[var(--soft-bg)]'}`}
+                  className={`flex h-11 min-w-11 items-center justify-center rounded-full px-3 text-xs font-bold transition ${chartPeriod === value ? 'bg-blue-600 text-white shadow-sm' : 'text-[var(--muted-text)] hover:bg-[var(--soft-bg)]'}`}
                 >
                   {label}
                 </button>
@@ -125,7 +145,7 @@ export function ReportsPage() {
                     style={{ height: bucket.count === 0 ? '2px' : `${Math.round((bucket.count / maxPostsInBucket) * 100)}%` }}
                   />
                 </span>
-                <span className={`whitespace-nowrap text-xs ${selectedChartBucket === bucket.key ? 'font-bold text-blue-600' : 'text-slate-400 group-hover:text-blue-600'}`}>{bucket.label}</span>
+                <span className={`whitespace-nowrap text-xs ${selectedChartBucket === bucket.key ? 'font-bold text-blue-600' : 'text-slate-600 group-hover:text-blue-600'}`}>{bucket.label}</span>
               </button>
             ))}
           </div>
@@ -233,10 +253,10 @@ export function ReportsPage() {
                 key={postRowKey(post)}
                 type="button"
                 onClick={() => setDetailPost(post)}
-                className="grid w-full grid-cols-[90px_minmax(0,1fr)_110px_90px_32px] items-center gap-4 px-5 py-4 text-left text-sm hover:bg-[var(--soft-bg)]"
+                className="flex w-full flex-wrap items-center gap-x-4 gap-y-2 px-5 py-4 text-left text-sm hover:bg-[var(--soft-bg)] md:grid md:grid-cols-[90px_minmax(0,1fr)_110px_90px_32px]"
               >
                 <PlatformBadge platform={post.platform} />
-                <span className="truncate text-slate-700" title={post.content}>{post.content || 'Không có nội dung chữ.'}</span>
+                <span className="basis-full truncate text-slate-700 md:basis-auto" title={post.content}>{post.content || 'Không có nội dung chữ.'}</span>
                 <StatusBadge status={post.status} />
                 <span className="text-xs leading-5 text-[var(--muted-text)]">{formatPostDateTime(post.time)}</span>
                 <span className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400">
