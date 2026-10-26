@@ -100,7 +100,7 @@ export function ConnectionsPage() {
   }
 
   if (error || !channels) {
-    return <PageState title="Không thể tải danh sách kết nối" description={error ?? undefined} />
+    return <PageState title="Không thể tải danh sách kết nối" description={error ?? undefined} onRetry={reload} />
   }
 
   const connectedChannels = channels.filter((channel) => ['Facebook', 'Instagram', 'Threads'].includes(channel.badge))

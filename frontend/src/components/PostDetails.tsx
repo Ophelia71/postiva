@@ -151,7 +151,7 @@ export function PostDetailModal({
           </div>
           <div className="flex items-center gap-1">
             {onEdit && (
-              <button type="button" onClick={onEdit} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-violet-50 hover:text-violet-700" title="Sửa bài">
+              <button type="button" onClick={onEdit} aria-label="Sửa bài" className="flex h-11 w-11 items-center justify-center rounded-lg text-slate-600 hover:bg-violet-50 hover:text-violet-700" title="Sửa bài">
                 <Pencil size={16} />
               </button>
             )}
@@ -161,11 +161,11 @@ export function PostDetailModal({
               </button>
             )}
             {onDelete && (
-              <button type="button" onClick={onDelete} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600" title="Xóa bài">
+              <button type="button" onClick={onDelete} aria-label="Xóa bài" className="flex h-11 w-11 items-center justify-center rounded-lg text-slate-600 hover:bg-rose-50 hover:text-rose-600" title="Xóa bài">
                 <Trash2 size={16} />
               </button>
             )}
-            <button type="button" onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-slate-100" title="Đóng">
+            <button type="button" onClick={onClose} aria-label="Đóng" className="flex h-11 w-11 items-center justify-center rounded-lg hover:bg-slate-100" title="Đóng">
               <X size={17} />
             </button>
           </div>

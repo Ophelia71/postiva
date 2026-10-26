@@ -13,6 +13,8 @@ import { sortPostsNewestFirst } from '../lib/posts'
 import { usePreferences } from '../lib/preferences'
 import { PageHeader, PageState, PlatformBadge, StatusBadge } from '../components/PageUi'
 
+type PendingScheduleAction = { kind: 'resolvePublished' | 'resolveNotPublished' | 'retry'; post: AppPost }
+
 type CalendarDay = {
   date: Date
   inCurrentMonth: boolean
@@ -41,6 +43,8 @@ export function SchedulePage() {
   const [detailPost, setDetailPost] = useState<AppPost | null>(null)
   const [deleteCandidate, setDeleteCandidate] = useState<AppPost | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [pendingAction, setPendingAction] = useState<PendingScheduleAction | null>(null)
+  const [deleteError, setDeleteError] = useState('')
 
   useEffect(() => {
     const refresh = () => {
@@ -128,7 +132,17 @@ export function SchedulePage() {
           }`}
         >
           <span>{publishNotice.message}</span>
-          <button type="button" onClick={() => setPublishNotice(null)} className="shrink-0 font-semibold underline">Đóng</button>
+          <button type="button" onClick={() => setPublishNotice(null)} className="min-h-11 shrink-0 font-semibold underline">Đóng</button>
+        </div>
+      )}
+
+      {pendingAction && (
+        <div role="alertdialog" aria-label="Xác nhận" className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between">
+          <p>{confirmMessage(pendingAction)}</p>
+          <div className="flex shrink-0 gap-2">
+            <button type="button" onClick={() => setPendingAction(null)} className="min-h-11 rounded-lg border border-amber-300 px-4 font-semibold hover:bg-amber-100">Hủy</button>
+            <button type="button" onClick={() => void runPendingAction()} className="min-h-11 rounded-lg bg-amber-700 px-4 font-bold text-white hover:bg-amber-800">Xác nhận</button>
+          </div>
         </div>
       )}
 
@@ -269,11 +283,11 @@ export function SchedulePage() {
                 </button>
                 {post.status === 'Unknown' ? (
                   <div className="flex flex-wrap gap-1">
-                    <button type="button" onClick={() => void resolveUnknown(post, true)} className="rounded border border-emerald-200 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">Đã đăng</button>
-                    <button type="button" onClick={() => void resolveUnknown(post, false)} className="rounded border border-amber-300 px-2 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-50">Chưa đăng · thử lại</button>
+                    <button type="button" onClick={() => setPendingAction({ kind: 'resolvePublished', post })} className="min-h-11 rounded border border-emerald-200 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">Đã đăng</button>
+                    <button type="button" onClick={() => setPendingAction({ kind: 'resolveNotPublished', post })} className="min-h-11 rounded border border-amber-300 px-3 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-50">Chưa đăng · thử lại</button>
                   </div>
                 ) : post.status === 'Failed' ? (
-                  <button type="button" onClick={() => void retryFailed(post)} className="rounded border border-blue-200 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50">Thử lại</button>
+                  <button type="button" onClick={() => setPendingAction({ kind: 'retry', post })} className="min-h-11 rounded border border-blue-200 px-3 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50">Thử lại</button>
                 ) : <span />}
               </div>
             ))
@@ -321,7 +335,8 @@ export function SchedulePage() {
         <DeletePostConfirmModal
           post={deleteCandidate}
           deleting={isDeleting}
-          onCancel={() => setDeleteCandidate(null)}
+          error={deleteError}
+          onCancel={() => { setDeleteError(''); setDeleteCandidate(null) }}
           onConfirm={() => void deletePost(deleteCandidate)}
         />
       )}
@@ -367,28 +382,39 @@ export function SchedulePage() {
 
   async function deletePost(post: AppPost) {
     setIsDeleting(true)
+    setDeleteError('')
     try {
       const response = await api.delete<DeletePostResponse>(`/app-data/posts/${post.id}`)
       if (!response.data.deleted) {
-        window.alert(response.data.message || response.data.facebookMessage || 'Không thể xóa bài viết.')
+        setDeleteError(response.data.message || response.data.facebookMessage || 'Không thể xóa bài viết.')
         return
       }
       setDeleteCandidate(null)
       setDetailPost((current) => current?.id === post.id ? null : current)
       reload()
     } catch (error) {
-      window.alert(getErrorMessage(error, 'Không thể xóa bài viết.'))
+      setDeleteError(getErrorMessage(error, 'Không thể xóa bài viết.'))
     } finally {
       setIsDeleting(false)
     }
   }
 
+  function confirmMessage(action: PendingScheduleAction) {
+    if (action.kind === 'resolvePublished') return 'Hãy xác nhận bạn đã mở nền tảng và tìm thấy bài đăng. Đánh dấu lịch là đã đăng?'
+    if (action.kind === 'resolveNotPublished') return 'Chỉ tiếp tục nếu bạn đã kiểm tra Page/tài khoản đích và chắc chắn bài chưa xuất hiện. Postiva sẽ thử đăng lại; nếu kết quả trước còn chưa rõ, thao tác này có thể tạo bài trùng.'
+    return 'Thử đăng lại bài này ngay? Hãy kiểm tra trước rằng bài chưa được đăng trên nền tảng.'
+  }
+
+  async function runPendingAction() {
+    const action = pendingAction
+    setPendingAction(null)
+    if (!action) return
+    if (action.kind === 'retry') await retryFailed(action.post)
+    else await resolveUnknown(action.post, action.kind === 'resolvePublished')
+  }
+
   async function resolveUnknown(post: AppPost, published: boolean) {
     if (!post.scheduleId) return
-    const confirmed = window.confirm(published
-      ? 'Hãy xác nhận bạn đã mở nền tảng và tìm thấy bài đăng. Đánh dấu lịch là đã đăng?'
-      : 'Chỉ tiếp tục nếu bạn đã kiểm tra Page/tài khoản đích và chắc chắn bài chưa xuất hiện. Postiva sẽ thử đăng lại; nếu kết quả trước còn chưa rõ, thao tác này có thể tạo bài trùng.')
-    if (!confirmed) return
     try {
       await api.post(`/publishing/${post.scheduleId}/resolve`, {
         result: published ? 'CONFIRMED_PUBLISHED' : 'CONFIRMED_NOT_PUBLISHED',
@@ -406,7 +432,7 @@ export function SchedulePage() {
   }
 
   async function retryFailed(post: AppPost) {
-    if (!post.scheduleId || !window.confirm('Thử đăng lại bài này ngay? Hãy kiểm tra trước rằng bài chưa được đăng trên nền tảng.')) return
+    if (!post.scheduleId) return
     try {
       await api.post(`/publishing/${post.scheduleId}/retry`)
       setPublishNotice({ tone: 'info', message: 'Đã nhận yêu cầu thử lại. Trạng thái sẽ tự cập nhật khi worker xử lý xong.' })

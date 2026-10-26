@@ -1,135 +1,176 @@
 # Plan đăng bài tự động hằng ngày
 
-> Trạng thái: **chỉ là plan, chưa triển khai.** Tính năng này cần thay đổi backend (migration, job, API), khác với đợt sửa onboarding chỉ chạm frontend. Cần chủ dự án duyệt các quyết định ở mục "Quyết định cần chốt" trước khi bắt đầu.
+> Trạng thái: **chỉ là plan, chưa triển khai.** Cần sửa backend (migration, job, API) nên khác với đợt onboarding chỉ chạm frontend. Bản này đã được một subagent Plan rà lại với mã nguồn (đọc code, không chạy ứng dụng); các điểm chưa kiểm chứng được ghi rõ ở cuối.
 
 ## Mục tiêu
 
-Người dùng đặt một lần: "mỗi ngày lúc 19:00, đăng một bài về chủ đề X lên Facebook Page Y". Postiva tự soạn nội dung, đưa vào hàng đợi và đăng đúng giờ, không cần mở ứng dụng mỗi ngày.
+Người dùng đặt một lần: "mỗi ngày lúc 19:00 đăng một bài về chủ đề X lên Facebook Page Y". Postiva tự soạn nội dung, đưa vào hàng đợi và đăng đúng giờ.
 
-Không phải mục tiêu của đợt đầu: đăng lặp lại cùng một nội dung, đăng chéo nhiều nền tảng phức tạp, chọn giờ đăng tối ưu bằng dữ liệu tương tác (hiện chưa đồng bộ lượt xem/tương tác).
+Không nằm trong đợt đầu: lặp lại cùng một nội dung, đăng nhiều nền tảng trong một rule, chọn giờ tối ưu theo dữ liệu tương tác (hiện chưa đồng bộ lượt xem/tương tác), Instagram và Threads.
 
-## Điều kiện nền (đã có sẵn trong backend)
+## Nguyên tắc thiết kế
 
-| Thành phần | Dùng lại như thế nào |
+1. **Automation chỉ tạo lịch, không bao giờ gọi Meta.** Bài tự động là một dòng `scheduled_posts` bình thường; `PublishingScheduler` và cơ chế claim/lease hiện có lo việc đăng, retry, `UNKNOWN`. Không sửa máy trạng thái này.
+2. **Khởi đầu bằng chế độ duyệt (`REVIEW`).** `docs/META_PAGE_TOKEN_PILOT.md` khuyến cáo chưa dùng lịch tự động cho nội dung quan trọng cho tới khi đã diễn tập timeout, restart và đối soát `UNKNOWN` trên staging. `AUTO` chỉ mở sau, theo từng người dùng.
+3. **Mỗi rule một Page** (một tài khoản mạng xã hội). Khóa duy nhất `(rule_id, run_date)` khi đó đúng bằng "tối đa một bài mỗi kênh mỗi ngày". Thay cho danh sách `targets` ở bản nháp trước.
+
+## Điểm sửa so với bản nháp trước (đã đối chiếu code)
+
+| # | Bản nháp sai/thiếu | Thực tế trong code | Cách xử lý |
+|---|---|---|---|
+| 1 | Một cột `brief` là đủ để soạn bài | `PostService.generate` (`post/service/PostService.java:68-94`) dựa vào người dùng đang đăng nhập (`requireCurrentUserId`) và cần đủ trường của `GeneratePostRequest`: tên sản phẩm, mô tả, khách hàng mục tiêu, điểm nổi bật, mục tiêu, giọng điệu, nền tảng. | Tách `generateForUser(userId, request, key)`. `PublishingService.create` và `SocialAccountService.requireCurrentUserAccount` cần bản nhận `userId` tương tự; repository đã có `findByIdAndUserIdAndDisconnectedAtIsNull`. `brief` lưu dạng JSONB khớp các trường này. |
+| 2 | Lưu `draft_content` riêng | `generate` đã lưu một dòng `generated_posts` ở trạng thái `DRAFT`; sửa nháp đã có qua `PUT /api/posts/{id}` (`PostController.java:262`). | Chỉ lưu `post_id` trong `automation_runs`. |
+| 3 | Chỉ nói "hết quota thì dừng" | `AiUsageService.reserve` ném cùng một `RateLimitException` (429) cho 4 trường hợp: đang có yêu cầu chạy, hết quota kỳ, hết hạn mức ngày của người dùng, hết hạn mức ngày toàn hệ thống (`:61, 62, 69, 77`). | Thêm mã lý do vào `RateLimitException`, hoặc kiểm tra trước `AiUsageService.summary(userId).remaining()` (public, `:33`). |
+| 4 | "Free ≈ 30 lượt/kỳ là đủ" | Hạn mức ngày: 20 lượt/người và 100 lượt toàn hệ thống (`application.yml:222`). Automation cạnh tranh với việc dùng tay. Free 30 lượt/kỳ khớp V11, Pro 50. | Giữ một phần quota cho dùng tay; cảnh báo khi tạo rule (xem quyết định 4). |
+| 5 | Phát hiện token/quyền lỗi dễ dàng | Chỉ có hàm private `containsTokenOrPermissionFailure` khớp chữ tiếng Việt (`scheduler/service/ScheduledPostProcessingService.java:268-273`). | Thêm cột `scheduled_posts.failure_code` (nullable, chỉ thêm) và ghi tại đó. |
+| 6 | "Có giới hạn tần suất như API AI" | Không có; `PostService` chỉ dùng `sha256` của limiter. Chốt chặn thực tế là các hạn mức usage. | Bỏ ý đó khỏi plan. |
+| 7 | Chống duyệt hai lần bằng ràng buộc ở `scheduled_posts` | `scheduled_posts` không có ràng buộc duy nhất theo (bài, tài khoản). | Chống trùng bằng cập nhật có điều kiện trên `automation_runs` (mục "Duyệt"). |
+| 8 | Không nhắc | `@EnableScheduling` bật toàn cục (`PostivaApplication.java:8`) và không job nào có khóa liên-instance ngoài SQL claim; phục hồi lease `PUBLISHING→UNKNOWN` chỉ chạy trong `claimDue` (`ScheduledPostClaimService.java:47`). | Planner phải tự an toàn trên DB, và đọc trạng thái bằng polling. |
+| 9 | Không nhắc | `DatabaseMigrationTest.java:84` khẳng định phiên bản Flyway là `"12"`. | Cập nhật lên 13. |
+
+## Mô hình dữ liệu: `V13__daily_autoposting.sql`
+
+```sql
+CREATE TABLE automation_rules (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  social_account_id UUID REFERENCES social_accounts(id) ON DELETE SET NULL,
+  platform VARCHAR(20) NOT NULL CHECK (platform IN ('FACEBOOK','INSTAGRAM','THREADS')),
+  name VARCHAR(120) NOT NULL,
+  status VARCHAR(10) NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','PAUSED')),
+  paused_reason VARCHAR(40), paused_at TIMESTAMPTZ,
+  timezone VARCHAR(64) NOT NULL,
+  time_of_day TIME NOT NULL,
+  days_of_week SMALLINT NOT NULL DEFAULT 127 CHECK (days_of_week BETWEEN 1 AND 127), -- bitmask
+  approval_mode VARCHAR(10) NOT NULL DEFAULT 'REVIEW' CHECK (approval_mode IN ('REVIEW','AUTO')),
+  lead_minutes INTEGER NOT NULL DEFAULT 720 CHECK (lead_minutes BETWEEN 60 AND 1440),
+  brief JSONB NOT NULL,                       -- các trường của GeneratePostRequest, trừ platforms
+  default_media_ids JSONB NOT NULL DEFAULT '[]',
+  version INTEGER NOT NULL DEFAULT 1,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE INDEX idx_automation_rules_user ON automation_rules(user_id);
+CREATE INDEX idx_automation_rules_active ON automation_rules(status) WHERE status = 'ACTIVE';
+
+CREATE TABLE automation_runs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  rule_id UUID NOT NULL REFERENCES automation_rules(id) ON DELETE CASCADE,
+  run_date DATE NOT NULL,                     -- ngày địa phương theo múi giờ của rule
+  planned_for TIMESTAMPTZ NOT NULL,
+  status VARCHAR(20) NOT NULL CHECK (status IN
+    ('GENERATING','PENDING_REVIEW','SCHEDULED','SKIPPED','FAILED')),
+  claim_token UUID, lease_until TIMESTAMPTZ,
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  idempotency_key UUID NOT NULL,
+  post_id UUID REFERENCES generated_posts(id) ON DELETE SET NULL,
+  scheduled_post_id UUID REFERENCES scheduled_posts(id) ON DELETE SET NULL,
+  error VARCHAR(80),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (rule_id, run_date));
+CREATE UNIQUE INDEX uq_automation_runs_sched ON automation_runs(scheduled_post_id) WHERE scheduled_post_id IS NOT NULL;
+CREATE INDEX idx_automation_runs_review ON automation_runs(status, planned_for);
+
+ALTER TABLE scheduled_posts ADD COLUMN failure_code VARCHAR(40);
+```
+
+Đây là bản phác thảo cho người triển khai; cần đối chiếu tên bảng/cột thật (`social_accounts`, `generated_posts`) trước khi chạy.
+
+## Planner (`AutomationPlanner`, `@Scheduled` mỗi 5 phút, sau cờ `postiva.automation.enabled`, mặc định tắt)
+
+1. **Chèn run.** Với mỗi rule ACTIVE (chủ tài khoản `ACTIVE`, kênh còn kết nối và có token), tính khung giờ kế tiếp và `run_date`. Nếu nằm trong `lead_minutes` và khớp thứ trong tuần:
+   `INSERT ... ON CONFLICT (rule_id, run_date) DO NOTHING RETURNING id`. Chỉ instance thắng mới đi tiếp. `idempotency_key = UUID.nameUUIDFromBytes(ruleId|runDate|ruleVersion)`.
+2. **Claim và phục hồi.** Instance thắng ghi `claim_token` và `lease_until`, giống `claimDue`. Run `GENERATING` quá hạn lease (quét bằng `FOR UPDATE SKIP LOCKED`) chỉ được thử lại bằng đúng key đó:
+   - nếu usage đã `SUCCEEDED` thì `reserve` trả bài đã có (`AiUsageService.java:51-54`);
+   - nếu `RESERVED` hoặc `UNKNOWN` thì trả 409 → run `FAILED`, bỏ qua ngày đó, **không** gọi nhà cung cấp lần hai.
+   Nội dung yêu cầu phải xác định (deterministic) để hash ổn định; đưa `run_date` và 3 tiêu đề gần nhất vào `additionalInfo` để tránh lặp.
+3. **Soạn nội dung** bằng `generateForUser`, ngoài transaction (như `generate` hiện làm). Ghi `post_id`. `REVIEW` → `PENDING_REVIEW`; `AUTO` → bước 4.
+4. **Duyệt hoặc tự tạo lịch**, trong một transaction:
+   `UPDATE automation_runs SET status='SCHEDULED' WHERE id=? AND status IN ('PENDING_REVIEW','GENERATING') AND planned_for > now() RETURNING ...`
+   Nếu trả về một dòng thì gọi `PublishingService.createForUser(userId, postId, accountId, platform, plannedFor)` và ghi `scheduled_post_id`. Cập nhật có điều kiện này là chốt chặn "đúng một lần" cho việc duyệt hai lần và cho tranh chấp giữa planner với người dùng. Dùng lại các kiểm tra sẵn có của lịch đăng: thời điểm phải ở tương lai; tài khoản, nền tảng và publisher phải tồn tại.
+5. **Hết hạn.** Một sweeper đánh `SKIPPED` cho run `PENDING_REVIEW` có `planned_for <= now`.
+
+## Bảo vệ AI
+
+- `generateForUser` giữ nguyên reserve/succeed/fail: quota, ngân sách toàn hệ thống, `ensureEnabled` (công tắc admin) và kiểm tra yêu cầu đang chạy.
+- Kiểm tra trước `summary().remaining()`:
+  - còn 0 → tạm dừng rule với `AI_QUOTA_EXHAUSTED`;
+  - đang bận hoặc chạm hạn mức ngày → hoãn sang lần quét sau trong cửa sổ `lead_minutes`; hết cửa sổ thì `SKIPPED` với `AI_BUSY`;
+  - 503 (AI tắt/ngân sách) → hoãn rồi bỏ qua; chỉ tạm dừng rule sau 3 ngày liên tiếp lỗi.
+- Giới hạn số rule mỗi người dùng (đề xuất 3).
+
+## Điều kiện tạm dừng
+
+| Điều kiện | Nơi phát hiện |
 |---|---|
-| `scheduled_posts` với claim token, lease 30 phút, retry backoff, trạng thái `SCHEDULED/PUBLISHING/PUBLISHED/FAILED/UNKNOWN/CANCELLED` | Bài tự động chỉ là một lịch đăng bình thường. **Không sửa máy trạng thái này.** |
-| `PublishingScheduler` + `ScheduledPostClaimService` (`FOR UPDATE SKIP LOCKED`) | Giữ nguyên làm nơi đăng. Automation chỉ *tạo* lịch, không tự gọi Meta. |
-| Module `ai` + quota Free/Pro + ngân sách ngày/tháng + công tắc AI | Mỗi bài tự soạn trừ đúng quota và bị chặn khi hết ngân sách. |
-| Quy tắc `UNKNOWN` không tự gửi lại | Giữ nguyên; automation phải **tạm dừng** khi gặp `UNKNOWN`/token lỗi (xem "Bảo vệ"). |
+| Token hết hạn/thiếu | Planner kiểm tra trước, mô phỏng `ensureTokenUsable` (`SocialAccountService.java:427`). Sau sự cố: `failure_code=TOKEN` ghi tại `ScheduledPostProcessingService.java:199-203` và `:235`. |
+| Bài gần nhất ở `UNKNOWN` | Trước khi tạo run, kiểm tra bài của run trước. `PUBLISHING` hoặc `UNKNOWN` chặn run mới; `UNKNOWN` tạm dừng rule. Từ chối bật lại khi còn bài chưa đối soát (`resolveUnknown`, `PublishingService.java:178`). |
+| Chủ tài khoản bị khóa | Truy vấn planner lọc `status='ACTIVE'`; đồng thời gọi `pauseAllForUser` từ `UserAccountStatusService.changeStatus` (nhánh `lockUser`, gần `:60`). |
+| Kênh bị ngắt | Planner kiểm tra `disconnected_at IS NULL`; thêm móc ở `SocialAccountService.disconnect` (`:243`) và `removeProviderUserData` (`:253`). `ON DELETE SET NULL` để lại tài khoản null, planner coi là tạm dừng. |
 
-Lưu ý từ `docs/META_PAGE_TOKEN_PILOT.md`: pilot hiện khuyến cáo *không dùng lịch tự động cho nội dung quan trọng* cho tới khi đã diễn tập timeout, restart và đối soát `UNKNOWN` trên staging. Vì vậy phát hành bắt đầu ở chế độ **duyệt trước khi đăng**, không phải tự động hoàn toàn.
+Chỉ người dùng mới bật lại được; mở khóa tài khoản không tự bật lại rule.
 
-## Thiết kế đề xuất
+## Múi giờ và DST
 
-### Hai chế độ duyệt
+Lưu múi giờ IANA và `LocalTime`, kiểm tra với `ZoneId.getAvailableZoneIds()`. Tính `ZonedDateTime.of(localDate, time, zone).toInstant()`: khoảng trống DST dịch tiến, khoảng chồng lấn lấy thời điểm sớm hơn. `run_date` là ngày địa phương. Sửa rule tăng `version`, chỉ ảnh hưởng các run sau. Kiểm thử `Asia/Ho_Chi_Minh` lúc 00:30 và 23:30, và `America/New_York` vào hai ngày chuyển giờ.
 
-| Chế độ | Hành vi | Khi nào dùng |
-|---|---|---|
-| `REVIEW` (mặc định) | Bài được soạn trước giờ đăng, nằm trong hàng đợi chờ duyệt. Chỉ khi người dùng bấm Duyệt mới tạo `scheduled_post`. Quá giờ mà chưa duyệt thì bỏ qua ngày đó. | Đợt đầu và với người dùng mới. |
-| `AUTO` | Soạn xong là tạo `scheduled_post` ngay. | Mở sau khi đã chạy ổn định ở `REVIEW` và đã đối soát an toàn. Chỉ bật theo từng người dùng. |
+## API (`/api/automation`)
 
-Giữ bài ở bảng automation cho tới khi duyệt, thay vì thêm trạng thái "chờ duyệt" vào `scheduled_posts`, để máy trạng thái của scheduler không đổi.
+Xác thực theo `SecurityConfig` (`anyRequest().hasRole("USER")`); người dùng lấy từ `CurrentUserService`; quyền sở hữu kiểm bằng `findByIdAndUserId` trả 404, như `PublishingService`.
 
-### Mô hình dữ liệu (migration mới, V13 trở đi)
+- Rule: `GET/POST /rules`, `PUT/DELETE /rules/{id}`, `POST /rules/{id}/pause` và `/resume`, `GET /rules/{id}/preview` (giờ đăng 7 ngày tới, không tốn quota).
+- Run: `GET /runs?status=`, `PUT /runs/{id}` (chuyển tiếp sang cập nhật bài hiện có), `POST /runs/{id}/approve` và `/skip`.
+- Kiểm tra khi tạo/sửa: tài khoản thuộc người dùng và đang kết nối; Instagram cần media (chưa hỗ trợ ở pha đầu); cờ `AUTO` phải được phép cho người dùng đó.
+- Phản hồi dùng `ApiResponse` và lỗi tiếng Việt qua `ResponseStatusException`.
 
-`automation_rules`
+## Frontend
 
-| Cột | Ghi chú |
-|---|---|
-| `id`, `user_id` | |
-| `name`, `active` | |
-| `timezone` | IANA (ví dụ `Asia/Ho_Chi_Minh`), không lưu offset cố định |
-| `time_of_day`, `days_of_week` | Giờ địa phương; mặc định cả tuần |
-| `targets` | Danh sách kênh (platform + account id) đã kết nối thuộc người dùng |
-| `source_type` | `BRIEF` (soạn từ mô tả/chủ đề, đợt đầu), sau này `TEMPLATE`, `EVERGREEN_LIST` |
-| `brief` | Mô tả sản phẩm/chủ đề, giọng điệu, hashtag; kèm ảnh mặc định nếu có |
-| `approval_mode` | `REVIEW` hoặc `AUTO` |
-| `lead_minutes` | Soạn trước giờ đăng bao lâu (mặc định 12 giờ) |
-| `paused_reason`, `paused_at` | Lý do tự động dừng |
-| `created_at`, `updated_at` | |
+- `AutomationPage.tsx` tại `/app/automation`; thêm route ở `App.tsx` và mục điều hướng trong `navItems`.
+- Wizard 4 bước dùng lại mẫu stepper của `CreatePostPage` (`goToStep`, `stepIssue`): kênh, giờ và ngày, chủ đề và giọng điệu, duyệt hay tự động kèm xem trước 7 ngày.
+- `EmptyState` cho trạng thái chưa có rule; `HelpTip` cho giải thích quota và cảnh báo `AUTO`.
+- Hàng đợi chờ duyệt hiện ở `SchedulePage` và dẫn từ `StartPage`; trạng thái rule (Đang chạy / Tạm dừng kèm lý do) luôn nhìn thấy, không chỉ dựa vào màu.
+- Hộp xác nhận trước khi chọn `AUTO`: bài sẽ đăng công khai mà không qua bước duyệt.
+- Mở rộng onboarding: bước 4 tùy chọn "Bật đăng hằng ngày" sau bài đầu tiên đã đăng.
 
-`automation_runs`
+## Kiểm thử
 
-| Cột | Ghi chú |
-|---|---|
-| `id`, `rule_id`, `run_date` (ngày địa phương) | **Khóa duy nhất `(rule_id, run_date)`** để mỗi ngày chỉ có một lần chạy, kể cả khi hai worker cùng quét |
-| `status` | `GENERATING`, `PENDING_REVIEW`, `SCHEDULED`, `SKIPPED`, `FAILED` |
-| `draft_content` | Nội dung đã soạn, người dùng sửa được trước khi duyệt |
-| `scheduled_post_id` | Liên kết sang lịch đăng sau khi duyệt/tự tạo |
-| `error`, `ai_usage_id` | Để đối chiếu quota và chi phí |
+- **Unit:** tính khung giờ (kể cả DST); phân loại điều kiện tạm dừng; lỗi AI giả lập 429, 503, 403.
+- **Tích hợp PostgreSQL** (nhân bản `ScheduledPostClaimIntegrationTest`, dùng `POSTIVA_TEST_DB_URL`):
+  1. Hai planner chạy song song chỉ tạo một run.
+  2. Duyệt hai lần chỉ tạo một dòng `scheduled_posts`.
+  3. Phục hồi sau crash dùng cùng key, không gọi nhà cung cấp lần hai.
+  4. Hết quota thì tạm dừng rule.
+  5. `UNKNOWN` chặn run kế tiếp.
+  6. Người dùng bị khóa bị bỏ qua.
+  7. Truy cập chéo người dùng trả 404.
+- Cập nhật `DatabaseMigrationTest` lên phiên bản 13. Frontend hiện chỉ có `tests/auth-session.test.mjs`, cần thêm khung test (xem `ONBOARDING_PLAN.md`).
 
-### Luồng hằng ngày
+## Giai đoạn
 
-1. **Planner** chạy mỗi 10–15 phút. Với mỗi rule đang `active`, nếu giờ đăng kế tiếp nằm trong `lead_minutes` và chưa có `automation_run` cho ngày đó, thì chèn một dòng `GENERATING`. Ràng buộc duy nhất làm bước này an toàn khi chạy song song; ai chèn được thì người đó soạn.
-2. **Soạn nội dung** bằng dịch vụ AI hiện có. Trừ quota, tôn trọng ngân sách; lỗi → `FAILED` kèm lý do, **không** tự thử lại vô hạn.
-3. `REVIEW`: lưu `draft_content`, trạng thái `PENDING_REVIEW`, thông báo người dùng. Người dùng sửa và Duyệt → tạo `scheduled_post` đúng giờ rule → `SCHEDULED`. Không duyệt kịp → `SKIPPED`.
-   `AUTO`: tạo `scheduled_post` ngay.
-4. Từ đây `PublishingScheduler` lo phần đăng, retry và ghi log như mọi lịch khác.
-
-### Bảo vệ (bắt buộc trước khi mở cho người dùng thật)
-
-- **Cờ tính năng** `POSTIVA_AUTOMATION_ENABLED`, mặc định tắt; thêm cờ theo người dùng cho `AUTO`.
-- **Tự tạm dừng rule** khi: token hết hạn/thiếu quyền, bài gần nhất của rule ở `UNKNOWN`, hết quota/ngân sách AI, kênh bị ngắt. Ghi `paused_reason` và hiển thị rõ; chỉ người dùng mới bật lại.
-- **Giới hạn một bài mỗi kênh mỗi ngày mỗi rule**, và giới hạn số rule mỗi người dùng.
-- **Chống lặp nội dung**: so với vài bài gần nhất của cùng rule, nếu quá giống thì soạn lại một lần rồi bỏ qua ngày đó; Meta có thể coi bài lặp là spam.
-- **Instagram cần media**: rule nhắm Instagram bắt buộc có ảnh mặc định hoặc nguồn ảnh; nếu không thì không cho lưu.
-- **Chủ tài khoản bị khóa** → rule dừng (đã có hành vi tương tự với lịch).
-- **Nhật ký kiểm toán** cho mọi lần tạo, sửa, bật, tắt rule.
-- Thời điểm lưu theo UTC như hiện tại; chỉ rule giữ múi giờ IANA để tính "19:00 hôm nay". Kiểm thử ranh giới ngày và chuyển giờ mùa hè.
-
-### API đề xuất
-
-| Phương thức | Đường dẫn | Mục đích |
-|---|---|---|
-| `GET/POST` | `/api/automation/rules` | Danh sách, tạo rule |
-| `PUT/DELETE` | `/api/automation/rules/{id}` | Sửa, xóa |
-| `POST` | `/api/automation/rules/{id}/pause` · `/resume` | Tạm dừng, bật lại |
-| `GET` | `/api/automation/runs?status=PENDING_REVIEW` | Hàng đợi chờ duyệt, lịch sử chạy |
-| `PUT` | `/api/automation/runs/{id}` | Sửa bản nháp |
-| `POST` | `/api/automation/runs/{id}/approve` · `/skip` | Duyệt hoặc bỏ qua |
-| `GET` | `/api/automation/rules/{id}/preview` | Giờ đăng 7 ngày tới (không soạn nội dung, không tốn quota) |
-
-Mọi endpoint theo chủ sở hữu (`user_id` lấy từ JWT), kiểm tra kênh thuộc người dùng, giới hạn tần suất giống các API AI hiện có.
-
-## Giao diện (frontend)
-
-- Trang mới **Đăng tự động** (`/app/automation`), mục thứ 5 trong điều hướng desktop; trên mobile nằm trong menu tài khoản để thanh dưới giữ 4 mục.
-- **Wizard 4 bước**, mỗi bước một quyết định: (1) Chọn kênh, (2) Giờ và ngày trong tuần, (3) Chủ đề/mô tả sản phẩm và giọng điệu, (4) Duyệt trước hay tự động, kèm bản xem trước 7 ngày tới.
-- **Hàng đợi chờ duyệt** nổi lên ở đầu `/app/schedule` và trong checklist onboarding: thẻ bài nháp, sửa tại chỗ, nút Duyệt / Bỏ qua, hiện giờ đăng dự kiến.
-- Trạng thái rule luôn nhìn thấy: Đang chạy / Tạm dừng (kèm lý do và nút bật lại). Không dùng màu làm tín hiệu duy nhất.
-- Mở rộng onboarding: sau khi có bài đầu tiên đã đăng, gợi ý **bước 4 tùy chọn** "Bật đăng hằng ngày". Không chặn người dùng, bỏ qua được.
-- Trước khi chọn `AUTO`: hộp xác nhận nói rõ "Bài sẽ tự đăng công khai, không qua bước duyệt", và nhắc quyền sửa/hủy trong Lịch đăng.
-
-## Giai đoạn và tiêu chí hoàn thành
-
-| Giai đoạn | Nội dung | Hoàn thành khi |
-|---|---|---|
-| **A. Nền tảng** | Migration, entity, repository, cờ tính năng, ràng buộc duy nhất `(rule_id, run_date)` | Migration chạy trên DB trống và trên staging có dữ liệu; test hai worker cùng chèn chỉ ra một dòng |
-| **B. Planner và soạn nội dung** | Job định kỳ, gọi dịch vụ AI, ghi quota, trạng thái `GENERATING → PENDING_REVIEW/FAILED` | Test tích hợp với PostgreSQL thật; hết quota thì dừng rule, không lặp vô hạn |
-| **C. Duyệt và tạo lịch** | API duyệt/bỏ qua, tạo `scheduled_post` đúng giờ theo múi giờ rule | Bài duyệt xuất hiện ở Lịch đăng và được scheduler đăng; quá giờ chưa duyệt thì `SKIPPED` |
-| **D. Bảo vệ** | Tự tạm dừng, chống lặp, giới hạn, kiểm toán | Mỗi điều kiện dừng có test; `UNKNOWN` không bao giờ dẫn tới đăng tiếp |
-| **E. Giao diện** | Wizard, hàng đợi duyệt, trạng thái rule, bước onboarding tùy chọn | Hoàn tất được luồng tạo rule → duyệt → thấy bài ở Lịch đăng trên 375px và 1440px |
-| **F. Pilot** | Bật cờ cho vài tài khoản thử, chế độ `REVIEW`, Page thử nghiệm, theo dõi 2 tuần | Không có bài trùng, không có bài đăng ngoài ý muốn, hàng đợi duyệt được dùng thật |
-| **G. `AUTO`** | Mở theo từng người dùng sau khi F ổn | Chỉ khi đã diễn tập timeout/restart và đối soát `UNKNOWN` trên staging như tài liệu scheduler yêu cầu |
-
-## Kiểm thử cần có
-
-- Hai planner chạy đồng thời chỉ tạo một `automation_run` mỗi ngày mỗi rule.
-- Ranh giới múi giờ: rule `Asia/Ho_Chi_Minh` lúc 00:30 và 23:30; múi giờ có chuyển giờ mùa hè.
-- Hết quota/ngân sách AI giữa chừng; AI trả lỗi; AI bị tắt bằng công tắc.
-- Token lỗi giữa hai ngày; bài hôm trước `UNKNOWN` → rule tự dừng.
-- Chủ tài khoản bị khóa; kênh bị ngắt khi rule còn bật.
-- Người dùng A không đọc/sửa được rule và bản nháp của người dùng B.
-
-## Chi phí và vận hành
-
-- Mỗi bài tự soạn tốn một lượt AI. Gói Free có hạn mức theo kỳ, nên rule hằng ngày sẽ dùng khoảng 30 lượt mỗi kỳ 30 ngày và có thể hết quota; giao diện phải nói rõ điều này khi tạo rule và gợi ý Pro khi gần hết. Cần xác nhận hạn mức Free/Pro hiện hành trong cấu hình trước khi viết nội dung này lên giao diện.
-- Theo dõi: số run mỗi trạng thái, tỉ lệ `FAILED`/`SKIPPED`, số rule tự dừng và lý do, chi phí AI cho automation tách riêng.
+| Giai đoạn | Nội dung | Mức | Hoàn thành khi |
+|---|---|---|---|
+| A | `V13`, entity, repository, cờ tính năng, sửa `DatabaseMigrationTest` | S | Migrate được trên DB trống và bản sao staging |
+| B | `generateForUser`, `createForUser`, `failure_code`, lý do trong `RateLimitException` | M | Endpoint hiện có hành xử y như cũ; test xanh |
+| C | Planner, claim, phục hồi, duyệt/bỏ qua, hết hạn | L | Test race và idempotency chạy qua |
+| D | Móc tạm dừng (`UserAccountStatusService`, `SocialAccountService`), nhật ký kiểm toán | M | Mỗi điều kiện dừng có một test |
+| E | Controller, DTO, quyền sở hữu | M | Test truy cập chéo chạy qua |
+| F | Wizard, hàng đợi duyệt, trạng thái rule | L | Rule → duyệt → thấy ở Lịch đăng trên 375px và 1440px |
+| G | Pilot chỉ `REVIEW`, vài tài khoản, Page thử nghiệm, 2 tuần | S | Không bài trùng, không bài ngoài ý muốn |
+| H | `AUTO` theo từng người dùng | S | Đã diễn tập timeout/restart và đối soát `UNKNOWN` trên staging |
 
 ## Quyết định cần chốt
 
-1. **Đợt đầu chỉ `REVIEW`** (khuyến nghị) hay cho `AUTO` ngay? Khuyến nghị `REVIEW` vì pilot hiện khuyến cáo không dùng lịch tự động cho nội dung quan trọng.
-2. **Nguồn nội dung đợt đầu**: chỉ `BRIEF` (AI soạn từ mô tả) hay thêm danh sách nội dung có sẵn (`EVERGREEN_LIST`)? Khuyến nghị `BRIEF` trước, vì danh sách có sẵn dễ gây lặp.
-3. **Nền tảng đợt đầu**: Facebook Page (nền tảng pilot chính). Instagram/Threads để sau cho tới khi chúng được kiểm chứng.
-4. **Tính phí**: automation là tính năng riêng của Pro, hay chỉ dùng chung quota AI hiện có?
-5. **Thông báo chờ duyệt**: chỉ trong ứng dụng, hay thêm email? Email cần `MAIL_*` hoạt động và chính sách gửi mail.
+1. **Chỉ `REVIEW` khi ra mắt** (khuyến nghị, theo tài liệu pilot).
+2. **Mỗi rule một Facebook Page**; Instagram/Threads để sau.
+3. **Pro riêng hay dùng chung quota AI?** Khuyến nghị dùng chung, kèm cảnh báo khi tạo rule vì rule hằng ngày dùng khoảng 30 lượt/kỳ, bằng toàn bộ quota Free.
+4. **Giữ phần quota cho dùng tay** (ví dụ tạm dừng khi `remaining <= 3`). Khuyến nghị có.
+5. **Tự bật lại khi sang kỳ quota mới?** Khuyến nghị không; người dùng bật lại để an toàn.
+6. **Thông báo chờ duyệt:** chỉ trong ứng dụng; email cần `MAIL_*` hoạt động và chính sách gửi mail.
+7. **Cột `failure_code` hay phân tích chuỗi lỗi?** Khuyến nghị cột.
+
+## Chưa kiểm chứng
+
+- Hành vi thật của Meta với token thật và lịch tự động.
+- Việc `MediaOrphanCleanupService` có xóa nhầm media dùng làm `default_media_ids` hay không (`FileService.java:96-100`); cần đọc kỹ trước khi cho rule dùng ảnh mặc định.
+- API chi tiết của các component frontend ngoài việc chúng tồn tại.
+- Các số dòng trích dẫn ở trên lấy từ lúc rà soát; có thể lệch nếu code đổi.

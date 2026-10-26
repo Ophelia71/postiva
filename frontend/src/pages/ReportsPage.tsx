@@ -35,6 +35,7 @@ export function ReportsPage() {
   const [detailPost, setDetailPost] = useState<AppPost | null>(null)
   const [deleteCandidate, setDeleteCandidate] = useState<AppPost | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
   const [repostingPost, setRepostingPost] = useState<AppPost | null>(null)
   const [chartPeriod, setChartPeriod] = useState<ChartPeriod>('DAY')
   const [selectedChartBucket, setSelectedChartBucket] = useState<string | null>(null)
@@ -63,7 +64,7 @@ export function ReportsPage() {
   }
 
   if (error || postsState.error || !overview || !postsState.data) {
-    return <PageState title="Không thể tải báo cáo" description={error ?? postsState.error ?? undefined} />
+    return <PageState title="Không thể tải báo cáo" description={error ?? postsState.error ?? undefined} onRetry={() => { reload(); postsState.reload() }} />
   }
 
   const normalizedOverview = normalizeAppOverview(overview)
@@ -323,7 +324,8 @@ export function ReportsPage() {
         <DeletePostConfirmModal
           post={deleteCandidate}
           deleting={isDeleting}
-          onCancel={() => setDeleteCandidate(null)}
+          error={deleteError}
+          onCancel={() => { setDeleteError(''); setDeleteCandidate(null) }}
           onConfirm={() => void deletePost(deleteCandidate)}
         />
       )}
@@ -370,10 +372,11 @@ export function ReportsPage() {
 
   async function deletePost(post: AppPost) {
     setIsDeleting(true)
+    setDeleteError('')
     try {
       const response = await api.delete<DeletePostResponse>(`/app-data/posts/${post.id}`)
       if (!response.data.deleted) {
-        window.alert(response.data.message || response.data.facebookMessage || 'Không thể xóa bài viết.')
+        setDeleteError(response.data.message || response.data.facebookMessage || 'Không thể xóa bài viết.')
         return
       }
       setDeleteCandidate(null)
@@ -381,7 +384,7 @@ export function ReportsPage() {
       reload()
       postsState.reload()
     } catch (error) {
-      window.alert(getErrorMessage(error, 'Không thể xóa bài viết.'))
+      setDeleteError(getErrorMessage(error, 'Không thể xóa bài viết.'))
     } finally {
       setIsDeleting(false)
     }
