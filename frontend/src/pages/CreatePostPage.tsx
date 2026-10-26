@@ -527,10 +527,10 @@ export function CreatePostPage() {
           </Link>
         </div>
       )}
-      <UsagePanel refreshVersion={usageVersion} />
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,520px)_minmax(420px,1fr)]">
-        <div className="overflow-hidden rounded-[8px] border border-slate-200 bg-white shadow-xl shadow-slate-200/70">
-          <div className="max-h-[calc(100svh-190px)] space-y-4 overflow-auto px-5 py-5">
+      <div className="grid gap-6 lg:grid-cols-2 lg:items-start lg:gap-8">
+        <div className="min-w-0 space-y-4">
+          <div className="space-y-4">
+            <UsagePanel refreshVersion={usageVersion} />
             <ComposerSection title={t('Đăng lên', 'Post to')}>
               <PlatformPicker
                 selected={selectedPlatforms}
@@ -716,7 +716,7 @@ export function CreatePostPage() {
             </p>
           </div>
 
-          <div className="flex items-center justify-end gap-2 border-t border-slate-200 bg-white px-5 py-4">
+          <div className="sticky bottom-[88px] z-10 flex items-center justify-end gap-2 rounded-[6px] border border-slate-200 bg-white px-4 py-3 shadow-lg shadow-slate-200/70 lg:bottom-4">
             <Link to="/app/schedule" className="inline-flex min-h-11 items-center justify-center rounded-[6px] border border-slate-300 px-4 text-sm font-semibold hover:bg-slate-50">
               {t('Hủy', 'Cancel')}
             </Link>
@@ -724,7 +724,7 @@ export function CreatePostPage() {
               type="button"
               onClick={() => void handlePublish()}
               disabled={!canPublish}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-[6px] bg-blue-600 px-5 text-sm font-bold text-white hover:bg-blue-700 disabled:bg-blue-200"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[6px] bg-blue-600 px-5 text-sm font-bold text-white hover:bg-blue-700 disabled:bg-blue-200"
             >
               {publishMode === 'SCHEDULE' ? <CalendarClock size={16} /> : <Send size={16} />}
               {isPublishing ? t('Đang xử lý...', 'Working...') : actionLabel}
@@ -732,7 +732,7 @@ export function CreatePostPage() {
           </div>
         </div>
 
-        <div className="min-w-0">
+        <div className="min-w-0 lg:sticky lg:top-6">
           <div className="mb-3 flex flex-wrap justify-center gap-2">
             {selectedPlatforms.map((platform) => (
               <button
