@@ -552,7 +552,7 @@ function RuleWizard({
       <div className="space-y-4 rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] p-4 shadow-sm">
         {step === 0 && (
           <>
-            <h2 className="text-base font-bold">Đăng lên Page nào?</h2>
+            <h2 className="text-base font-bold">Đăng lên kênh nào?</h2>
             <div className="grid gap-2 sm:grid-cols-2">
               {channels.map((channel) => (
                 <button
