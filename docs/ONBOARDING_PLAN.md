@@ -80,7 +80,17 @@ Một subagent Plan đọc lại phần đã làm và tìm ra các lỗi nhỏ �
 - Bỏ `aria-disabled` giả trên liên kết; nhãn "Kết nối kênh trước" là một hành động thật.
 - Câu chữ: bước 1 nói đúng thực tế "Bắt đầu với Facebook Page"; bỏ lời hứa "mỗi bước chỉ vài phút"; nút "Để sau" nói rõ mở lại ở menu tài khoản.
 
-### G5. Giai đoạn kế tiếp (chưa làm)
+### G5. Giai đoạn kế tiếp (một phần đã làm)
+
+**Đã làm trên nhánh `feature/onboarding-daily-autopost`:**
+
+- Việc 1, xác minh bài thử Facebook: **không** tính vào `totalPosts`. Nút Kiểm tra chỉ gọi Facebook tạo một bài không công khai và không ghi dòng nào vào DB (`SocialAccountService.publishTestPost`, `FacebookGraphClient.publishUnpublishedText`), và đồng bộ bài chỉ đọc `/{pageId}/posts`. Không cần đổi định nghĩa các bước.
+- Việc 3, khoảnh khắc thành công đầu tiên: sau khi đăng thành công, `CreatePostPage` hiện khung "Bài đầu tiên đã sẵn sàng" (hoặc "Đã tạo bài") với "Xem lịch đăng" và "Tạo bài tiếp"; bài đầu tiên gọi `dismissOnboarding()`. Bài lên lịch nói rõ chưa đăng công khai. Đăng thất bại toàn bộ hiện lời nhắc thử lại kèm liên kết kiểm tra kết nối. "Tạo bài tiếp" khởi tạo lại biểu mẫu bằng cách gắn `key`.
+- Việc 4, nhắc cho người đã bấm "Để sau": `SetupReminder` trên Báo cáo và Lịch đăng, chỉ hiện khi đã bỏ qua checklist, có kênh và chưa có bài nào.
+
+**Chưa làm:** việc 2 (khung test frontend), việc 5 (đo lường), việc 6 (chuyển chuỗi `StartPage` sang `t()`), việc 7 (lối vào hướng dẫn ở thanh dưới mobile; hiện vẫn có trong menu tài khoản).
+
+Danh sách gốc, để tham chiếu:
 
 Thứ tự đề xuất, kèm tiêu chí hoàn thành:
 
