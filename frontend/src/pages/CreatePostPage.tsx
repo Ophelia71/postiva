@@ -2,6 +2,7 @@ import {
   ArrowLeft,
   Calendar,
   CalendarClock,
+  Check,
   ChevronDown,
   Clock3,
   Globe2,
@@ -70,6 +71,17 @@ type GeneratePostResponse = {
 type MediaType = 'NONE' | 'IMAGE' | 'VIDEO' | 'MIXED'
 type PublishMode = 'NOW' | 'SCHEDULE'
 const EMPTY_CHANNELS: AppChannel[] = []
+const STEPS = [
+  { label: 'Kênh đăng', optional: false },
+  { label: 'Sản phẩm', optional: true },
+  { label: 'Ảnh/video', optional: true },
+  { label: 'Nội dung', optional: false },
+  { label: 'Lịch đăng', optional: true },
+] as const
+const LAST_STEP = STEPS.length - 1
+const SKIP_BLOCKED_MESSAGE = 'Bước này không thể bỏ qua, hãy setup lại.'
+// In the Vite dev server every step can be skipped so the flow is easy to test; production builds enforce required steps.
+const CAN_SKIP_REQUIRED_STEPS = import.meta.env.DEV
 const ALL_PLATFORMS: Platform[] = ['FACEBOOK', 'INSTAGRAM', 'THREADS']
 const PLATFORM_LABELS: Record<Platform, string> = {
   FACEBOOK: 'Facebook',
@@ -133,6 +145,8 @@ export function CreatePostPage() {
   const generationRequest = useRef<{ fingerprint: string; key: string } | null>(null)
   const [usageVersion, setUsageVersion] = useState(0)
   const [isPublishing, setIsPublishing] = useState(false)
+  const [step, setStep] = useState(0)
+  const [stepNotice, setStepNotice] = useState('')
 
   useEffect(() => {
     if (channelsState.loading || didInitializeTargets.current) {
@@ -167,13 +181,6 @@ export function CreatePostPage() {
     : hasImages && hasVideos ? 'MIXED' : hasVideos ? 'VIDEO' : 'IMAGE'
   const mediaUrls = uploadedMedia.map((media) => media.fileUrl)
   const actionLabel = publishMode === 'SCHEDULE' ? t('Đặt lịch', 'Schedule') : t('Tạo bài', 'Create post')
-  const canPublish = Boolean(
-    selectedPlatforms.length > 0
-      && selectedPlatforms.every((platform) => selectedAccountIds[platform])
-      && selectedPlatforms.every((platform) => (platformCaptions[platform] ?? '').trim())
-      && !isUploadingMedia
-      && !isPublishing,
-  )
 
   const scheduleLabel = useMemo(() => {
     if (publishMode === 'NOW') {
@@ -231,8 +238,51 @@ export function CreatePostPage() {
     return true
   }
 
+  /** Why a required step cannot be skipped yet, or null when it is complete. Optional steps never block. */
+  function stepIssue(index: number): string | null {
+    if (index === 0 && selectedPlatforms.length === 0) {
+      return t('Chọn ít nhất một nền tảng.', 'Choose at least one platform.')
+    }
+    if (index === 3) {
+      const missing = selectedPlatforms.find((platform) => !(platformCaptions[platform] ?? '').trim())
+      if (selectedPlatforms.length === 0 || missing) {
+        return missing ? t(`Nhập nội dung ${PLATFORM_LABELS[missing]}.`, `Enter ${PLATFORM_LABELS[missing]} content.`) : t('Chọn nền tảng ở bước 1 trước.', 'Choose a platform in step 1 first.')
+      }
+    }
+    return null
+  }
+
+  function isStepDone(index: number) {
+    if (index === 1) return productName.trim() !== ''
+    if (index === 2) return uploadedMedia.length > 0
+    if (index === 4) return publishMode === 'SCHEDULE'
+    return stepIssue(index) === null
+  }
+
+  /** Move to a step; going forward stops at the first required step that is still incomplete. */
+  function goToStep(target: number) {
+    if (target <= step || CAN_SKIP_REQUIRED_STEPS) {
+      setStepNotice('')
+      setStep(target)
+      return
+    }
+    for (let index = step; index < target; index += 1) {
+      const issue = stepIssue(index)
+      if (issue) {
+        setStep(index)
+        setStepNotice(`${SKIP_BLOCKED_MESSAGE} ${issue}`)
+        return
+      }
+    }
+    setStepNotice('')
+    setStep(target)
+  }
+
   async function handlePublish() {
-    if (!validateProductInput()) {
+    const blockedStep = CAN_SKIP_REQUIRED_STEPS ? undefined : [0, 3].find((index) => stepIssue(index))
+    if (blockedStep !== undefined) {
+      setStep(blockedStep)
+      setStepNotice(`${SKIP_BLOCKED_MESSAGE} ${stepIssue(blockedStep)}`)
       return
     }
     if (selectedPlatforms.length === 0) {
@@ -290,7 +340,7 @@ export function CreatePostPage() {
 
     try {
       const response = await api.post<SocialPostResponse>('/social-posts', {
-        title: productName.trim(),
+        title: productName.trim() || t('Bài đăng mới', 'New post'),
         targets: selectedPlatforms.map((platform) => ({
           platform,
           socialAccountId: selectedAccountIds[platform],
@@ -372,6 +422,8 @@ export function CreatePostPage() {
   async function applyPlatformTemplates() {
     if (isGeneratingContent) return
     if (!validateProductInput()) {
+      // The AI needs the product details from step 2, so take the user there.
+      if (selectedPlatforms.length > 0) setStep(1)
       return
     }
 
@@ -521,16 +573,56 @@ export function CreatePostPage() {
 
       {!channelsState.loading && !channelsState.error && availablePlatforms.length === 0 && (
         <div role="status" className="mb-5 flex flex-col gap-3 rounded-[8px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between">
-          <p>Bạn chưa kết nối kênh nào nên chưa thể đăng. Bạn vẫn có thể soạn nội dung với AI trước.</p>
+          <p>Bạn chưa kết nối kênh nào nên chưa thể chọn nơi đăng. Hãy kết nối một kênh trước khi bắt đầu.</p>
           <Link to="/app/connections" className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full bg-amber-700 px-4 text-sm font-bold text-white hover:bg-amber-800">
             Kết nối kênh
           </Link>
         </div>
       )}
+      <nav aria-label="Các bước tạo bài" className="mb-5">
+        <ol className="grid grid-cols-5 gap-1 rounded-[8px] border border-slate-200 bg-white p-1.5 shadow-sm">
+          {STEPS.map((item, index) => {
+            const active = index === step
+            const done = !active && isStepDone(index)
+            return (
+              <li key={item.label}>
+                <button
+                  type="button"
+                  onClick={() => goToStep(index)}
+                  aria-current={active ? 'step' : undefined}
+                  className={cn(
+                    'flex min-h-14 w-full flex-col items-center justify-center gap-0.5 rounded-[6px] px-1 py-1.5 text-center transition focus-visible:outline-2 focus-visible:outline-violet-500',
+                    active ? 'bg-violet-50 text-violet-800' : 'text-slate-700 hover:bg-slate-50',
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold',
+                      active ? 'bg-violet-600 text-white' : done ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700',
+                    )}
+                  >
+                    {done ? <Check size={14} aria-label="Đã xong" /> : index + 1}
+                  </span>
+                  <span className="text-xs font-bold leading-tight">{item.label}</span>
+                  <span className="hidden text-[11px] font-medium text-slate-600 sm:block">{item.optional ? 'Tùy chọn' : 'Bắt buộc'}</span>
+                </button>
+              </li>
+            )
+          })}
+        </ol>
+        {CAN_SKIP_REQUIRED_STEPS && (
+          <p className="mt-2 text-xs text-slate-600">Chế độ dev: có thể bỏ qua mọi bước, kể cả bước bắt buộc. Bản chạy thật vẫn chặn.</p>
+        )}
+      </nav>
       <div className="grid gap-6 lg:grid-cols-2 lg:items-start lg:gap-8">
         <div className="min-w-0 space-y-4">
           <div className="space-y-4">
-            <UsagePanel refreshVersion={usageVersion} />
+            {stepNotice && stepIssue(step) && (
+              <p role="alert" className="rounded-[6px] border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-800">
+                {stepNotice}
+              </p>
+            )}
+            {step === 0 && (
             <ComposerSection title={t('Đăng lên', 'Post to')}>
               <PlatformPicker
                 selected={selectedPlatforms}
@@ -576,8 +668,11 @@ export function CreatePostPage() {
                 </div>
               )}
             </ComposerSection>
+            )}
 
+            {step === 1 && (
             <ComposerSection title={t('Thông tin sản phẩm', 'Product information')}>
+              <p className="mb-3 text-sm text-slate-600">Tùy chọn. Cần điền các ô có dấu * nếu bạn muốn AI soạn bài; nếu tự viết nội dung thì bỏ qua bước này.</p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <TextField label={t('Tên sản phẩm *', 'Product name *')} value={productName} onChange={setProductName} className="sm:col-span-2" />
                 <TextAreaField label={t('Mô tả *', 'Description *')} value={productDescription} onChange={setProductDescription} rows={3} className="sm:col-span-2" />
@@ -587,7 +682,9 @@ export function CreatePostPage() {
                 <TextAreaField label={t('Mục tiêu', 'Goal')} value={goal} onChange={setGoal} rows={2} />
               </div>
             </ComposerSection>
+            )}
 
+            {step === 2 && (
             <ComposerSection title={t('Ảnh/video sản phẩm', 'Product image/video')}>
               <div className="flex flex-wrap items-center gap-3">
                 <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-[6px] border border-slate-300 bg-white px-4 text-sm font-semibold hover:bg-slate-50">
@@ -622,7 +719,11 @@ export function CreatePostPage() {
                 </div>
               )}
             </ComposerSection>
+            )}
 
+            {step === 3 && (
+            <>
+            <UsagePanel refreshVersion={usageVersion} />
             <ComposerSection
               title={t('Nội dung', 'Content')}
               headerAction={selectedPlatforms.length > 1 ? (
@@ -686,7 +787,10 @@ export function CreatePostPage() {
                 </span>
               </label>
             </ComposerSection>
+            </>
+            )}
 
+            {step === 4 && (
             <ComposerSection
               title={t('Lịch đăng', 'Schedule')}
               headerAction={<Toggle checked={publishMode === 'SCHEDULE'} onChange={(checked) => setPublishMode(checked ? 'SCHEDULE' : 'NOW')} />}
@@ -709,7 +813,9 @@ export function CreatePostPage() {
                   </div>
                 </div>
               )}
+              {publishMode === 'NOW' && <p className="text-sm text-slate-600">Tùy chọn. Bài sẽ được đăng ngay khi bạn bấm Tạo bài. Bật công tắc để chọn giờ đăng.</p>}
             </ComposerSection>
+            )}
 
             <p className={cn('rounded-[6px] border px-3 py-2 text-sm', statusTone === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : statusTone === 'error' ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-slate-200 bg-slate-50 text-slate-700')}>
               {status}
@@ -717,18 +823,49 @@ export function CreatePostPage() {
           </div>
 
           <div className="sticky bottom-[88px] z-10 flex items-center justify-end gap-2 rounded-[6px] border border-slate-200 bg-white px-4 py-3 shadow-lg shadow-slate-200/70 lg:bottom-4">
-            <Link to="/app/schedule" className="inline-flex min-h-11 items-center justify-center rounded-[6px] border border-slate-300 px-4 text-sm font-semibold hover:bg-slate-50">
-              {t('Hủy', 'Cancel')}
-            </Link>
-            <button
-              type="button"
-              onClick={() => void handlePublish()}
-              disabled={!canPublish}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[6px] bg-blue-600 px-5 text-sm font-bold text-white hover:bg-blue-700 disabled:bg-blue-200"
-            >
-              {publishMode === 'SCHEDULE' ? <CalendarClock size={16} /> : <Send size={16} />}
-              {isPublishing ? t('Đang xử lý...', 'Working...') : actionLabel}
-            </button>
+            {step === 0 ? (
+              <Link to="/app/schedule" className="mr-auto inline-flex min-h-11 items-center justify-center rounded-[6px] border border-slate-300 px-4 text-sm font-semibold hover:bg-slate-50">
+                {t('Hủy', 'Cancel')}
+              </Link>
+            ) : (
+              <button
+                type="button"
+                onClick={() => goToStep(step - 1)}
+                className="mr-auto inline-flex min-h-11 items-center justify-center rounded-[6px] border border-slate-300 px-4 text-sm font-semibold hover:bg-slate-50"
+              >
+                Quay lại
+              </button>
+            )}
+            {step < LAST_STEP ? (
+              <>
+                {(STEPS[step].optional || CAN_SKIP_REQUIRED_STEPS) && (
+                  <button
+                    type="button"
+                    onClick={() => goToStep(step + 1)}
+                    className="inline-flex min-h-11 items-center justify-center rounded-[6px] px-4 text-sm font-semibold text-slate-700 underline underline-offset-4 hover:text-slate-900"
+                  >
+                    Bỏ qua bước này
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => goToStep(step + 1)}
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[6px] bg-blue-600 px-5 text-sm font-bold text-white hover:bg-blue-700"
+                >
+                  Tiếp tục
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void handlePublish()}
+                disabled={isUploadingMedia || isPublishing}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[6px] bg-blue-600 px-5 text-sm font-bold text-white hover:bg-blue-700 disabled:bg-blue-200"
+              >
+                {publishMode === 'SCHEDULE' ? <CalendarClock size={16} /> : <Send size={16} />}
+                {isPublishing ? t('Đang xử lý...', 'Working...') : actionLabel}
+              </button>
+            )}
           </div>
         </div>
 
