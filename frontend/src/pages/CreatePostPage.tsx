@@ -539,9 +539,16 @@ export function CreatePostPage() {
                 onToggle={togglePlatform}
               />
               {selectedPlatforms.length === 0 ? (
-                <p className="rounded-[6px] border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
-                  {t('Chọn ít nhất một nền tảng.', 'Choose at least one platform.')}
-                </p>
+                availablePlatforms.length === 0 ? (
+                  <p className="mt-3 text-sm text-slate-600">
+                    Kết nối ít nhất một kênh để chọn nơi đăng.{' '}
+                    <Link to="/app/connections" className="font-semibold text-violet-700 underline underline-offset-2">Đi tới Kết nối</Link>
+                  </p>
+                ) : (
+                  <p className="mt-3 rounded-[6px] border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                    {t('Chọn ít nhất một nền tảng.', 'Choose at least one platform.')}
+                  </p>
+                )
               ) : (
                 <div className="mt-3 space-y-2">
                   {selectedPlatforms.map((platform) => (
@@ -843,27 +850,33 @@ function PlatformPicker({
   onToggle: (platform: Platform) => void
 }) {
   return (
-    <div className="flex flex-wrap gap-2">
-      {ALL_PLATFORMS.map((platform) => (
-        <label key={platform} className={cn(
-          'inline-flex min-h-11 items-center gap-2 rounded-full border px-4 py-1.5 text-xs font-semibold transition focus-within:ring-2 focus-within:ring-violet-400',
-          !available.includes(platform)
-            ? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-600'
-            : selected.includes(platform)
-              ? 'cursor-pointer border-violet-300 bg-violet-50 text-violet-700'
-              : 'cursor-pointer border-slate-300 bg-white text-slate-600 hover:border-violet-300',
-        )}>
-          <input
-            type="checkbox"
-            checked={selected.includes(platform)}
-            onChange={() => onToggle(platform)}
-            disabled={!available.includes(platform)}
-            className="sr-only"
-          />
-          {PLATFORM_LABELS[platform]}
-          {!available.includes(platform) && ` (${notConnectedLabel})`}
-        </label>
-      ))}
+    <div className="grid gap-2 sm:grid-cols-3">
+      {ALL_PLATFORMS.map((platform) => {
+        const isAvailable = available.includes(platform)
+        const isSelected = selected.includes(platform)
+        return (
+          <label key={platform} className={cn(
+            'flex min-h-14 flex-col justify-center rounded-xl border px-4 py-2 transition focus-within:ring-2 focus-within:ring-violet-400',
+            !isAvailable
+              ? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-600'
+              : isSelected
+                ? 'cursor-pointer border-violet-300 bg-violet-50 text-violet-800'
+                : 'cursor-pointer border-slate-300 bg-white text-slate-700 hover:border-violet-300',
+          )}>
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={() => onToggle(platform)}
+              disabled={!isAvailable}
+              className="sr-only"
+            />
+            <span className="text-sm font-bold">{PLATFORM_LABELS[platform]}</span>
+            <span className="text-xs font-semibold">
+              {!isAvailable ? notConnectedLabel : isSelected ? 'Đã chọn' : 'Bấm để chọn'}
+            </span>
+          </label>
+        )
+      })}
     </div>
   )
 }
