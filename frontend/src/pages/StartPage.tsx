@@ -1,8 +1,10 @@
 import { Check, Link2, PenLine, Send } from 'lucide-react'
+import { useEffect } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { PageHeader, PageState } from '../components/PageUi'
 import { type AppOverview, normalizeAppOverview, useAppDataResource } from '../lib/appDataApi'
 import { dismissOnboarding, getOnboardingState, isOnboardingDismissed } from '../lib/onboarding'
+import { trackOnboardingStep } from '../lib/webAnalytics'
 import type { AuthSession } from '../lib/auth'
 
 type Step = {
@@ -28,6 +30,15 @@ export function AppIndexRedirect() {
 export function StartPage({ session }: { session: AuthSession }) {
   const navigate = useNavigate()
   const { data, loading, error, reload } = useAppDataResource<AppOverview>('/app-data/overview')
+
+  // Milestones are derived from real data, so they are recorded the first time each one is true.
+  useEffect(() => {
+    if (!data) return
+    const progress = getOnboardingState(normalizeAppOverview(data))
+    if (progress.hasChannel) trackOnboardingStep('step/connect')
+    if (progress.hasPost) trackOnboardingStep('step/create')
+    if (progress.hasPublishedOrScheduled) trackOnboardingStep('step/publish')
+  }, [data])
 
   if (loading) return <PageState title="Đang tải không gian làm việc..." />
   if (error || !data) return <OverviewError onRetry={reload} />
@@ -66,6 +77,7 @@ export function StartPage({ session }: { session: AuthSession }) {
   const allDone = doneCount === steps.length
 
   function finish() {
+    if (!allDone) trackOnboardingStep('dismissed')
     dismissOnboarding()
     navigate('/app/reports')
   }

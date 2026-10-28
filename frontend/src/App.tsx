@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  CalendarClock,
   CalendarDays,
   ChevronDown,
   CreditCard,
@@ -36,10 +37,12 @@ import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { ChangePasswordPage } from './pages/ChangePasswordPage'
 import { BillingPage } from './pages/BillingPage'
+import { DailyPage } from './pages/DailyPage'
 import { AppIndexRedirect, StartPage } from './pages/StartPage'
 
 const navItems = [
   { to: '/app/schedule', label: 'Lịch đăng', icon: CalendarDays },
+  { to: '/app/daily', label: 'Daily', icon: CalendarClock },
   { to: '/app/reports', label: 'Báo cáo', icon: BarChart3 },
   { to: '/app/connections', label: 'Kết nối', icon: Link2 },
   { to: '/app/billing', label: 'Gói & thanh toán', icon: CreditCard },
@@ -269,6 +272,10 @@ function AccountMenu({ session, onLogout, placement }: { session: AuthSession; o
             <Rocket size={16} aria-hidden="true" />
             Hướng dẫn bắt đầu
           </Link>
+          <Link role="menuitem" to="/app/daily" onClick={() => setOpen(false)} className={` lg:hidden`}>
+            <CalendarClock size={16} aria-hidden="true" />
+            Daily
+          </Link>
           <Link role="menuitem" to="/app/billing" onClick={() => setOpen(false)} className={itemClass}>
             <CreditCard size={16} aria-hidden="true" />
             Gói &amp; thanh toán
@@ -366,6 +373,7 @@ function AppShell({ session, onLogout, onPasswordChanged }: ShellProps) {
             <Route path="/start" element={<StartPage session={session} />} />
             <Route path="/products" element={<Navigate to="/app/reports" replace />} />
             <Route path="/schedule" element={<SchedulePage />} />
+            <Route path="/daily" element={<DailyPage />} />
             <Route path="/reports" element={<ReportsPage />} />
             <Route path="/connections" element={<ConnectionsPage />} />
             <Route path="/create" element={<CreatePostPage />} />

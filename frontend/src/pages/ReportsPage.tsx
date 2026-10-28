@@ -1,6 +1,7 @@
 import { BarChart3, Eye, X } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
 import { EmptyState } from '../components/EmptyState'
+import { SetupReminder } from '../components/SetupReminder'
 import { EditPostModal } from '../components/EditPostModal'
 import { DeletePostConfirmModal } from '../components/DeletePostConfirmModal'
 import { getPaginatedItems, PaginationControls } from '../components/PaginationControls'
@@ -101,6 +102,7 @@ export function ReportsPage() {
 
   return (
     <section className="space-y-6">
+      <SetupReminder />
       <PageHeader
         title={t('Báo cáo trạng thái đăng', 'Publishing status report')}
         subtitle={t(

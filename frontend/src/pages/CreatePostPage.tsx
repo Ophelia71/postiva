@@ -23,7 +23,9 @@ import { FacebookBadge } from '../components/FacebookBadge'
 import { ProtectedMediaImage, ProtectedMediaVideo } from '../components/ProtectedMedia'
 import { PageState } from '../components/PageUi'
 import { api } from '../lib/api'
-import { type AppChannel, useAppDataResource } from '../lib/appDataApi'
+import { type AppChannel, type AppOverview, normalizeAppOverview, useAppDataResource } from '../lib/appDataApi'
+import { dismissOnboarding } from '../lib/onboarding'
+import { trackOnboardingStep } from '../lib/webAnalytics'
 import { getErrorMessage } from '../lib/errors'
 import { formatFileSize } from '../lib/format'
 import { resolveMediaUrl } from '../lib/media'
@@ -90,6 +92,12 @@ const PLATFORM_LABELS: Record<Platform, string> = {
 }
 
 export function CreatePostPage() {
+  // Remounting the form is the simplest reliable way to start a fresh post after a successful one.
+  const [run, setRun] = useState(0)
+  return <CreatePostForm key={run} onNewPost={() => setRun((value) => value + 1)} />
+}
+
+function CreatePostForm({ onNewPost }: { onNewPost: () => void }) {
   const { t } = usePreferences()
   const navigate = useNavigate()
   const channelsState = useAppDataResource<AppChannel[]>('/app-data/channels')
@@ -146,6 +154,8 @@ export function CreatePostPage() {
   const [usageVersion, setUsageVersion] = useState(0)
   const [isPublishing, setIsPublishing] = useState(false)
   const [step, setStep] = useState(0)
+  const [result, setResult] = useState<{ first: boolean; scheduled: boolean; when: string } | null>(null)
+  const [publishFailed, setPublishFailed] = useState(false)
   const [stepNotice, setStepNotice] = useState('')
   const stepsAnchorRef = useRef<HTMLDivElement>(null)
   const hasMountedRef = useRef(false)
@@ -350,10 +360,19 @@ export function CreatePostPage() {
     }
 
     setIsPublishing(true)
+    setPublishFailed(false)
     setStatusTone('info')
     setStatus(publishMode === 'SCHEDULE' ? t('Đang đặt lịch...', 'Scheduling...') : t('Đang tạo bài...', 'Creating post...'))
 
     try {
+      // Only used to word the success message; a failed lookup just means the generic message is shown.
+      let isFirstPost = false
+      try {
+        const before = normalizeAppOverview((await api.get<AppOverview>('/app-data/overview')).data)
+        isFirstPost = before.publishedPosts + before.scheduledPosts === 0
+      } catch {
+        isFirstPost = false
+      }
       const response = await api.post<SocialPostResponse>('/social-posts', {
         title: productName.trim() || t('Bài đăng mới', 'New post'),
         targets: selectedPlatforms.map((platform) => ({
@@ -372,12 +391,18 @@ export function CreatePostPage() {
       if (failed.length > 0) {
         setStatusTone(completed.length > 0 ? 'info' : 'error')
         setStatus(formatTargetResults(response.data.targets, publishMode, t))
+        setPublishFailed(completed.length === 0)
       } else if (unknown) {
         setStatusTone('info')
         setStatus(formatTargetResults(response.data.targets, publishMode, t))
       } else {
         setStatusTone('success')
         setStatus(formatTargetResults(response.data.targets, publishMode, t))
+        if (isFirstPost) {
+          dismissOnboarding()
+          trackOnboardingStep('first-success')
+        }
+        setResult({ first: isFirstPost, scheduled: publishMode === 'SCHEDULE', when: scheduleLabel })
       }
     } catch (error) {
       setError(getErrorMessage(error, t('Không thể đăng bài.', 'Could not publish the post.')))
@@ -550,6 +575,25 @@ export function CreatePostPage() {
     if (!isRemoving) {
       setActivePreviewPlatform(platform)
     }
+  }
+
+  if (result) {
+    return (
+      <section className="create-post-page mx-auto max-w-xl px-4 py-6">
+        <div role="status" className="space-y-3 rounded-[8px] border border-slate-200 bg-white p-6 shadow-sm">
+          <h1 className="text-2xl font-bold tracking-tight">{result.first ? 'Bài đầu tiên đã sẵn sàng' : 'Đã tạo bài'}</h1>
+          <p className="text-sm text-slate-700">
+            {result.scheduled
+              ? `Bài đã lên lịch cho ${result.when}. Chưa có gì được đăng công khai cho tới giờ đó.`
+              : 'Bài đã được gửi đăng. Xem trạng thái từng nền tảng ở Lịch đăng.'}
+          </p>
+          <div className="flex flex-wrap gap-3 pt-1">
+            <Link to="/app/schedule" className="inline-flex min-h-11 items-center rounded-full bg-[#505db8] px-5 text-sm font-bold text-white hover:bg-[#434fa0]">Xem lịch đăng</Link>
+            <button type="button" onClick={onNewPost} className="inline-flex min-h-11 items-center rounded-full border border-slate-300 px-5 text-sm font-bold hover:bg-slate-50">Tạo bài tiếp</button>
+          </div>
+        </div>
+      </section>
+    )
   }
 
   return (
@@ -833,6 +877,12 @@ export function CreatePostPage() {
             {(step >= 3 || statusTone !== 'info') && (
               <p className={cn('rounded-[6px] border px-3 py-2 text-sm', statusTone === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : statusTone === 'error' ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-slate-200 bg-slate-50 text-slate-700')}>
                 {status}
+              </p>
+            )}
+            {publishFailed && (
+              <p className="rounded-[6px] border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                Thử lại bằng nút Tạo bài. Nếu vẫn lỗi, token của kênh có thể đã hết hạn:{' '}
+                <Link to="/app/connections" className="font-semibold underline underline-offset-2">kiểm tra kết nối</Link>.
               </p>
             )}
           </div>
