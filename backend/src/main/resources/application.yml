@@ -149,6 +149,8 @@ postiva:
   mail:
     enabled: ${POSTIVA_MAIL_ENABLED:false}
     from: ${MAIL_FROM:no-reply@postiva.local}
+    # Local development only: with mail disabled, write registration codes and reset links to the log instead.
+    log-codes: ${POSTIVA_MAIL_LOG_CODES:false}
 
 
 app:

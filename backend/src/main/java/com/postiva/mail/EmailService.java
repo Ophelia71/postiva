@@ -19,19 +19,26 @@ public class EmailService {
     private final String username;
     private final String password;
     private final String from;
+    /** Only ever true when mail is off, so codes cannot be logged on a server that sends real mail. */
+    private final boolean logCodes;
 
     public EmailService(
             JavaMailSender mailSender,
             @Value("${postiva.mail.enabled:false}") boolean enabled,
             @Value("${spring.mail.username:}") String username,
             @Value("${spring.mail.password:}") String password,
-            @Value("${postiva.mail.from}") String from
+            @Value("${postiva.mail.from}") String from,
+            @Value("${postiva.mail.log-codes:false}") boolean logCodes
     ) {
         this.mailSender = mailSender;
         this.enabled = enabled;
         this.username = username;
         this.password = password;
         this.from = from;
+        this.logCodes = logCodes && !enabled;
+        if (this.logCodes) {
+            log.warn("POSTIVA_MAIL_LOG_CODES đang bật: mã xác thực và link đặt lại mật khẩu được ghi ra log, không gửi email. Chỉ dùng khi chạy local.");
+        }
     }
 
     public void sendRegistrationSuccess(
@@ -62,6 +69,10 @@ public class EmailService {
             String code,
             long expiresInMinutes
     ) {
+        if (logCodes) {
+            log.warn("[LOCAL] Mã xác thực đăng ký cho {}: {} (hết hạn sau {} phút)", recipient, code, expiresInMinutes);
+            return;
+        }
         if (!enabled || !StringUtils.hasText(username) || !StringUtils.hasText(password)) {
             throw new IllegalStateException(
                     "Email chưa được cấu hình. Hãy bật POSTIVA_MAIL_ENABLED và cấu hình MAIL_USERNAME/MAIL_PASSWORD."
@@ -87,6 +98,10 @@ public class EmailService {
     }
 
     public void sendPasswordResetLink(String recipient, String resetUrl, long expiresInMinutes) {
+        if (logCodes) {
+            log.warn("[LOCAL] Link đặt lại mật khẩu cho {}: {} (hết hạn sau {} phút)", recipient, resetUrl, expiresInMinutes);
+            return;
+        }
         requireConfiguredMail();
         String content = """
                 Bạn vừa yêu cầu đặt lại mật khẩu Postiva.
