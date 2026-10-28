@@ -22,6 +22,7 @@ import {
   WEEKDAY_NAMES,
 } from '../lib/dailyApi'
 import { installDailyMock } from '../lib/dailyMock'
+import { isDemoActive } from '../lib/demo'
 import { getErrorMessage } from '../lib/errors'
 
 if (DAILY_USE_MOCK) installDailyMock(api)
@@ -77,7 +78,7 @@ function toLocalInput(value: string | null) {
 
 export function DailyPage() {
   // Until the backend ships, a production build must not call /weekly-plans at all.
-  return DAILY_API_READY || DAILY_USE_MOCK ? <DailyHome /> : <DailyDisabled />
+  return DAILY_API_READY || DAILY_USE_MOCK || isDemoActive() ? <DailyHome /> : <DailyDisabled />
 }
 
 function DailyDisabled() {
@@ -188,7 +189,8 @@ function DailyHome() {
 }
 
 function MockBanner() {
-  if (!DAILY_USE_MOCK) return null
+  // The demo shell has its own banner.
+  if (!DAILY_USE_MOCK || isDemoActive()) return null
   return (
     <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
       Dữ liệu mẫu (chỉ ở môi trường dev): kế hoạch và bản nháp được lưu tạm trong trình duyệt, tải lại trang là mất. Chưa có gì được đăng.

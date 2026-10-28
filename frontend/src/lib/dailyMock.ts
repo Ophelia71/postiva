@@ -40,7 +40,7 @@ function sampleInsights(): PerformanceSummary {
     topHashtags: ['#caphe', '#feedback'],
     postsPerWeek: 2.5,
     insights: [
-      'Dữ liệu mẫu (dev): bài video đạt tương tác gấp 5.6 lần bài chỉ có chữ.',
+      'Bài video đạt tương tác gấp 5.6 lần bài chỉ có chữ.',
       'Ngày có tương tác cao nhất: Thứ Sáu, Thứ Bảy, Thứ Tư.',
       'Khung giờ hiệu quả nhất: 20h–21h.',
       'Bài hiệu quả thường dài hơn, khoảng 320 ký tự.',
@@ -119,7 +119,7 @@ function simulateDrafting(planId: string, request: CreateWeeklyPlanRequest) {
   })
 }
 
-class MockError extends Error {
+export class MockError extends Error {
   readonly status: number
 
   constructor(status: number, message: string) {
@@ -134,7 +134,7 @@ function requirePlan(id: string | undefined) {
   return plan
 }
 
-async function handle(api: AxiosInstance, method: string, url: string, body: unknown): Promise<unknown> {
+export async function handleDailyMock(api: AxiosInstance, method: string, url: string, body: unknown): Promise<unknown> {
   const [path] = url.split('?')
   if (path.startsWith('/posts/mock-') && method === 'put') {
     const postId = path.slice('/posts/'.length)
@@ -235,7 +235,7 @@ async function handle(api: AxiosInstance, method: string, url: string, body: unk
   throw new MockError(404, `Mock Daily chưa hỗ trợ ${method.toUpperCase()} ${path}`)
 }
 
-function isMocked(url: string) {
+export function isDailyMockPath(url: string) {
   return url.startsWith('/weekly-plans') || url.startsWith('/posts/mock-')
 }
 
@@ -245,7 +245,7 @@ export function installDailyMock(api: AxiosInstance) {
     const url = `${String(config.url ?? '')}${query}`
     const body = typeof config.data === 'string' && config.data ? JSON.parse(config.data) : config.data
     try {
-      const data = await handle(api, (config.method ?? 'get').toLowerCase(), url, body)
+      const data = await handleDailyMock(api, (config.method ?? 'get').toLowerCase(), url, body)
       return { data: { success: true, message: null, data }, status: 200, statusText: 'OK', headers: {}, config }
     } catch (error) {
       const status = error instanceof MockError ? error.status : 500
@@ -257,7 +257,7 @@ export function installDailyMock(api: AxiosInstance) {
   }
 
   api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-    if (isMocked(String(config.url ?? ''))) config.adapter = adapter
+    if (isDailyMockPath(String(config.url ?? ''))) config.adapter = adapter
     return config
   })
 }

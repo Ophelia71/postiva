@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import { startDemo } from '../lib/demo'
 
 const features = [
   {
@@ -119,13 +120,14 @@ export function HomePage() {
               Instagram và Threads đang thử nghiệm.
             </p>
             <div data-reveal className="reveal-up mt-9 flex flex-wrap justify-center gap-3">
-              <Link to="/app?mode=register" className="inline-flex min-h-12 items-center gap-2 rounded-full bg-[#505db8] px-7 text-sm font-bold text-white hover:-translate-y-1 hover:bg-[#434fa0]">
-                Tạo tài khoản <ArrowRight size={16} aria-hidden="true" />
+              <Link to="/app/reports" onClick={startDemo} className="inline-flex min-h-12 items-center gap-2 rounded-full bg-[#505db8] px-7 text-sm font-bold text-white hover:-translate-y-1 hover:bg-[#434fa0]">
+                Dùng thử ngay <ArrowRight size={16} aria-hidden="true" />
               </Link>
-              <a href="#platform" className="inline-flex min-h-12 items-center rounded-full border border-[#b9bfee] bg-white/60 px-7 text-sm font-bold hover:bg-white">
-                Xem cách hoạt động
-              </a>
+              <Link to="/app?mode=register" className="inline-flex min-h-12 items-center rounded-full border border-[#b9bfee] bg-white/60 px-7 text-sm font-bold hover:bg-white">
+                Tạo tài khoản
+              </Link>
             </div>
+            <p data-reveal className="reveal-up mt-3 text-sm text-black/60">Không cần đăng ký, xem ngay với dữ liệu mẫu.</p>
 
             <ReportsPreview />
           </div>

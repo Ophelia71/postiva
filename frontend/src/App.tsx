@@ -12,8 +12,11 @@ import {
   Rocket,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { Link, Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom'
+import { Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { api } from './lib/api'
+import { DEMO_SESSION, exitDemo, isDemoActive } from './lib/demo'
+import { installDemoApi } from './lib/demoApi'
+import { DemoBanner } from './components/DemoBanner'
 import { identifyWebAnalyticsUser, WebAnalyticsTracker } from './lib/webAnalytics'
 import { AdminShell } from './components/AdminShell'
 import {
@@ -55,6 +58,8 @@ const mobileNavItems = [
   { to: '/app/reports', label: 'Báo cáo', icon: BarChart3 },
   { to: '/app/connections', label: 'Kết nối', icon: Link2 },
 ]
+
+installDemoApi(api)
 
 type UserResponse = {
   id: string
@@ -158,7 +163,13 @@ function SessionApp() {
     }
   }, [])
 
+  // Re-read on every navigation: the demo starts from a link on the home page, outside this component's state.
+  useLocation()
+  const navigate = useNavigate()
+  const inDemo = !session && isDemoActive()
+
   function handleAuthenticated(nextSession: AuthSession) {
+    exitDemo()
     saveAuthSession(nextSession)
     identifyWebAnalyticsUser()
     setSession(nextSession)
@@ -166,8 +177,19 @@ function SessionApp() {
   }
 
   function handleLogout() {
+    exitDemo()
     clearAuthSession()
     setSession(null)
+  }
+
+  function leaveDemo() {
+    exitDemo()
+    navigate('/')
+  }
+
+  function signUpFromDemo() {
+    exitDemo()
+    navigate('/app?mode=register')
   }
 
   function handlePasswordChanged() {
@@ -189,6 +211,8 @@ function SessionApp() {
                     session.role === 'ADMIN'
                       ? <AdminShell session={session} onLogout={handleLogout} onPasswordChanged={handlePasswordChanged} />
                       : <AppShell session={session} onLogout={handleLogout} onPasswordChanged={handlePasswordChanged} />
+              ) : inDemo ? (
+                <AppShell session={DEMO_SESSION} onLogout={leaveDemo} onPasswordChanged={leaveDemo} demo={{ onSignUp: signUpFromDemo, onExit: leaveDemo }} />
               ) : (
                 <AuthPage onAuthenticated={handleAuthenticated} notice={authNotice} />
               )
@@ -207,9 +231,10 @@ function SessionLoading() {
   )
 }
 
-type ShellProps = { session: AuthSession; onLogout: () => void; onPasswordChanged: () => void }
+type DemoControls = { onSignUp: () => void; onExit: () => void }
+type ShellProps = { session: AuthSession; onLogout: () => void; onPasswordChanged: () => void; demo?: DemoControls }
 
-function AccountMenu({ session, onLogout, placement }: { session: AuthSession; onLogout: () => void; placement: 'above' | 'below' }) {
+function AccountMenu({ session, onLogout, placement, demo }: { session: AuthSession; onLogout: () => void; placement: 'above' | 'below'; demo?: DemoControls }) {
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
   const { t } = usePreferences()
@@ -280,13 +305,20 @@ function AccountMenu({ session, onLogout, placement }: { session: AuthSession; o
             <CreditCard size={16} aria-hidden="true" />
             Gói &amp; thanh toán
           </Link>
-          <Link role="menuitem" to="/app/security" onClick={() => setOpen(false)} className={itemClass}>
-            <KeyRound size={16} aria-hidden="true" />
-            Bảo mật tài khoản
-          </Link>
+          {demo ? (
+            <button role="menuitem" type="button" onClick={demo.onSignUp} className={itemClass}>
+              <KeyRound size={16} aria-hidden="true" />
+              Tạo tài khoản miễn phí
+            </button>
+          ) : (
+            <Link role="menuitem" to="/app/security" onClick={() => setOpen(false)} className={itemClass}>
+              <KeyRound size={16} aria-hidden="true" />
+              Bảo mật tài khoản
+            </Link>
+          )}
           <button role="menuitem" type="button" onClick={onLogout} className={itemClass}>
             <LogOut size={16} aria-hidden="true" />
-            {t('Đăng xuất')}
+            {demo ? 'Thoát dùng thử' : t('Đăng xuất')}
           </button>
         </div>
       )}
@@ -294,7 +326,7 @@ function AccountMenu({ session, onLogout, placement }: { session: AuthSession; o
   )
 }
 
-function AppShell({ session, onLogout, onPasswordChanged }: ShellProps) {
+function AppShell({ session, onLogout, onPasswordChanged, demo }: ShellProps) {
   const { t } = usePreferences()
   // The "Tạo bài mới" shortcut is pointless while the user is already on the create page.
   const isCreatePage = useLocation().pathname.startsWith('/app/create')
@@ -341,7 +373,7 @@ function AppShell({ session, onLogout, onPasswordChanged }: ShellProps) {
         </nav>
 
         <div className="border-t border-[var(--app-border)] pt-3">
-          <AccountMenu session={session} onLogout={onLogout} placement="above" />
+          <AccountMenu session={session} onLogout={onLogout} placement="above" demo={demo} />
         </div>
       </aside>
 
@@ -352,11 +384,12 @@ function AppShell({ session, onLogout, onPasswordChanged }: ShellProps) {
           </span>
           Postiva
         </Link>
-        <AccountMenu session={session} onLogout={onLogout} placement="below" />
+        <AccountMenu session={session} onLogout={onLogout} placement="below" demo={demo} />
       </header>
 
       <main className="pb-24 lg:pb-0 lg:pl-[272px]">
         <div className="mx-auto min-h-svh max-w-[1320px] px-4 py-5 sm:px-6 lg:px-10 lg:py-8">
+          {demo && <DemoBanner onSignUp={demo.onSignUp} onExit={demo.onExit} />}
           {!isCreatePage && (
             <div className="mb-8 hidden items-center justify-end lg:flex">
               <NavLink
