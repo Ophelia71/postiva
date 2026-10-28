@@ -2,6 +2,7 @@ import {
   ArrowLeft,
   Calendar,
   CalendarClock,
+  Check,
   ChevronDown,
   Clock3,
   Globe2,
@@ -17,7 +18,7 @@ import {
   X,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { FacebookBadge } from '../components/FacebookBadge'
 import { ProtectedMediaImage, ProtectedMediaVideo } from '../components/ProtectedMedia'
 import { PageState } from '../components/PageUi'
@@ -70,6 +71,17 @@ type GeneratePostResponse = {
 type MediaType = 'NONE' | 'IMAGE' | 'VIDEO' | 'MIXED'
 type PublishMode = 'NOW' | 'SCHEDULE'
 const EMPTY_CHANNELS: AppChannel[] = []
+const STEPS = [
+  { label: 'Kênh đăng', optional: false },
+  { label: 'Sản phẩm', optional: true },
+  { label: 'Ảnh/video', optional: true },
+  { label: 'Nội dung', optional: false },
+  { label: 'Lịch đăng', optional: true },
+] as const
+const LAST_STEP = STEPS.length - 1
+const SKIP_BLOCKED_MESSAGE = 'Bước này không thể bỏ qua, hãy setup lại.'
+// In the Vite dev server every step can be skipped so the flow is easy to test; production builds enforce required steps.
+const CAN_SKIP_REQUIRED_STEPS = import.meta.env.DEV
 const ALL_PLATFORMS: Platform[] = ['FACEBOOK', 'INSTAGRAM', 'THREADS']
 const PLATFORM_LABELS: Record<Platform, string> = {
   FACEBOOK: 'Facebook',
@@ -79,6 +91,7 @@ const PLATFORM_LABELS: Record<Platform, string> = {
 
 export function CreatePostPage() {
   const { t } = usePreferences()
+  const navigate = useNavigate()
   const channelsState = useAppDataResource<AppChannel[]>('/app-data/channels')
   const activeChannels = useMemo(
     () => (channelsState.data ?? EMPTY_CHANNELS).filter((channel) => channel.active),
@@ -132,6 +145,23 @@ export function CreatePostPage() {
   const generationRequest = useRef<{ fingerprint: string; key: string } | null>(null)
   const [usageVersion, setUsageVersion] = useState(0)
   const [isPublishing, setIsPublishing] = useState(false)
+  const [step, setStep] = useState(0)
+  const [stepNotice, setStepNotice] = useState('')
+  const stepsAnchorRef = useRef<HTMLDivElement>(null)
+  const hasMountedRef = useRef(false)
+
+  // After changing step, bring the stepper back to the top of the viewport so the new step is visible without scrolling.
+  useEffect(() => {
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true
+      return
+    }
+    const anchor = stepsAnchorRef.current
+    if (anchor && anchor.getBoundingClientRect().top < 0) {
+      const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      anchor.scrollIntoView({ block: 'start', behavior: reduceMotion ? 'auto' : 'smooth' })
+    }
+  }, [step])
 
   useEffect(() => {
     if (channelsState.loading || didInitializeTargets.current) {
@@ -166,13 +196,6 @@ export function CreatePostPage() {
     : hasImages && hasVideos ? 'MIXED' : hasVideos ? 'VIDEO' : 'IMAGE'
   const mediaUrls = uploadedMedia.map((media) => media.fileUrl)
   const actionLabel = publishMode === 'SCHEDULE' ? t('Đặt lịch', 'Schedule') : t('Tạo bài', 'Create post')
-  const canPublish = Boolean(
-    selectedPlatforms.length > 0
-      && selectedPlatforms.every((platform) => selectedAccountIds[platform])
-      && selectedPlatforms.every((platform) => (platformCaptions[platform] ?? '').trim())
-      && !isUploadingMedia
-      && !isPublishing,
-  )
 
   const scheduleLabel = useMemo(() => {
     if (publishMode === 'NOW') {
@@ -230,8 +253,51 @@ export function CreatePostPage() {
     return true
   }
 
+  /** Why a required step cannot be skipped yet, or null when it is complete. Optional steps never block. */
+  function stepIssue(index: number): string | null {
+    if (index === 0 && selectedPlatforms.length === 0) {
+      return t('Chọn ít nhất một nền tảng.', 'Choose at least one platform.')
+    }
+    if (index === 3) {
+      const missing = selectedPlatforms.find((platform) => !(platformCaptions[platform] ?? '').trim())
+      if (selectedPlatforms.length === 0 || missing) {
+        return missing ? t(`Nhập nội dung ${PLATFORM_LABELS[missing]}.`, `Enter ${PLATFORM_LABELS[missing]} content.`) : t('Chọn nền tảng ở bước 1 trước.', 'Choose a platform in step 1 first.')
+      }
+    }
+    return null
+  }
+
+  function isStepDone(index: number) {
+    if (index === 1) return productName.trim() !== ''
+    if (index === 2) return uploadedMedia.length > 0
+    if (index === 4) return publishMode === 'SCHEDULE'
+    return stepIssue(index) === null
+  }
+
+  /** Move to a step; going forward stops at the first required step that is still incomplete. */
+  function goToStep(target: number) {
+    if (target <= step || CAN_SKIP_REQUIRED_STEPS) {
+      setStepNotice('')
+      setStep(target)
+      return
+    }
+    for (let index = step; index < target; index += 1) {
+      const issue = stepIssue(index)
+      if (issue) {
+        setStep(index)
+        setStepNotice(`${SKIP_BLOCKED_MESSAGE} ${issue}`)
+        return
+      }
+    }
+    setStepNotice('')
+    setStep(target)
+  }
+
   async function handlePublish() {
-    if (!validateProductInput()) {
+    const blockedStep = CAN_SKIP_REQUIRED_STEPS ? undefined : [0, 3].find((index) => stepIssue(index))
+    if (blockedStep !== undefined) {
+      setStep(blockedStep)
+      setStepNotice(`${SKIP_BLOCKED_MESSAGE} ${stepIssue(blockedStep)}`)
       return
     }
     if (selectedPlatforms.length === 0) {
@@ -289,7 +355,7 @@ export function CreatePostPage() {
 
     try {
       const response = await api.post<SocialPostResponse>('/social-posts', {
-        title: productName.trim(),
+        title: productName.trim() || t('Bài đăng mới', 'New post'),
         targets: selectedPlatforms.map((platform) => ({
           platform,
           socialAccountId: selectedAccountIds[platform],
@@ -371,6 +437,8 @@ export function CreatePostPage() {
   async function applyPlatformTemplates() {
     if (isGeneratingContent) return
     if (!validateProductInput()) {
+      // The AI needs the product details from step 2, so take the user there.
+      if (selectedPlatforms.length > 0) setStep(1)
       return
     }
 
@@ -485,12 +553,17 @@ export function CreatePostPage() {
   }
 
   return (
-    <section className="create-post-page -mx-4 min-h-[calc(100svh-56px)] rounded-[8px] bg-gradient-to-br from-rose-50 via-violet-50 to-cyan-50 px-4 py-3">
-      <div className="mb-5 flex items-center justify-between gap-4">
+    <section className="create-post-page -mx-4 min-h-[calc(100svh-8rem)] rounded-[8px] bg-gradient-to-br from-rose-50 via-violet-50 to-cyan-50 px-4 py-3 sm:-mx-6 sm:px-6 lg:mx-0 lg:flex lg:h-[calc(100svh-4rem)] lg:min-h-0 lg:flex-col">
+      <div className="mb-3 flex shrink-0 items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <Link to="/app" className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700">
-            <ArrowLeft size={18} />
-          </Link>
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            aria-label={t('Quay lại', 'Go back')}
+            className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700"
+          >
+            <ArrowLeft size={18} aria-hidden="true" />
+          </button>
           <h1 className="text-2xl font-bold tracking-tight">{t('Tạo bài đăng', 'Create post')}</h1>
         </div>
         <div className="flex overflow-hidden rounded-[6px] border border-slate-300 bg-white">
@@ -513,10 +586,56 @@ export function CreatePostPage() {
         </div>
       </div>
 
-      <UsagePanel refreshVersion={usageVersion} />
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,520px)_minmax(420px,1fr)]">
-        <div className="overflow-hidden rounded-[8px] border border-slate-200 bg-white shadow-xl shadow-slate-200/70">
-          <div className="max-h-[calc(100svh-190px)] space-y-4 overflow-auto px-5 py-5">
+      {!channelsState.loading && !channelsState.error && availablePlatforms.length === 0 && (
+        <div role="status" className="mb-3 flex shrink-0 flex-col gap-2 rounded-[8px] border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between">
+          <p>Bạn chưa kết nối kênh nào nên chưa thể chọn nơi đăng. Hãy kết nối một kênh trước khi bắt đầu.</p>
+          <Link to="/app/connections" className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full bg-amber-700 px-4 text-sm font-bold text-white hover:bg-amber-800">
+            Kết nối kênh
+          </Link>
+        </div>
+      )}
+      <div ref={stepsAnchorRef} aria-hidden="true" className="scroll-mt-[64px] lg:scroll-mt-4" />
+      <nav aria-label="Các bước tạo bài" className="sticky top-[64px] z-10 mb-3 shrink-0 lg:static">
+        <ol className="grid grid-cols-5 gap-1 rounded-[8px] border border-slate-200 bg-white p-1.5 shadow-sm">
+          {STEPS.map((item, index) => {
+            const active = index === step
+            const done = !active && isStepDone(index)
+            return (
+              <li key={item.label}>
+                <button
+                  type="button"
+                  onClick={() => goToStep(index)}
+                  aria-current={active ? 'step' : undefined}
+                  className={cn(
+                    'flex min-h-14 w-full flex-col items-center justify-center gap-0.5 rounded-[6px] px-1 py-1.5 text-center transition focus-visible:outline-2 focus-visible:outline-violet-500',
+                    active ? 'bg-violet-50 text-violet-800' : 'text-slate-700 hover:bg-slate-50',
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold',
+                      active ? 'bg-violet-600 text-white' : done ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700',
+                    )}
+                  >
+                    {done ? <Check size={14} aria-label="Đã xong" /> : index + 1}
+                  </span>
+                  <span className="text-xs font-bold leading-tight">{item.label}</span>
+                  <span className="hidden text-[11px] font-medium text-slate-600 sm:block">{item.optional ? 'Tùy chọn' : 'Bắt buộc'}</span>
+                </button>
+              </li>
+            )
+          })}
+        </ol>
+      </nav>
+      <div className="grid gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-2 lg:items-stretch lg:gap-8">
+        <div className="min-w-0 space-y-3 lg:flex lg:min-h-0 lg:flex-col lg:space-y-0 lg:gap-3">
+          <div className="space-y-3 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-1">
+            {stepNotice && stepIssue(step) && (
+              <p role="alert" className="rounded-[6px] border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-800">
+                {stepNotice}
+              </p>
+            )}
+            {step === 0 && (
             <ComposerSection title={t('Đăng lên', 'Post to')}>
               <PlatformPicker
                 selected={selectedPlatforms}
@@ -525,9 +644,16 @@ export function CreatePostPage() {
                 onToggle={togglePlatform}
               />
               {selectedPlatforms.length === 0 ? (
-                <p className="rounded-[6px] border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
-                  {t('Chọn ít nhất một nền tảng.', 'Choose at least one platform.')}
-                </p>
+                availablePlatforms.length === 0 ? (
+                  <p className="mt-3 text-sm text-slate-600">
+                    Kết nối ít nhất một kênh để chọn nơi đăng.{' '}
+                    <Link to="/app/connections" className="font-semibold text-violet-700 underline underline-offset-2">Đi tới Kết nối</Link>
+                  </p>
+                ) : (
+                  <p className="mt-3 rounded-[6px] border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                    {t('Chọn ít nhất một nền tảng.', 'Choose at least one platform.')}
+                  </p>
+                )
               ) : (
                 <div className="mt-3 space-y-2">
                   {selectedPlatforms.map((platform) => (
@@ -555,8 +681,11 @@ export function CreatePostPage() {
                 </div>
               )}
             </ComposerSection>
+            )}
 
+            {step === 1 && (
             <ComposerSection title={t('Thông tin sản phẩm', 'Product information')}>
+              <p className="mb-3 text-sm text-slate-600">Tùy chọn. Cần điền các ô có dấu * nếu bạn muốn AI soạn bài; nếu tự viết nội dung thì bỏ qua bước này.</p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <TextField label={t('Tên sản phẩm *', 'Product name *')} value={productName} onChange={setProductName} className="sm:col-span-2" />
                 <TextAreaField label={t('Mô tả *', 'Description *')} value={productDescription} onChange={setProductDescription} rows={3} className="sm:col-span-2" />
@@ -566,7 +695,9 @@ export function CreatePostPage() {
                 <TextAreaField label={t('Mục tiêu', 'Goal')} value={goal} onChange={setGoal} rows={2} />
               </div>
             </ComposerSection>
+            )}
 
+            {step === 2 && (
             <ComposerSection title={t('Ảnh/video sản phẩm', 'Product image/video')}>
               <div className="flex flex-wrap items-center gap-3">
                 <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-[6px] border border-slate-300 bg-white px-4 text-sm font-semibold hover:bg-slate-50">
@@ -601,7 +732,11 @@ export function CreatePostPage() {
                 </div>
               )}
             </ComposerSection>
+            )}
 
+            {step === 3 && (
+            <>
+            <UsagePanel refreshVersion={usageVersion} />
             <ComposerSection
               title={t('Nội dung', 'Content')}
               headerAction={selectedPlatforms.length > 1 ? (
@@ -629,11 +764,11 @@ export function CreatePostPage() {
                 <textarea
                   value={sourceContent}
                   onChange={(event) => setSourceContent(event.target.value)}
-                  className="mt-2 h-24 w-full resize-none rounded-[6px] border border-slate-300 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-blue-500"
+                  className="mt-2 h-20 w-full resize-none rounded-[6px] border border-slate-300 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-blue-500"
                   placeholder={t('Nhập nội dung chính...', 'Enter the main content...')}
                 />
               </label>
-              <div className="mt-3 flex justify-end">
+              <div className="mt-2 flex justify-end">
                 <button
                   type="button"
                   onClick={() => void applyPlatformTemplates()}
@@ -644,7 +779,7 @@ export function CreatePostPage() {
                   {isGeneratingContent ? t('Đang gen...', 'Generating...') : t('Tự gen bài', 'Generate')}
                 </button>
               </div>
-              <div className="my-4 border-t border-slate-100" />
+              <div className="my-3 border-t border-slate-100" />
               <label className="block text-sm font-bold">
                 {t(`Bản ${PLATFORM_LABELS[activePreviewPlatform]}`, `${PLATFORM_LABELS[activePreviewPlatform]} version`)}
                 <textarea
@@ -654,7 +789,7 @@ export function CreatePostPage() {
                     [activePreviewPlatform]: event.target.value,
                   }))}
                   disabled={!selectedPlatforms.includes(activePreviewPlatform)}
-                  className="mt-2 h-28 w-full resize-none rounded-[6px] border border-slate-300 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-blue-500"
+                  className="mt-2 h-24 w-full resize-none rounded-[6px] border border-slate-300 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-blue-500 lg:h-20"
                   placeholder={getPlatformPlaceholder(activePreviewPlatform, t)}
                 />
                 <span className={cn(
@@ -665,7 +800,10 @@ export function CreatePostPage() {
                 </span>
               </label>
             </ComposerSection>
+            </>
+            )}
 
+            {step === 4 && (
             <ComposerSection
               title={t('Lịch đăng', 'Schedule')}
               headerAction={<Toggle checked={publishMode === 'SCHEDULE'} onChange={(checked) => setPublishMode(checked ? 'SCHEDULE' : 'NOW')} />}
@@ -688,31 +826,66 @@ export function CreatePostPage() {
                   </div>
                 </div>
               )}
+              {publishMode === 'NOW' && <p className="text-sm text-slate-600">Tùy chọn. Bài sẽ được đăng ngay khi bạn bấm Tạo bài. Bật công tắc để chọn giờ đăng.</p>}
             </ComposerSection>
+            )}
 
-            <p className={cn('rounded-[6px] border px-3 py-2 text-sm', statusTone === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : statusTone === 'error' ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-slate-200 bg-slate-50 text-slate-700')}>
-              {status}
-            </p>
+            {(step >= 3 || statusTone !== 'info') && (
+              <p className={cn('rounded-[6px] border px-3 py-2 text-sm', statusTone === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : statusTone === 'error' ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-slate-200 bg-slate-50 text-slate-700')}>
+                {status}
+              </p>
+            )}
           </div>
 
-          <div className="flex items-center justify-end gap-2 border-t border-slate-200 bg-white px-5 py-4">
-            <Link to="/app" className="inline-flex h-10 items-center justify-center rounded-[6px] border border-slate-300 px-4 text-sm font-semibold hover:bg-slate-50">
-              {t('Hủy', 'Cancel')}
-            </Link>
-            <button
-              type="button"
-              onClick={() => void handlePublish()}
-              disabled={!canPublish}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-[6px] bg-blue-600 px-5 text-sm font-bold text-white hover:bg-blue-700 disabled:bg-blue-200"
-            >
-              {publishMode === 'SCHEDULE' ? <CalendarClock size={16} /> : <Send size={16} />}
-              {isPublishing ? t('Đang xử lý...', 'Working...') : actionLabel}
-            </button>
+          <div className="sticky bottom-[88px] z-10 flex items-center justify-end gap-2 rounded-[6px] border border-slate-200 bg-white px-4 py-2 shadow-lg shadow-slate-200/70 lg:static lg:shrink-0 lg:shadow-sm">
+            {step === 0 ? (
+              <Link to="/app/schedule" className="mr-auto inline-flex min-h-11 items-center justify-center rounded-[6px] border border-slate-300 px-4 text-sm font-semibold hover:bg-slate-50">
+                {t('Hủy', 'Cancel')}
+              </Link>
+            ) : (
+              <button
+                type="button"
+                onClick={() => goToStep(step - 1)}
+                className="mr-auto inline-flex min-h-11 items-center justify-center rounded-[6px] border border-slate-300 px-4 text-sm font-semibold hover:bg-slate-50"
+              >
+                Quay lại
+              </button>
+            )}
+            {step < LAST_STEP ? (
+              <>
+                {(STEPS[step].optional || CAN_SKIP_REQUIRED_STEPS) && (
+                  <button
+                    type="button"
+                    onClick={() => goToStep(step + 1)}
+                    className="inline-flex min-h-11 items-center justify-center rounded-[6px] px-4 text-sm font-semibold text-slate-700 underline underline-offset-4 hover:text-slate-900"
+                  >
+                    Bỏ qua bước này
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => goToStep(step + 1)}
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[6px] bg-blue-600 px-5 text-sm font-bold text-white hover:bg-blue-700"
+                >
+                  Tiếp tục
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void handlePublish()}
+                disabled={isUploadingMedia || isPublishing}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[6px] bg-blue-600 px-5 text-sm font-bold text-white hover:bg-blue-700 disabled:bg-blue-200"
+              >
+                {publishMode === 'SCHEDULE' ? <CalendarClock size={16} /> : <Send size={16} />}
+                {isPublishing ? t('Đang xử lý...', 'Working...') : actionLabel}
+              </button>
+            )}
           </div>
         </div>
 
-        <div className="min-w-0">
-          <div className="mb-3 flex flex-wrap justify-center gap-2">
+        <div className="min-w-0 lg:flex lg:min-h-0 lg:flex-col">
+          <div className="mb-3 flex shrink-0 flex-wrap justify-center gap-2">
             {selectedPlatforms.map((platform) => (
               <button
                 key={platform}
@@ -758,8 +931,8 @@ function ComposerSection({
   children: ReactNode
 }) {
   return (
-    <section className="rounded-[6px] border border-slate-100 bg-white p-4 shadow-sm">
-      <div className="mb-3 flex items-center justify-between gap-3">
+    <section className="rounded-[6px] border border-slate-100 bg-white p-4 shadow-sm lg:p-3">
+      <div className="mb-3 flex items-center justify-between gap-3 lg:mb-2">
         <h2 className="text-lg font-bold">{title}</h2>
         {headerAction}
       </div>
@@ -829,27 +1002,33 @@ function PlatformPicker({
   onToggle: (platform: Platform) => void
 }) {
   return (
-    <div className="flex flex-wrap gap-2">
-      {ALL_PLATFORMS.map((platform) => (
-        <label key={platform} className={cn(
-          'inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition',
-          !available.includes(platform)
-            ? 'cursor-not-allowed border-slate-100 bg-slate-50 text-slate-300'
-            : selected.includes(platform)
-              ? 'cursor-pointer border-violet-300 bg-violet-50 text-violet-700'
-              : 'cursor-pointer border-slate-200 bg-white text-slate-500 hover:border-violet-200',
-        )}>
-          <input
-            type="checkbox"
-            checked={selected.includes(platform)}
-            onChange={() => onToggle(platform)}
-            disabled={!available.includes(platform)}
-            className="sr-only"
-          />
-          {PLATFORM_LABELS[platform]}
-          {!available.includes(platform) && ` (${notConnectedLabel})`}
-        </label>
-      ))}
+    <div className="grid gap-2 sm:grid-cols-3">
+      {ALL_PLATFORMS.map((platform) => {
+        const isAvailable = available.includes(platform)
+        const isSelected = selected.includes(platform)
+        return (
+          <label key={platform} className={cn(
+            'flex min-h-14 flex-col justify-center rounded-xl border px-4 py-2 transition focus-within:ring-2 focus-within:ring-violet-400',
+            !isAvailable
+              ? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-600'
+              : isSelected
+                ? 'cursor-pointer border-violet-300 bg-violet-50 text-violet-800'
+                : 'cursor-pointer border-slate-300 bg-white text-slate-700 hover:border-violet-300',
+          )}>
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={() => onToggle(platform)}
+              disabled={!isAvailable}
+              className="sr-only"
+            />
+            <span className="text-sm font-bold">{PLATFORM_LABELS[platform]}</span>
+            <span className="text-xs font-semibold">
+              {!isAvailable ? notConnectedLabel : isSelected ? 'Đã chọn' : 'Bấm để chọn'}
+            </span>
+          </label>
+        )
+      })}
     </div>
   )
 }
@@ -899,10 +1078,10 @@ function SocialFeedPreview({
 
   return (
     <article
-      className={cn('mx-auto overflow-hidden rounded-[6px] border-t-4 bg-white shadow-xl shadow-slate-200/80', compact ? 'max-w-[360px]' : 'max-w-[620px]')}
-      style={{ borderTopColor: getPlatformColor(platform) }}
+      className={cn('mx-auto flex w-full flex-col overflow-hidden rounded-[6px] bg-white shadow-xl shadow-slate-200/80 lg:min-h-0 lg:flex-1', compact ? 'max-w-[360px]' : 'max-w-[620px]')}
     >
-      <header className="flex items-center gap-3 px-5 py-4">
+      <div aria-hidden className="h-1 shrink-0" style={{ backgroundColor: getPlatformColor(platform) }} />
+      <header className="flex shrink-0 items-center gap-3 px-5 py-3">
         <PageIdentity channel={channel} platform={platform} large />
         <div className="min-w-0">
           <p className="truncate text-sm font-bold">{channel?.name ?? labels.account}</p>
@@ -914,26 +1093,26 @@ function SocialFeedPreview({
       </header>
 
       {caption.trim() ? (
-        <p className="whitespace-pre-wrap px-5 pb-4 text-sm leading-6 text-slate-900">{caption}</p>
+        <p className="shrink-0 whitespace-pre-wrap px-5 pb-3 text-sm leading-6 text-slate-900 lg:max-h-28 lg:overflow-y-auto">{caption}</p>
       ) : (
-        <div className="space-y-3 px-5 pb-5">
+        <div className="shrink-0 space-y-3 px-5 pb-4">
           <div className="h-3 w-full rounded-full bg-slate-100" />
           <div className="h-3 w-1/3 rounded-full bg-slate-100" />
         </div>
       )}
 
-      <div className={cn('bg-slate-100', previewMedia.length > 1 ? '' : 'flex min-h-[430px] items-center justify-center')}>
+      <div className="relative min-h-[430px] overflow-hidden bg-slate-100 lg:min-h-0 lg:flex-1">
         {previewMedia.length > 0 ? (
-          <div className={cn('grid w-full', visiblePreviewMedia.length > 1 ? 'grid-cols-2 gap-0.5' : 'grid-cols-1')}>
+          <div className={cn('grid w-full lg:absolute lg:inset-0 lg:place-content-center', visiblePreviewMedia.length > 1 ? 'grid-cols-2 gap-0.5' : 'grid-cols-1')}>
             {visiblePreviewMedia.map((media, index) => (
               <div key={media.url + '-' + index} className="relative">
                 {media.type.startsWith('video/') ? (
-                  <ProtectedMediaVideo src={media.url} controls className="mx-auto max-h-[430px] w-full bg-slate-950 object-contain" />
+                  <ProtectedMediaVideo src={media.url} controls className="mx-auto max-h-[430px] w-full bg-slate-950 object-contain lg:max-h-[26vh]" />
                 ) : (
                   <ProtectedMediaImage
                     src={media.url}
                     alt={`${PLATFORM_LABELS[platform]} post media preview ${index + 1}`}
-                    className="mx-auto h-auto max-h-[430px] w-full object-contain"
+                    className="mx-auto h-auto max-h-[430px] w-full object-contain lg:max-h-[26vh]"
                   />
                 )}
                 {index === visiblePreviewMedia.length - 1 && hiddenImageCount > 0 && (
@@ -945,11 +1124,13 @@ function SocialFeedPreview({
             ))}
           </div>
         ) : (
-          <EmptyMediaPlaceholder />
+          <div className="flex h-full min-h-[430px] items-center justify-center lg:absolute lg:inset-0 lg:min-h-0">
+            <EmptyMediaPlaceholder />
+          </div>
         )}
       </div>
 
-      <footer className="grid grid-cols-3 border-t border-slate-100 px-6 py-4 text-sm font-semibold text-slate-500">
+      <footer className="grid shrink-0 grid-cols-3 border-t border-slate-100 px-6 py-3 text-sm font-semibold text-slate-500">
         <button type="button" className="flex items-center justify-center gap-2">
           <ThumbsUp size={20} />
           {labels.like}
@@ -969,8 +1150,8 @@ function SocialFeedPreview({
 
 function EmptyMediaPlaceholder() {
   return (
-    <div className="flex h-56 w-72 items-center justify-center border-[6px] border-dashed border-slate-200 text-slate-200">
-      <Image size={120} strokeWidth={1.2} />
+    <div className="flex h-56 max-h-[80%] w-72 max-w-[80%] items-center justify-center border-[6px] border-dashed border-slate-200 text-slate-200">
+      <Image size={96} strokeWidth={1.2} />
     </div>
   )
 }

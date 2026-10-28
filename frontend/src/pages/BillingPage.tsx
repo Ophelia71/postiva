@@ -7,6 +7,20 @@ type Order = { id: string; orderCode: number; amountVnd: number; aiLimit: number
 type Refund = { id: string; orderId: string; amountVnd: number; status: string; reason: string; createdAt: string; providerRef: string | null }
 
 const money = (amount: number) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount)
+const dateTime = (value: string) => new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value))
+
+const ORDER_STATUS_LABELS: Record<string, string> = {
+  CREATING: 'Đang tạo link', PENDING: 'Chờ thanh toán', PAID: 'Đã thanh toán', REVIEW: 'Đang xác minh',
+  CANCELED: 'Đã hủy', CANCELLED: 'Đã hủy', EXPIRED: 'Hết hạn', FAILED: 'Thất bại',
+}
+const GRANT_STATUS_LABELS: Record<string, string> = {
+  PENDING: 'Đang cấp Pro', GRANTED: 'Đã cấp Pro', FAILED: 'Cấp Pro lỗi', NOT_APPLICABLE: 'Không áp dụng',
+}
+const REFUND_STATUS_LABELS: Record<string, string> = {
+  REQUESTED: 'Đã gửi yêu cầu', APPROVED: 'Đã duyệt', REJECTED: 'Bị từ chối', PROCESSING: 'Đang hoàn tiền',
+  SUCCEEDED: 'Đã hoàn tiền', FAILED: 'Hoàn tiền lỗi',
+}
+const label = (labels: Record<string, string>, value: string) => labels[value] ?? value
 
 export function BillingPage() {
   const { t } = usePreferences()
@@ -89,7 +103,8 @@ export function BillingPage() {
 
   return <div className="mx-auto max-w-4xl space-y-6">
     <header><h1 className="text-2xl font-bold">{t('Gói Pro và thanh toán', 'Pro plan and billing')}</h1>
-      <p className="mt-2 text-sm text-slate-600">{t('Thanh toán từng kỳ; không tự động gia hạn hoặc lưu thẻ.', 'Pay per period; no automatic renewal or card storage.')}</p></header>
+      <p className="mt-2 text-sm text-slate-600">Gói Free đã gồm lượt tạo nội dung bằng AI mỗi kỳ. Bạn chỉ cần Pro khi muốn thêm lượt.</p>
+      <p className="mt-1 text-sm text-slate-600">{t('Thanh toán từng kỳ; không tự động gia hạn hoặc lưu thẻ.', 'Pay per period; no automatic renewal or card storage.')}</p></header>
     {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</p>}
     {notice && <p role="status" className="rounded-lg bg-blue-50 p-3 text-sm text-blue-900">{notice}</p>}
     <section className="rounded-xl border border-slate-200 bg-white p-5">
@@ -106,15 +121,15 @@ export function BillingPage() {
       <h2 className="text-lg font-bold">{t('Lịch sử đơn', 'Order history')}</h2>
       {orders.length === 0 ? <p className="mt-3 text-sm text-slate-600">{t('Chưa có đơn thanh toán.', 'No payment orders yet.')}</p> : <ul className="mt-3 space-y-2">{orders.map((order) => <li key={order.id}>
         <button type="button" onClick={() => setSelected(order)} className={`min-h-12 w-full rounded-lg border px-3 py-2 text-left text-sm ${selected?.id === order.id ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200'}`}>
-          <span className="font-semibold">#{order.orderCode}</span> · {money(order.amountVnd)} · {order.status} / {order.grantStatus}
-          <span className="ml-2 text-slate-500">{new Date(order.createdAt).toLocaleString()}</span>
+          <span className="font-semibold">#{order.orderCode}</span> · {money(order.amountVnd)} · {label(ORDER_STATUS_LABELS, order.status)} / {label(GRANT_STATUS_LABELS, order.grantStatus)}
+          <span className="ml-2 text-slate-600">{dateTime(order.createdAt)}</span>
         </button>
       </li>)}</ul>}
     </section>
     {selected && <section className="rounded-xl border border-slate-200 bg-white p-5 text-sm">
       <h2 className="text-lg font-bold">{t('Chi tiết đơn', 'Order details')} #{selected.orderCode}</h2>
       <p className="mt-2">{money(selected.amountVnd)} · Pro {selected.aiLimit} {t('lượt AI /', 'AI generations /')} {selected.periodDays} {t('ngày', 'days')}</p>
-      <p className="mt-1">{t('Thanh toán:', 'Payment:')} <strong>{selected.status}</strong> · {t('Cấp quyền:', 'Entitlement:')} <strong>{selected.grantStatus}</strong></p>
+      <p className="mt-1">{t('Thanh toán:', 'Payment:')} <strong>{label(ORDER_STATUS_LABELS, selected.status)}</strong> · {t('Cấp quyền:', 'Entitlement:')} <strong>{label(GRANT_STATUS_LABELS, selected.grantStatus)}</strong></p>
       {selected.status === 'PAID' && selected.grantStatus === 'GRANTED' && <p role="status" className="mt-2 text-emerald-700">{t('Đã xác minh và cấp Pro. Nếu đang gia hạn, kỳ mới bắt đầu sau kỳ Pro hiện tại.', 'Verified and Pro granted. A renewal starts after the current Pro period.')}</p>}
       {selected.status === 'PAID' && selected.grantStatus === 'NOT_APPLICABLE' && refunds.some((refund) => refund.status === 'SUCCEEDED') && <p role="status" className="mt-2 text-slate-700">{t('Đơn đã hoàn tiền; kỳ Pro liên quan đã dừng.', 'This order was refunded; its Pro period has ended.')}</p>}
       {selected.status === 'PAID' && ['PENDING', 'FAILED'].includes(selected.grantStatus) && <p role="status" className="mt-2 text-amber-700">{t('Đã ghi nhận tiền, đang xử lý cấp quyền. Không thanh toán lại đơn này.', 'Payment recorded; entitlement is being processed. Do not pay again.')}</p>}
@@ -126,7 +141,7 @@ export function BillingPage() {
       </div>
       {selected.status === 'PAID' && <div className="mt-6 border-t border-slate-200 pt-4">
         <h3 className="font-bold">{t('Yêu cầu hoàn tiền', 'Refund request')}</h3>
-        {refunds.map((refund) => <p key={refund.id} className="mt-2">{new Date(refund.createdAt).toLocaleString()} · {money(refund.amountVnd)} · {refund.status}</p>)}
+        {refunds.map((refund) => <p key={refund.id} className="mt-2">{dateTime(refund.createdAt)} · {money(refund.amountVnd)} · {label(REFUND_STATUS_LABELS, refund.status)}</p>)}
         {refunds.length === 0 && <><label htmlFor="refund-reason" className="mt-3 block">{t('Lý do (ít nhất 10 ký tự)', 'Reason (at least 10 characters)')}</label>
           <textarea id="refund-reason" value={refundReason} onChange={(event) => setRefundReason(event.target.value)} maxLength={1000} rows={3} className="mt-1 w-full rounded-lg border border-slate-300 p-2" />
           <button type="button" disabled={busy || refundReason.trim().length < 10} onClick={() => void requestRefund()} className="mt-2 min-h-11 rounded-lg border border-slate-300 px-4 font-semibold disabled:opacity-50">{t('Gửi yêu cầu', 'Submit request')}</button></>}

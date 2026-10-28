@@ -1,6 +1,7 @@
 import { CalendarDays, ChevronLeft, ChevronRight, Eye, Pencil, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { EditPostModal } from '../components/EditPostModal'
+import { EmptyState } from '../components/EmptyState'
 import { DeletePostConfirmModal } from '../components/DeletePostConfirmModal'
 import { getPaginatedItems, PaginationControls } from '../components/PaginationControls'
 import { PostDetailModal, PostSummary } from '../components/PostDetails'
@@ -11,6 +12,8 @@ import { getErrorMessage } from '../lib/errors'
 import { sortPostsNewestFirst } from '../lib/posts'
 import { usePreferences } from '../lib/preferences'
 import { PageHeader, PageState, PlatformBadge, StatusBadge } from '../components/PageUi'
+
+type PendingScheduleAction = { kind: 'resolvePublished' | 'resolveNotPublished' | 'retry'; post: AppPost }
 
 type CalendarDay = {
   date: Date
@@ -40,6 +43,8 @@ export function SchedulePage() {
   const [detailPost, setDetailPost] = useState<AppPost | null>(null)
   const [deleteCandidate, setDeleteCandidate] = useState<AppPost | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [pendingAction, setPendingAction] = useState<PendingScheduleAction | null>(null)
+  const [deleteError, setDeleteError] = useState('')
 
   useEffect(() => {
     const refresh = () => {
@@ -127,7 +132,17 @@ export function SchedulePage() {
           }`}
         >
           <span>{publishNotice.message}</span>
-          <button type="button" onClick={() => setPublishNotice(null)} className="shrink-0 font-semibold underline">Đóng</button>
+          <button type="button" onClick={() => setPublishNotice(null)} className="min-h-11 shrink-0 font-semibold underline">Đóng</button>
+        </div>
+      )}
+
+      {pendingAction && (
+        <div role="alertdialog" aria-label="Xác nhận" className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between">
+          <p>{confirmMessage(pendingAction)}</p>
+          <div className="flex shrink-0 gap-2">
+            <button type="button" onClick={() => setPendingAction(null)} className="min-h-11 rounded-lg border border-amber-300 px-4 font-semibold hover:bg-amber-100">Hủy</button>
+            <button type="button" onClick={() => void runPendingAction()} className="min-h-11 rounded-lg bg-amber-700 px-4 font-bold text-white hover:bg-amber-800">Xác nhận</button>
+          </div>
         </div>
       )}
 
@@ -136,24 +151,26 @@ export function SchedulePage() {
           <div className="mb-6 flex items-center justify-between">
             <button
               type="button"
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200"
+              aria-label="Tháng trước"
+              className="flex h-11 w-11 items-center justify-center rounded-lg border border-slate-200"
               onClick={() => setVisibleMonth(addMonths(visibleMonth, -1))}
             >
-              <ChevronLeft size={16} />
+              <ChevronLeft size={16} aria-hidden="true" />
             </button>
             <h2 className="inline-flex items-center gap-2 font-bold"><CalendarDays size={17} />{formatMonth(visibleMonth)}</h2>
             <button
               type="button"
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200"
+              aria-label="Tháng sau"
+              className="flex h-11 w-11 items-center justify-center rounded-lg border border-slate-200"
               onClick={() => setVisibleMonth(addMonths(visibleMonth, 1))}
             >
-              <ChevronRight size={16} />
+              <ChevronRight size={16} aria-hidden="true" />
             </button>
           </div>
 
           <div className="grid grid-cols-7 gap-2">
             {['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map((label) => (
-              <div key={label} className="text-center text-xs font-medium text-slate-400">
+              <div key={label} className="text-center text-xs font-medium text-slate-600">
                 {label}
               </div>
             ))}
@@ -167,10 +184,12 @@ export function SchedulePage() {
                   key={key}
                   type="button"
                   onClick={() => setSelectedDate(stripTime(day.date))}
+                  aria-label={`${formatDate(day.date)}${hasPosts ? ', có bài chờ đăng' : ''}`}
+                  aria-pressed={selected}
                   className={[
-                    'relative flex h-20 flex-col items-center justify-start rounded-xl pt-3 text-xs transition',
+                    'relative flex h-14 flex-col items-center justify-start rounded-xl pt-3 text-xs transition sm:h-20',
                     selected ? 'bg-blue-600 font-bold text-white' : 'hover:bg-[var(--soft-bg)]',
-                    day.inCurrentMonth ? '' : 'text-slate-300',
+                    day.inCurrentMonth ? '' : 'text-slate-500',
                   ].join(' ')}
                 >
                   {day.date.getDate()}
@@ -204,7 +223,13 @@ export function SchedulePage() {
         <h2 className="border-b border-[var(--app-border)] p-5 text-base font-bold">{t('Lịch đăng và bài cần xử lý')}</h2>
         <div className="divide-y divide-slate-100">
           {scheduleRows.length === 0 ? (
-            <div className="px-5 py-6 text-sm text-[var(--muted-text)]">{t('Chưa có lịch đăng hoặc bài nào cần xử lý.')}</div>
+            <EmptyState
+              icon={<CalendarDays size={20} />}
+              title="Chưa có bài nào trong lịch"
+              description="Bài đã lên lịch, bài đang đăng và bài cần xử lý sẽ hiện ở đây. Tạo bài và chọn giờ đăng để bắt đầu."
+              actionLabel="Tạo bài và lên lịch"
+              actionTo="/app/create"
+            />
           ) : (
             paginatedSchedule.pageItems.map((post) => (
               <div key={postRowKey(post)} className="grid grid-cols-[72px_minmax(0,1fr)] items-center gap-2 px-4 py-4 text-sm lg:grid-cols-[90px_minmax(0,1fr)_110px_150px_32px_32px_32px_auto] lg:gap-3 lg:px-5">
@@ -233,33 +258,36 @@ export function SchedulePage() {
                 <button
                   type="button"
                   onClick={() => setDetailPost(post)}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-50 hover:text-slate-700"
+                  aria-label="Xem chi tiết bài"
+                  className="flex h-11 w-11 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-50 hover:text-slate-900 lg:h-8 lg:w-8"
                 >
-                  <Eye size={15} />
+                  <Eye size={15} aria-hidden="true" />
                 </button>
                 <button
                   type="button"
                   onClick={() => openEditPost(post)}
                   disabled={!isEditableScheduledPost(post)}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-300 hover:bg-violet-50 hover:text-violet-700 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-300"
+                  aria-label="Sửa bài đã đặt lịch"
+                  className="flex h-11 w-11 items-center justify-center rounded-lg text-slate-600 hover:bg-violet-50 hover:text-violet-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-600 lg:h-8 lg:w-8"
                   title={isEditableScheduledPost(post) ? 'Sửa bài đã đặt lịch' : 'Chỉ sửa được bài đang chờ đăng'}
                 >
-                  <Pencil size={15} />
+                  <Pencil size={15} aria-hidden="true" />
                 </button>
                 <button
                   type="button"
                   onClick={() => setDeleteCandidate(post)}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-300 hover:bg-rose-50 hover:text-rose-500"
+                  aria-label="Xóa bài"
+                  className="flex h-11 w-11 items-center justify-center rounded-lg text-slate-600 hover:bg-rose-50 hover:text-rose-600 lg:h-8 lg:w-8"
                 >
-                  <Trash2 size={15} />
+                  <Trash2 size={15} aria-hidden="true" />
                 </button>
                 {post.status === 'Unknown' ? (
                   <div className="flex flex-wrap gap-1">
-                    <button type="button" onClick={() => void resolveUnknown(post, true)} className="rounded border border-emerald-200 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">Đã đăng</button>
-                    <button type="button" onClick={() => void resolveUnknown(post, false)} className="rounded border border-amber-300 px-2 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-50">Chưa đăng · thử lại</button>
+                    <button type="button" onClick={() => setPendingAction({ kind: 'resolvePublished', post })} className="min-h-11 rounded border border-emerald-200 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">Đã đăng</button>
+                    <button type="button" onClick={() => setPendingAction({ kind: 'resolveNotPublished', post })} className="min-h-11 rounded border border-amber-300 px-3 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-50">Chưa đăng · thử lại</button>
                   </div>
                 ) : post.status === 'Failed' ? (
-                  <button type="button" onClick={() => void retryFailed(post)} className="rounded border border-blue-200 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50">Thử lại</button>
+                  <button type="button" onClick={() => setPendingAction({ kind: 'retry', post })} className="min-h-11 rounded border border-blue-200 px-3 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50">Thử lại</button>
                 ) : <span />}
               </div>
             ))
@@ -307,7 +335,8 @@ export function SchedulePage() {
         <DeletePostConfirmModal
           post={deleteCandidate}
           deleting={isDeleting}
-          onCancel={() => setDeleteCandidate(null)}
+          error={deleteError}
+          onCancel={() => { setDeleteError(''); setDeleteCandidate(null) }}
           onConfirm={() => void deletePost(deleteCandidate)}
         />
       )}
@@ -353,28 +382,39 @@ export function SchedulePage() {
 
   async function deletePost(post: AppPost) {
     setIsDeleting(true)
+    setDeleteError('')
     try {
       const response = await api.delete<DeletePostResponse>(`/app-data/posts/${post.id}`)
       if (!response.data.deleted) {
-        window.alert(response.data.message || response.data.facebookMessage || 'Không thể xóa bài viết.')
+        setDeleteError(response.data.message || response.data.facebookMessage || 'Không thể xóa bài viết.')
         return
       }
       setDeleteCandidate(null)
       setDetailPost((current) => current?.id === post.id ? null : current)
       reload()
     } catch (error) {
-      window.alert(getErrorMessage(error, 'Không thể xóa bài viết.'))
+      setDeleteError(getErrorMessage(error, 'Không thể xóa bài viết.'))
     } finally {
       setIsDeleting(false)
     }
   }
 
+  function confirmMessage(action: PendingScheduleAction) {
+    if (action.kind === 'resolvePublished') return 'Hãy xác nhận bạn đã mở nền tảng và tìm thấy bài đăng. Đánh dấu lịch là đã đăng?'
+    if (action.kind === 'resolveNotPublished') return 'Chỉ tiếp tục nếu bạn đã kiểm tra Page/tài khoản đích và chắc chắn bài chưa xuất hiện. Postiva sẽ thử đăng lại; nếu kết quả trước còn chưa rõ, thao tác này có thể tạo bài trùng.'
+    return 'Thử đăng lại bài này ngay? Hãy kiểm tra trước rằng bài chưa được đăng trên nền tảng.'
+  }
+
+  async function runPendingAction() {
+    const action = pendingAction
+    setPendingAction(null)
+    if (!action) return
+    if (action.kind === 'retry') await retryFailed(action.post)
+    else await resolveUnknown(action.post, action.kind === 'resolvePublished')
+  }
+
   async function resolveUnknown(post: AppPost, published: boolean) {
     if (!post.scheduleId) return
-    const confirmed = window.confirm(published
-      ? 'Hãy xác nhận bạn đã mở nền tảng và tìm thấy bài đăng. Đánh dấu lịch là đã đăng?'
-      : 'Chỉ tiếp tục nếu bạn đã kiểm tra Page/tài khoản đích và chắc chắn bài chưa xuất hiện. Postiva sẽ thử đăng lại; nếu kết quả trước còn chưa rõ, thao tác này có thể tạo bài trùng.')
-    if (!confirmed) return
     try {
       await api.post(`/publishing/${post.scheduleId}/resolve`, {
         result: published ? 'CONFIRMED_PUBLISHED' : 'CONFIRMED_NOT_PUBLISHED',
@@ -392,7 +432,7 @@ export function SchedulePage() {
   }
 
   async function retryFailed(post: AppPost) {
-    if (!post.scheduleId || !window.confirm('Thử đăng lại bài này ngay? Hãy kiểm tra trước rằng bài chưa được đăng trên nền tảng.')) return
+    if (!post.scheduleId) return
     try {
       await api.post(`/publishing/${post.scheduleId}/retry`)
       setPublishNotice({ tone: 'info', message: 'Đã nhận yêu cầu thử lại. Trạng thái sẽ tự cập nhật khi worker xử lý xong.' })

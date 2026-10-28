@@ -193,7 +193,7 @@ export function RepostPostModal({
             <h2 className="text-lg font-bold">Tạo bài mới từ bài này</h2>
             <p className="mt-1 text-xs text-slate-400">Bài cũ không bị thay đổi. Bài mới sẽ có permalink và tương tác riêng.</p>
           </div>
-          <button type="button" onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-slate-100">
+          <button type="button" onClick={onClose} aria-label="Đóng" className="flex h-11 w-11 items-center justify-center rounded-lg hover:bg-slate-100">
             <X size={17} />
           </button>
         </div>

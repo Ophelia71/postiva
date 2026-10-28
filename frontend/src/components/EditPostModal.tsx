@@ -29,7 +29,7 @@ export function EditPostModal({
       <form onSubmit={onSubmit} className="w-full max-w-2xl rounded-2xl bg-white p-5 shadow-xl">
         <div className="mb-5 flex items-center justify-between">
           <h2 className="text-lg font-bold">{title}</h2>
-          <button type="button" onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-slate-100">
+          <button type="button" onClick={onClose} aria-label="Đóng" className="flex h-11 w-11 items-center justify-center rounded-lg hover:bg-slate-100">
             <X size={17} />
           </button>
         </div>

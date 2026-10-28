@@ -6,14 +6,22 @@ import { usePreferences } from '../lib/preferences'
 export function PageState({
   title,
   description,
+  onRetry,
 }: {
   title: string
   description?: string
+  /** When set, the state is treated as a recoverable error and offers a retry button. */
+  onRetry?: () => void
 }) {
   return (
-    <div className="rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] p-8 text-center shadow-sm">
+    <div role={onRetry ? 'alert' : undefined} className="rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] p-8 text-center shadow-sm">
       <p className="text-lg font-bold">{title}</p>
       {description && <p className="mt-2 text-sm text-[var(--muted-text)]">{description}</p>}
+      {onRetry && (
+        <button type="button" onClick={onRetry} className="mt-4 min-h-11 rounded-full border border-[var(--app-border)] px-5 text-sm font-bold hover:bg-[var(--soft-bg)]">
+          Thử lại
+        </button>
+      )}
     </div>
   )
 }
