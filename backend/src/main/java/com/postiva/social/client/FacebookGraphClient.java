@@ -2,6 +2,8 @@ package com.postiva.social.client;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.postiva.common.Platform;
+import com.postiva.social.insights.PostMetrics;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.http.MediaType;
@@ -226,6 +228,55 @@ public class FacebookGraphClient {
         } catch (Exception exception) {
             throw new IllegalStateException("Meta trả về dữ liệu bài đăng không hợp lệ", exception);
         }
+    }
+
+    /**
+     * Recent Page posts with reaction, comment and share counts. Needs pages_read_engagement; views are not
+     * requested because they need read_insights, which most manually connected tokens do not have.
+     */
+    public List<PostMetrics> getPagePostMetrics(String pageId, String accessToken, int limit) {
+        String body = webClient.get()
+                .uri(uri -> uri.path("/{pageId}/posts")
+                        .queryParam("fields", "id,message,created_time,shares,attachments{media_type},"
+                                + "reactions.summary(total_count).limit(0),comments.summary(total_count).limit(0)")
+                        .queryParam("limit", limit)
+                        .queryParam("access_token", accessToken)
+                        .build(pageId))
+                .retrieve()
+                .onStatus(HttpStatusCode::isError, response -> response.bodyToMono(String.class)
+                        .map(responseBody -> new MetaApiException(response.statusCode().value(),
+                                metaErrorMessage("đọc tương tác bài đăng Facebook", responseBody))))
+                .bodyToMono(String.class)
+                .block();
+        try {
+            List<PostMetrics> posts = new ArrayList<>();
+            for (JsonNode node : objectMapper.readTree(body).path("data")) {
+                String id = node.path("id").asText();
+                if (id.isBlank()) {
+                    continue;
+                }
+                JsonNode attachment = node.path("attachments").path("data").path(0);
+                posts.add(new PostMetrics(
+                        id,
+                        Platform.FACEBOOK,
+                        parseDate(node.path("created_time").asText()),
+                        node.path("message").asText(""),
+                        attachment.isMissingNode() ? "TEXT" : attachment.path("media_type").asText("TEXT").toUpperCase(),
+                        countOrNull(node.path("reactions").path("summary").path("total_count")),
+                        countOrNull(node.path("comments").path("summary").path("total_count")),
+                        // Meta omits "shares" entirely when a post has never been shared.
+                        node.path("shares").path("count").canConvertToInt() ? node.path("shares").path("count").asInt() : 0,
+                        null
+                ));
+            }
+            return posts;
+        } catch (Exception exception) {
+            throw new IllegalStateException("Meta trả về dữ liệu tương tác không hợp lệ", exception);
+        }
+    }
+
+    private static Integer countOrNull(JsonNode node) {
+        return node.canConvertToInt() ? node.asInt() : null;
     }
 
     private String extractObjectId(String body) {

@@ -1,7 +1,6 @@
 package com.postiva.calendar.entity;
 
 import com.postiva.common.Platform;
-import com.postiva.common.PostStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -10,6 +9,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -36,7 +36,19 @@ public class CalendarItem {
     private String topic;
 
     @Enumerated(EnumType.STRING)
-    private PostStatus status = PostStatus.PLANNED;
+    private CalendarItemStatus status = CalendarItemStatus.PLANNED;
+
+    /** When the post goes out once the week is approved. */
+    private Instant scheduledTime;
+
+    /** Why this post fits the shop, in the AI's words, shown to the shop next to the draft. */
+    @Column(columnDefinition = "TEXT")
+    private String reason;
+
+    private UUID scheduledPostId;
+
+    @Column(columnDefinition = "TEXT")
+    private String error;
 
     private LocalDateTime createdAt = LocalDateTime.now();
     private LocalDateTime updatedAt = LocalDateTime.now();
@@ -93,11 +105,44 @@ public class CalendarItem {
         this.topic = topic;
     }
 
-    public PostStatus getStatus() {
+    public CalendarItemStatus getStatus() {
         return status;
     }
 
-    public void setStatus(PostStatus status) {
+    public void setStatus(CalendarItemStatus status) {
         this.status = status;
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    public Instant getScheduledTime() {
+        return scheduledTime;
+    }
+
+    public void setScheduledTime(Instant scheduledTime) {
+        this.scheduledTime = scheduledTime;
+    }
+
+    public String getReason() {
+        return reason;
+    }
+
+    public void setReason(String reason) {
+        this.reason = reason;
+    }
+
+    public UUID getScheduledPostId() {
+        return scheduledPostId;
+    }
+
+    public void setScheduledPostId(UUID scheduledPostId) {
+        this.scheduledPostId = scheduledPostId;
+    }
+
+    public String getError() {
+        return error;
+    }
+
+    public void setError(String error) {
+        this.error = error;
     }
 }

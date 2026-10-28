@@ -66,7 +66,11 @@ public class PostService {
     }
 
     public GeneratePostResponse generate(GeneratePostRequest request, UUID idempotencyKey) {
-        UUID userId = currentUserService.requireCurrentUserId();
+        return generateForUser(currentUserService.requireCurrentUserId(), request, idempotencyKey);
+    }
+
+    /** Same as {@link #generate} for work that runs outside a request, such as weekly plan drafts. */
+    public GeneratePostResponse generateForUser(UUID userId, GeneratePostRequest request, UUID idempotencyKey) {
         if (idempotencyKey == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Thiếu Idempotency-Key");
         if (!openAiProperties.enabled()) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Dịch vụ AI chưa sẵn sàng");
         fileService.validateAttachments(request.imageIds(), userId);
@@ -75,7 +79,10 @@ public class PostService {
         try { fingerprint = PersistentRateLimiter.sha256(json.writeValueAsString(request)); }
         catch (JsonProcessingException e) { throw new IllegalArgumentException("Nội dung yêu cầu không hợp lệ", e); }
         var reservation = usage.reserve(userId, idempotencyKey, fingerprint, openAiProperties.model());
-        if (reservation.existingPostId() != null) return getPostResponse(reservation.existingPostId());
+        if (reservation.existingPostId() != null) {
+            return toResponse(postRepository.findByIdAndUserId(reservation.existingPostId(), userId)
+                    .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy bài viết")));
+        }
         try {
             // External I/O is outside the database transaction and does not hold a connection/row lock.
             AiPostResult result = openAiService.generatePost(request, template,
@@ -141,6 +148,16 @@ public class PostService {
 
     public GeneratePostResponse getPostResponse(UUID postId) {
         return toResponse(getPost(postId));
+    }
+
+    /** Posts of one user by id, for screens that show many drafts at once. Missing ids are left out. */
+    @Transactional(readOnly = true)
+    public Map<UUID, GeneratePostResponse> getPostResponses(UUID userId, List<UUID> postIds) {
+        Map<UUID, GeneratePostResponse> responses = new LinkedHashMap<>();
+        for (UUID postId : postIds) {
+            postRepository.findByIdAndUserId(postId, userId).ifPresent(post -> responses.put(postId, toResponse(post)));
+        }
+        return responses;
     }
 
     @Transactional

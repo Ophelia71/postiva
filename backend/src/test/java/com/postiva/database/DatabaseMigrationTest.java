@@ -80,8 +80,8 @@ class DatabaseMigrationTest {
 
     @Test
     void emptyDatabaseMigratesAndValidatesAllApplicationEntities() {
-        assertEquals(12, flyway(null).migrate().migrationsExecuted);
-        assertEquals("12", flyway(null).info().current().getVersion().getVersion());
+        assertEquals(13, flyway(null).migrate().migrationsExecuted);
+        assertEquals("13", flyway(null).info().current().getVersion().getVersion());
         assertTrue(flyway(null).validateWithResult().validationSuccessful);
         validateEntities();
     }
@@ -98,7 +98,7 @@ class DatabaseMigrationTest {
         assertThrows(FlywayException.class, () -> flyway(null).migrate());
         assertEquals(original, snapshot());
         flyway(null).baseline();
-        assertEquals(11, flyway(null).migrate().migrationsExecuted);
+        assertEquals(12, flyway(null).migrate().migrationsExecuted);
         assertEquals(original, snapshot());
         assertEquals("ACTIVE", query("SELECT status FROM " + schema + ".users WHERE id = '" + USER + "'"));
         assertEquals("0", query("SELECT count(*) FROM " + schema + ".admin_audit_logs"));
@@ -140,7 +140,7 @@ class DatabaseMigrationTest {
         execute("INSERT INTO " + schema + ".pending_registrations (full_name,email,password_hash,otp_hash,otp_expires_at) VALUES "
                 + "('Pending fixture','pending@example.test','original-password-hash','original-otp-hash',TIMESTAMP '2030-01-01')");
         String before = query("SELECT (to_jsonb(p))::text FROM " + schema + ".pending_registrations p");
-        assertEquals(8, flyway(null).migrate().migrationsExecuted);
+        assertEquals(9, flyway(null).migrate().migrationsExecuted);
         assertEquals(before, query("SELECT (to_jsonb(p) - 'failed_attempts')::text FROM " + schema + ".pending_registrations p"));
         assertEquals("0", query("SELECT failed_attempts FROM " + schema + ".pending_registrations"));
         assertEquals("0", query("SELECT count(*) FROM " + schema + ".subscription_periods"));
@@ -170,7 +170,7 @@ class DatabaseMigrationTest {
                 + "('" + requestId + "', DATE '2026-10-17', DATE '2026-10-01', 'gpt-4o-mini', 0.15, 0.075, 0.60, 'RESERVED', 0.01)");
         String before = query("SELECT to_jsonb(cost)::text FROM " + schema + ".ai_provider_costs cost WHERE request_id = '" + requestId + "'");
 
-        assertEquals(4, flyway(null).migrate().migrationsExecuted);
+        assertEquals(5, flyway(null).migrate().migrationsExecuted);
         assertEquals(before, query("SELECT (to_jsonb(cost) - ARRAY['cache_write_input_rate_usd_per_million', "
                 + "'cache_write_input_tokens'])::text FROM " + schema + ".ai_provider_costs cost WHERE request_id = '" + requestId + "'"));
         assertEquals("0.0000000000", query("SELECT cache_write_input_rate_usd_per_million::text FROM " + schema
@@ -191,7 +191,7 @@ class DatabaseMigrationTest {
                 + "('" + expiredPeriodId + "', '" + USER + "', 'FREE', CURRENT_TIMESTAMP - INTERVAL '40 days', "
                 + "CURRENT_TIMESTAMP - INTERVAL '10 days', 5, 5)");
 
-        assertEquals(2, flyway(null).migrate().migrationsExecuted);
+        assertEquals(3, flyway(null).migrate().migrationsExecuted);
         assertEquals("30", query("SELECT ai_limit FROM " + schema + ".subscription_periods WHERE id = '" + activePeriodId + "'"));
         assertEquals("3", query("SELECT ai_used FROM " + schema + ".subscription_periods WHERE id = '" + activePeriodId + "'"));
         assertEquals("5", query("SELECT ai_limit FROM " + schema + ".subscription_periods WHERE id = '" + expiredPeriodId + "'"));
@@ -208,7 +208,7 @@ class DatabaseMigrationTest {
                 + "TIMESTAMP '2026-10-19 10:15:00', TIMESTAMP '2026-10-18 09:00:00', "
                 + "TIMESTAMP '2026-10-18 09:30:00', 'PUBLISHING')");
 
-        assertEquals(7, flyway(null, "UTC", "Asia/Ho_Chi_Minh").migrate().migrationsExecuted);
+        assertEquals(8, flyway(null, "UTC", "Asia/Ho_Chi_Minh").migrate().migrationsExecuted);
 
         assertEquals("UNKNOWN", query("SELECT status FROM " + schema + ".scheduled_posts"));
         assertEquals("2026-10-20 15:30:00", query("SELECT to_char(scheduled_time AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') FROM " + schema + ".scheduled_posts"));
@@ -252,6 +252,31 @@ class DatabaseMigrationTest {
             assertEquals("Verified lock", query("SELECT reason FROM " + schema
                     + ".admin_audit_logs WHERE action = 'LOCK_USER'"));
         }
+    }
+
+    @Test
+    void v13KeepsTemplateCalendarsAndReplacesLegacyStatusCheck() throws SQLException {
+        flyway("12").migrate();
+        seedExistingData();
+        // Databases created from the old reset script carry this constraint name instead of V1's generated one.
+        execute("ALTER TABLE " + schema + ".calendar_items RENAME CONSTRAINT calendar_items_status_check TO chk_calendar_items_status");
+        String calendarId = "00000000-0000-0000-0000-000000000040";
+        execute("INSERT INTO " + schema + ".content_calendars (id, user_id, industry_code, goal, start_date, end_date) VALUES "
+                + "('" + calendarId + "', '" + USER + "', 'fnb', 'Goal', DATE '2026-11-02', DATE '2026-11-08')");
+        execute("INSERT INTO " + schema + ".calendar_items (calendar_id, planned_date, platform, topic, status) VALUES "
+                + "('" + calendarId + "', DATE '2026-11-02', 'FACEBOOK', 'Topic', 'PLANNED')");
+        String before = query("SELECT (to_jsonb(i) - 'id')::text FROM " + schema + ".calendar_items i");
+
+        assertEquals(1, flyway(null).migrate().migrationsExecuted);
+        assertEquals("READY", query("SELECT status FROM " + schema + ".content_calendars WHERE id = '" + calendarId + "'"));
+        assertEquals(before, query("SELECT (to_jsonb(i) - ARRAY['id', 'scheduled_time', 'reason', 'scheduled_post_id', 'error'])::text FROM "
+                + schema + ".calendar_items i"));
+        assertEquals("1", query("SELECT count(*) FROM pg_constraint WHERE conrelid = '" + schema + ".calendar_items'::regclass "
+                + "AND contype = 'c' AND pg_get_constraintdef(oid) ILIKE '%status%'"));
+        execute("UPDATE " + schema + ".calendar_items SET status = 'SKIPPED'");
+        assertThrows(SQLException.class, () -> execute("UPDATE " + schema + ".calendar_items SET status = 'OTHER'"));
+        assertThrows(SQLException.class, () -> execute("UPDATE " + schema + ".content_calendars SET status = 'OTHER'"));
+        validateEntities();
     }
 
     @Test

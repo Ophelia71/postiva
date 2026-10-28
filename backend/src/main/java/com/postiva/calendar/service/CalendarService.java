@@ -9,7 +9,7 @@ import com.postiva.calendar.repository.CalendarItemRepository;
 import com.postiva.calendar.repository.ContentCalendarRepository;
 import com.postiva.auth.service.CurrentUserService;
 import com.postiva.common.Platform;
-import com.postiva.common.PostStatus;
+import com.postiva.calendar.entity.CalendarItemStatus;
 import com.postiva.template.entity.IndustryTemplate;
 import com.postiva.template.service.TemplateService;
 import org.springframework.stereotype.Service;
@@ -62,7 +62,7 @@ public class CalendarService {
             item.setPlatform(i % 2 == 0 ? Platform.FACEBOOK : Platform.INSTAGRAM);
             item.setPostType(postTypes.get(i % postTypes.size()));
             item.setTopic(item.getPostType() + " cho mục tiêu: " + request.goal());
-            item.setStatus(PostStatus.PLANNED);
+            item.setStatus(CalendarItemStatus.PLANNED);
             savedItems.add(itemRepository.save(item));
         }
 

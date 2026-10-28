@@ -10,7 +10,6 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 @Component
 public class InstagramPublisher implements PlatformPublisher {
@@ -95,18 +94,7 @@ public class InstagramPublisher implements PlatformPublisher {
     }
 
     private InstagramGraphClient.ApiMode apiMode(SocialAccount account) {
-        Map<String, Object> metadata = account.getAccountMetadata();
-        String configuredMode = metadata == null ? "" : String.valueOf(metadata.getOrDefault("apiMode", ""));
-        if (InstagramGraphClient.ApiMode.INSTAGRAM_LOGIN.name().equalsIgnoreCase(configuredMode)) {
-            return InstagramGraphClient.ApiMode.INSTAGRAM_LOGIN;
-        }
-        if (InstagramGraphClient.ApiMode.FACEBOOK_LOGIN.name().equalsIgnoreCase(configuredMode)) {
-            return InstagramGraphClient.ApiMode.FACEBOOK_LOGIN;
-        }
-        String accountType = metadata == null ? "" : String.valueOf(metadata.getOrDefault("accountType", ""));
-        return accountType.isBlank()
-                ? InstagramGraphClient.ApiMode.FACEBOOK_LOGIN
-                : InstagramGraphClient.ApiMode.INSTAGRAM_LOGIN;
+        return InstagramGraphClient.ApiMode.fromAccountMetadata(account.getAccountMetadata());
     }
 
     private void validateMedia(UploadedFile media) {

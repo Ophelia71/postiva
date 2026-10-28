@@ -2,6 +2,8 @@ package com.postiva.social.client;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.postiva.common.Platform;
+import com.postiva.social.insights.PostMetrics;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
@@ -12,7 +14,13 @@ import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Component
 public class ThreadsGraphClient {
@@ -111,6 +119,88 @@ public class ThreadsGraphClient {
                 .bodyToMono(String.class)
                 .block();
         return extractId(body, "Threads không trả về ID bài đăng");
+    }
+
+    /** Recent posts of the token's profile, without engagement (Threads only exposes that through insights). */
+    public List<PostMetrics> getRecentThreads(String accessToken, int limit) {
+        String body = apiClient.get()
+                .uri(uri -> uri.path("/me/threads")
+                        .queryParam("fields", "id,text,media_type,timestamp")
+                        .queryParam("limit", limit)
+                        .queryParam("access_token", accessToken)
+                        .build())
+                .retrieve()
+                .onStatus(HttpStatusCode::isError, response -> response.bodyToMono(String.class)
+                        .map(responseBody -> new MetaApiException(response.statusCode().value(),
+                                metaErrorMessage(responseBody))))
+                .bodyToMono(String.class)
+                .block();
+        try {
+            List<PostMetrics> posts = new ArrayList<>();
+            for (JsonNode node : objectMapper.readTree(body).path("data")) {
+                String id = node.path("id").asText();
+                // Reposts of other people's posts have no insights and say nothing about this shop's content.
+                if (id.isBlank() || "REPOST_FACADE".equalsIgnoreCase(node.path("media_type").asText())) {
+                    continue;
+                }
+                posts.add(new PostMetrics(
+                        id,
+                        Platform.THREADS,
+                        parseTimestamp(node.path("timestamp").asText()),
+                        node.path("text").asText(""),
+                        node.path("media_type").asText("TEXT_POST"),
+                        null, null, null, null
+                ));
+            }
+            return posts;
+        } catch (Exception exception) {
+            throw new IllegalStateException("Threads trả về danh sách bài không hợp lệ", exception);
+        }
+    }
+
+    /** Lifetime metrics of one post. Needs threads_manage_insights; callers treat a failure as "no data". */
+    public Map<String, Integer> getThreadInsights(String mediaId, String accessToken) {
+        String body = apiClient.get()
+                .uri(uri -> uri.path("/{mediaId}/insights")
+                        .queryParam("metric", "views,likes,replies,reposts,quotes")
+                        .queryParam("access_token", accessToken)
+                        .build(mediaId))
+                .retrieve()
+                .onStatus(HttpStatusCode::isError, response -> response.bodyToMono(String.class)
+                        .map(responseBody -> new MetaApiException(response.statusCode().value(),
+                                metaErrorMessage(responseBody))))
+                .bodyToMono(String.class)
+                .block();
+        try {
+            Map<String, Integer> metrics = new HashMap<>();
+            for (JsonNode metric : objectMapper.readTree(body).path("data")) {
+                JsonNode value = metric.path("values").path(0).path("value");
+                if (!value.canConvertToInt()) {
+                    value = metric.path("total_value").path("value");
+                }
+                if (value.canConvertToInt()) {
+                    metrics.put(metric.path("name").asText(), value.asInt());
+                }
+            }
+            return metrics;
+        } catch (Exception exception) {
+            throw new IllegalStateException("Threads trả về insights không hợp lệ", exception);
+        }
+    }
+
+    private static Instant parseTimestamp(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return OffsetDateTime.parse(value, DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssZ")).toInstant();
+        } catch (RuntimeException exception) {
+            try {
+                return OffsetDateTime.parse(value).toInstant();
+            } catch (RuntimeException invalid) {
+                return null;
+            }
+        }
     }
 
     public void awaitContainerReady(String containerId, String accessToken) {
