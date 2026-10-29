@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, CalendarClock, Check, Clock3, Film, Link2, Trash2, Undo2 } from 'lucide-react'
+import { ArrowLeft, ArrowRight, CalendarClock, Check, Clock3, Film, Link2, Minus, Plus, Trash2, Undo2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { EmptyState } from '../components/EmptyState'
@@ -34,7 +34,16 @@ const PLATFORM_NAMES: Record<string, string> = { FACEBOOK: 'Facebook', INSTAGRAM
 const PLATFORM_COLORS: Record<string, string> = { FACEBOOK: '#1877F2', INSTAGRAM: '#E1306C', THREADS: '#111827' }
 const TONES = ['Thân thiện, gần gũi', 'Chuyên nghiệp, tin cậy', 'Trẻ trung, hài hước', 'Sang trọng, tinh tế']
 const GOALS = ['Giới thiệu sản phẩm mới', 'Chạy khuyến mãi', 'Tăng tương tác', 'Kéo khách cũ quay lại', 'Xây dựng thương hiệu']
-const POST_COUNTS = [3, 5, 7]
+const MIN_POSTS = 1
+const MAX_POSTS = 7
+// Below this many measured posts the findings come from a handful of posts and may be chance.
+const RELIABLE_SAMPLE = 10
+
+/** A week's post count from how often the channel already posts: keep a good rhythm, nudge a slow one up to 4. */
+function suggestedPostCount(postsPerWeek: number) {
+  if (!(postsPerWeek > 0)) return null
+  return Math.min(MAX_POSTS, Math.max(4, Math.round(postsPerWeek)))
+}
 const MEDIA_LABELS: Record<string, string> = { VIDEO: 'Video', IMAGE: 'Bài có ảnh', CAROUSEL: 'Bài nhiều ảnh', TEXT: 'Bài chỉ có chữ', LINK: 'Bài chia sẻ link' }
 const POLL_MS = 2500
 const INPUT = 'mt-1 h-11 w-full rounded-xl border border-[var(--app-border)] bg-[var(--panel-bg)] px-3 text-sm font-normal'
@@ -307,7 +316,7 @@ function WeekBoard({ plan, selectedId, onSelect }: { plan: WeeklyPlan; selectedI
 }
 
 /** The three findings that matter most for planning, as tiles instead of a paragraph. */
-function InsightTiles({ summary, stacked = false }: { summary: Partial<PerformanceSummary> | null | undefined; stacked?: boolean }) {
+function InsightTiles({ summary, stacked = false, platform }: { summary: Partial<PerformanceSummary> | null | undefined; stacked?: boolean; platform?: string }) {
   const [open, setOpen] = useState(false)
   if (!summary) return null
   const media = Object.entries(summary.engagementByMediaType ?? {}).sort((a, b) => b[1] - a[1])[0]?.[0]
@@ -317,9 +326,16 @@ function InsightTiles({ summary, stacked = false }: { summary: Partial<Performan
     { icon: Clock3, label: 'Giờ tốt nhất', value: summary.bestHour != null ? `${summary.bestHour}h – ${summary.bestHour + 1}h` : null },
   ]
   const hasData = tiles.some((tile) => tile.value)
+  const measured = summary.postsWithMetrics ?? 0
   return (
     <div className="rounded-2xl border border-[var(--app-border)] bg-[var(--soft-bg)] p-4">
       <p className="flex items-center gap-2 text-sm font-bold">Postiva thấy gì từ bài cũ</p>
+      {measured > 0 && (
+        <p className="mt-1 text-xs text-[var(--muted-text)]">
+          Dựa trên {measured} bài gần nhất{platform ? ` trên ${platform}` : ''} có số liệu tương tác.
+          {hasData && measured < RELIABLE_SAMPLE && ' Còn ít bài nên chỉ nên tham khảo.'}
+        </p>
+      )}
       {summary.warning && <p className="mt-2 rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] px-3 py-2 text-xs text-[var(--muted-text)]">{summary.warning}</p>}
       {hasData ? (
         <div className={`mt-3 grid grid-cols-1 gap-2 ${stacked ? '' : 'sm:grid-cols-3'}`}>
@@ -383,6 +399,7 @@ function PlanCreator({ channels, onCancel, onCreated }: { channels: AppChannel[]
   const [customGoal, setCustomGoal] = useState('')
   const [startDate, setStartDate] = useState(weeks[0])
   const [posts, setPosts] = useState(5)
+  const [postsChosen, setPostsChosen] = useState(false)
   const [days, setDays] = useState<number[]>([])
   const [fixedTime, setFixedTime] = useState('')
   const [brief, setBrief] = useState<Brief | null>(null)
@@ -481,6 +498,17 @@ function PlanCreator({ channels, onCancel, onCreated }: { channels: AppChannel[]
   }
 
   const currentInsights = insights?.accountId === channelId ? insights : null
+  const suggestion = suggestedPostCount(currentInsights?.summary?.postsPerWeek ?? 0)
+  // The suggestion fills the count until the shop picks one themselves.
+  useEffect(() => {
+    if (suggestion !== null && !postsChosen) setPosts(suggestion)
+  }, [suggestion, postsChosen])
+
+  function choosePosts(value: number) {
+    if (!Number.isFinite(value)) return
+    setPostsChosen(true)
+    setPosts(Math.min(MAX_POSTS, Math.max(MIN_POSTS, Math.round(value))))
+  }
 
   return (
     <section className="mx-auto max-w-3xl">
@@ -501,32 +529,51 @@ function PlanCreator({ channels, onCancel, onCreated }: { channels: AppChannel[]
           )}
         </fieldset>
 
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2">
           <label className="block text-sm font-bold">Kênh
             <select value={channelId} onChange={(event) => setChannelId(event.target.value)} className={INPUT}>
               {channels.map((channel) => <option key={channel.id} value={channel.id}>{channel.name} ({channel.badge})</option>)}
             </select>
           </label>
-          <label className="block text-sm font-bold">Tuần
-            <select value={startDate} onChange={(event) => setStartDate(event.target.value)} className={INPUT}>
-              {weeks.map((week, index) => (
-                <option key={week} value={week}>{index === 0 ? 'Tuần tới' : `Sau ${index + 1} tuần`} · {shortDate(week)} – {shortDate(weekDates(week)[6])}</option>
-              ))}
-            </select>
-          </label>
           <div className="text-sm font-bold">
-            <span id="post-count-label">Số bài</span>
-            <div role="group" aria-labelledby="post-count-label" className="mt-1 flex gap-2">
-              {POST_COUNTS.map((count) => (
-                <button key={count} type="button" aria-pressed={posts === count} onClick={() => setPosts(count)} className={`${chipClass(posts === count)} flex-1 px-0`}>{count}</button>
-              ))}
+            <label htmlFor="post-count">Số bài trong tuần</label>
+            <div className="mt-1 flex items-center gap-2">
+              <button type="button" aria-label="Bớt một bài" disabled={posts <= MIN_POSTS} onClick={() => choosePosts(posts - 1)} className={`${SECONDARY} h-11 w-11 px-0`}><Minus size={16} aria-hidden="true" /></button>
+              <input
+                id="post-count"
+                type="number"
+                inputMode="numeric"
+                min={MIN_POSTS}
+                max={MAX_POSTS}
+                value={posts}
+                onChange={(event) => { if (event.target.value !== '') choosePosts(Number(event.target.value)) }}
+                className="h-11 w-16 rounded-xl border border-[var(--app-border)] bg-[var(--panel-bg)] text-center text-base font-bold"
+              />
+              <button type="button" aria-label="Thêm một bài" disabled={posts >= MAX_POSTS} onClick={() => choosePosts(posts + 1)} className={`${SECONDARY} h-11 w-11 px-0`}><Plus size={16} aria-hidden="true" /></button>
             </div>
+            <p className="mt-1 text-xs font-normal text-[var(--muted-text)]">
+              {suggestion
+                ? `Gợi ý ${suggestion} bài: kênh đang đăng khoảng ${currentInsights?.summary?.postsPerWeek} bài/tuần.`
+                : `Từ ${MIN_POSTS} đến ${MAX_POSTS} bài, tối đa một bài mỗi ngày.`}
+            </p>
+          </div>
+        </div>
+
+        <div role="group" aria-labelledby="week-label" className="text-sm font-bold">
+          <span id="week-label">Tuần đăng</span>
+          <div className="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {weeks.map((week, index) => (
+              <button key={week} type="button" aria-pressed={startDate === week} onClick={() => setStartDate(week)} className={`${chipClass(startDate === week)} flex flex-col items-center justify-center !rounded-2xl px-2 py-1.5 leading-tight`}>
+                <span className="whitespace-nowrap">{shortDate(week)} – {shortDate(weekDates(week)[6])}</span>
+                <span className="text-xs font-normal opacity-80">{index === 0 ? 'Tuần tới' : `${index + 1} tuần nữa`}</span>
+              </button>
+            ))}
           </div>
         </div>
 
         {!currentInsights && channelId && <p className="text-sm text-[var(--muted-text)]">Đang đọc bài cũ của kênh...</p>}
         {currentInsights?.error && <p className="rounded-xl border border-[var(--app-border)] bg-[var(--soft-bg)] px-3 py-2 text-sm text-[var(--app-text)]">{currentInsights.error} Kế hoạch vẫn tạo được, dựa trên hồ sơ shop.</p>}
-        {currentInsights?.summary && <InsightTiles summary={currentInsights.summary} />}
+        {currentInsights?.summary && <InsightTiles summary={currentInsights.summary} platform={channels.find((channel) => channel.id === channelId)?.badge} />}
 
         {!profileComplete && (
           <p className="rounded-xl border border-[var(--app-border)] bg-[var(--soft-bg)] px-3 py-2 text-sm text-[var(--app-text)]">
