@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, CalendarClock, Check, Clock3, Film, Lightbulb, Link2, Sparkles, Trash2, Undo2 } from 'lucide-react'
+import { ArrowLeft, ArrowRight, CalendarClock, Check, Clock3, Film, Link2, Trash2, Undo2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { EmptyState } from '../components/EmptyState'
@@ -129,15 +129,6 @@ function DailyDisabled() {
   )
 }
 
-function MockBanner() {
-  // The demo shell has its own banner.
-  if (!DAILY_USE_MOCK || isDemoActive()) return null
-  return (
-    <p className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-      Dữ liệu mẫu (chỉ ở môi trường dev): kế hoạch và bản nháp được lưu tạm trong trình duyệt, tải lại trang là mất. Chưa có gì được đăng.
-    </p>
-  )
-}
 
 type View = { kind: 'home' } | { kind: 'create' } | { kind: 'plan'; planId: string; itemId?: string }
 
@@ -173,7 +164,6 @@ function DailyHome() {
     return (
       <section>
         <Header title="Kế hoạch tuần" subtitle="Postiva phân tích bài cũ, lên ý tưởng và soạn sẵn bài cho cả tuần. Bạn duyệt một lần là xong." />
-        <MockBanner />
         <div className="rounded-2xl border border-[var(--app-border)] bg-[var(--panel-bg)] shadow-sm">
           <EmptyState
             icon={<Link2 size={20} />}
@@ -190,7 +180,6 @@ function DailyHome() {
   const [current, ...past] = plans
   const createButton = channels.length > 0 && (
     <button type="button" onClick={() => setView({ kind: 'create' })} className={PRIMARY}>
-      <Sparkles size={16} aria-hidden="true" />
       {current ? 'Lên kế hoạch tuần tới' : 'Lên kế hoạch tuần đầu tiên'}
     </button>
   )
@@ -199,7 +188,6 @@ function DailyHome() {
     <section>
       {/* With no plan yet the empty state carries the button; one call to action is enough. */}
       <Header title="Kế hoạch tuần" subtitle="Postiva phân tích bài cũ, lên ý tưởng và soạn sẵn bài cho cả tuần. Bạn duyệt một lần là xong." action={current ? createButton : undefined} />
-      <MockBanner />
 
       {!current ? (
         <div className="rounded-3xl border border-dashed border-[#b9bfee] bg-[var(--panel-bg)] p-8 text-center sm:p-12">
@@ -249,7 +237,7 @@ function DailyHome() {
 function PlanStatusBadge({ status }: { status: WeeklyPlan['status'] }) {
   const styles: Record<WeeklyPlan['status'], [string, string]> = {
     GENERATING: ['Đang soạn', 'bg-blue-50 text-blue-700'],
-    READY: ['Chờ duyệt', 'bg-amber-50 text-amber-800'],
+    READY: ['Chờ duyệt', 'bg-[#eef0fd] text-[#344260]'],
     APPROVED: ['Đã duyệt', 'bg-emerald-50 text-emerald-700'],
     FAILED: ['Lỗi', 'bg-rose-50 text-rose-700'],
   }
@@ -261,7 +249,7 @@ function itemTone(status: PlanItemStatus) {
   if (status === 'PUBLISHED' || status === 'SCHEDULED') return 'bg-emerald-50 text-emerald-700'
   if (status === 'FAILED') return 'bg-rose-50 text-rose-700'
   if (status === 'SKIPPED') return 'bg-slate-100 text-slate-500'
-  if (status === 'DRAFT') return 'bg-amber-50 text-amber-800'
+  if (status === 'DRAFT') return 'bg-slate-100 text-slate-700'
   return 'bg-blue-50 text-blue-700'
 }
 
@@ -330,8 +318,8 @@ function InsightTiles({ summary, stacked = false }: { summary: Partial<Performan
   const hasData = tiles.some((tile) => tile.value)
   return (
     <div className="rounded-2xl border border-[var(--app-border)] bg-[var(--soft-bg)] p-4">
-      <p className="flex items-center gap-2 text-sm font-bold"><Lightbulb size={16} aria-hidden="true" />Postiva thấy gì từ bài cũ</p>
-      {summary.warning && <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">{summary.warning}</p>}
+      <p className="flex items-center gap-2 text-sm font-bold">Postiva thấy gì từ bài cũ</p>
+      {summary.warning && <p className="mt-2 rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] px-3 py-2 text-xs text-[var(--muted-text)]">{summary.warning}</p>}
       {hasData ? (
         <div className={`mt-3 grid grid-cols-1 gap-2 ${stacked ? '' : 'sm:grid-cols-3'}`}>
           {tiles.map((tile) => (
@@ -496,7 +484,6 @@ function PlanCreator({ channels, onCancel, onCreated }: { channels: AppChannel[]
     <section className="mx-auto max-w-3xl">
       <button type="button" onClick={onCancel} className="mb-3 inline-flex min-h-11 items-center gap-2 text-sm font-semibold"><ArrowLeft size={16} aria-hidden="true" />Kế hoạch tuần</button>
       <Header title="Tuần tới bạn muốn tập trung vào gì?" subtitle="Một màn hình là xong. Postiva lấy sản phẩm và giọng văn từ hồ sơ shop của bạn." />
-      <MockBanner />
 
       <div className="space-y-6 rounded-3xl border border-[var(--app-border)] bg-[var(--panel-bg)] p-5 shadow-sm sm:p-8">
         <fieldset>
@@ -536,11 +523,11 @@ function PlanCreator({ channels, onCancel, onCreated }: { channels: AppChannel[]
         </div>
 
         {!currentInsights && channelId && <p className="text-sm text-[var(--muted-text)]">Đang đọc bài cũ của kênh...</p>}
-        {currentInsights?.error && <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">{currentInsights.error} Kế hoạch vẫn tạo được, dựa trên hồ sơ shop.</p>}
+        {currentInsights?.error && <p className="rounded-xl border border-[var(--app-border)] bg-[var(--soft-bg)] px-3 py-2 text-sm text-[var(--app-text)]">{currentInsights.error} Kế hoạch vẫn tạo được, dựa trên hồ sơ shop.</p>}
         {currentInsights?.summary && <InsightTiles summary={currentInsights.summary} />}
 
         {!profileComplete && (
-          <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          <p className="rounded-xl border border-[var(--app-border)] bg-[var(--soft-bg)] px-3 py-2 text-sm text-[var(--app-text)]">
             Chưa có hồ sơ shop nên cần nhập sản phẩm bên dưới. <Link to="/app/shop-profile" className="font-bold underline">Hoàn thiện hồ sơ shop</Link> để lần sau Postiva tự điền.
           </p>
         )}
@@ -611,7 +598,6 @@ function PlanCreator({ channels, onCancel, onCreated }: { channels: AppChannel[]
             Dùng <strong className="text-[var(--app-text)]">{needed} lượt AI</strong>{remaining !== undefined && <> · còn {remaining}</>}. Chưa đăng gì cho tới khi bạn duyệt.
           </p>
           <button type="button" disabled={saving || (remaining !== undefined && remaining < needed)} onClick={() => void submit()} className={PRIMARY}>
-            <Sparkles size={16} aria-hidden="true" />
             {saving ? 'Đang bắt đầu...' : 'Lên kế hoạch'}
           </button>
         </div>
@@ -686,13 +672,12 @@ function PlanView({ planId, initialItemId, onBack, onCreateNew }: { planId: stri
         subtitle={`${PLATFORM_NAMES[plan.platform ?? ''] ?? 'Kênh'} · ${plan.accountName ?? 'Kênh đã chọn'} · Chủ đề: ${plan.goal}`}
         action={<PlanStatusBadge status={plan.status} />}
       />
-      <MockBanner />
 
       {notice && (
         <p role="status" className={`mb-4 rounded-xl border px-4 py-3 text-sm font-semibold ${notice.tone === 'ok' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-rose-200 bg-rose-50 text-rose-800'}`}>{notice.text}</p>
       )}
       {plan.error && (
-        <p role="alert" className={`mb-4 rounded-xl border px-4 py-3 text-sm font-semibold ${plan.status === 'FAILED' ? 'border-rose-200 bg-rose-50 text-rose-800' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>{plan.error}</p>
+        <p role="alert" className={`mb-4 rounded-xl border px-4 py-3 text-sm font-semibold ${plan.status === 'FAILED' ? 'border-rose-200 bg-rose-50 text-rose-800' : 'border-[var(--app-border)] bg-[var(--soft-bg)] text-[var(--app-text)]'}`}>{plan.error}</p>
       )}
 
       {plan.status === 'GENERATING' && (
@@ -704,7 +689,6 @@ function PlanView({ planId, initialItemId, onBack, onCreateNew }: { planId: stri
 
       {plan.strategy && (
         <div className="mb-4 flex items-start gap-3 rounded-2xl border border-[var(--app-border)] bg-[var(--panel-bg)] p-4 text-sm">
-          <Sparkles size={18} aria-hidden="true" className="mt-0.5 shrink-0 text-[#505db8]" />
           <p><span className="font-bold">Chiến lược tuần: </span>{plan.strategy}</p>
         </div>
       )}
@@ -883,12 +867,11 @@ function DayDetail({ plan, item, onChanged, onNotice, onPrev, onNext }: {
       </div>
 
       {item.reason && (
-        <p className="flex items-start gap-2 rounded-xl bg-[#eef0fd] px-3 py-2 text-sm text-[#344260]">
-          <Lightbulb size={16} aria-hidden="true" className="mt-0.5 shrink-0" />
-          <span><span className="font-bold">Vì sao: </span>{item.reason}</span>
+        <p className="text-sm text-[var(--muted-text)]">
+          <span><span className="font-semibold text-[var(--app-text)]">Lý do: </span>{item.reason}</span>
         </p>
       )}
-      {item.error && <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">{item.error}</p>}
+      {item.error && <p className="rounded-xl border border-[var(--app-border)] bg-[var(--soft-bg)] px-3 py-2 text-sm text-[var(--app-text)]">{item.error}</p>}
 
       {item.post ? (
         <div className={`overflow-hidden rounded-2xl border border-[var(--app-border)] bg-white text-slate-900 ${skipped ? 'opacity-60' : ''}`} style={{ borderTop: `4px solid ${PLATFORM_COLORS[platform] ?? '#505db8'}` }}>
@@ -914,9 +897,8 @@ function DayDetail({ plan, item, onChanged, onNotice, onPrev, onNext }: {
           {item.post.imageUrl ? (
             <ProtectedMediaImage src={item.post.imageUrl} alt="" className="mt-3 max-h-80 w-full object-cover" />
           ) : (
-            item.post.imageSuggestion && <p className="mx-4 mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">📷 Gợi ý ảnh: {item.post.imageSuggestion}</p>
+            item.post.imageSuggestion && <p className="mx-4 mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">Gợi ý ảnh: {item.post.imageSuggestion}</p>
           )}
-          <div className="mt-3 border-t border-slate-100 px-4 py-2 text-xs text-slate-400">Xem trước gần giống khi đăng</div>
         </div>
       ) : (
         <div className="space-y-2 rounded-2xl border border-[var(--app-border)] p-4" aria-label="Đang soạn">

@@ -185,7 +185,7 @@ export function ShopProfileForm({ initial, mode, onSaved, onSkip }: {
             <textarea value={form.policies} maxLength={2000} rows={2} onChange={(event) => set('policies', event.target.value)} className={TEXTAREA} />
           </label>
           <label className="block text-sm font-bold">Chữ ký cuối bài
-            <textarea value={form.signature} maxLength={500} rows={2} onChange={(event) => set('signature', event.target.value)} className={TEXTAREA} placeholder="📍 Địa chỉ · ☎ Số điện thoại" />
+            <textarea value={form.signature} maxLength={500} rows={2} onChange={(event) => set('signature', event.target.value)} className={TEXTAREA} placeholder="Địa chỉ: ... | Hotline: ..." />
             <span className="mt-1 block text-xs font-normal text-[var(--muted-text)]">Tự thêm vào cuối mỗi bài AI soạn; bạn vẫn sửa hoặc xóa được trước khi đăng. Threads chỉ thêm khi bài còn dưới 500 ký tự.</span>
           </label>
           {!form.signature.trim() && suggestion && (

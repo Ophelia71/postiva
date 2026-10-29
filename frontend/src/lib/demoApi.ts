@@ -16,12 +16,12 @@ const CHANNELS: AppChannel[] = [
 ]
 
 const SAMPLE_POSTS: Array<{ days: number; hour: number; platform: string; status: string; content: string }> = [
-  { days: -9, hour: 20, platform: 'Facebook', status: 'Published', content: 'Ly cà phê muối đầu tiên của ngày ☕ Lớp kem mặn béo hòa cùng cà phê phin đậm vị. Ghé tiệm hoặc nhắn tin để được giao trong 30 phút nhé!' },
-  { days: -7, hour: 9, platform: 'Facebook', status: 'Published', content: 'Tiệm mở cửa từ 7h sáng. Hôm nay có thêm bánh quy bơ mới ra lò 🍪' },
+  { days: -9, hour: 20, platform: 'Facebook', status: 'Published', content: 'Ly cà phê muối đầu tiên của ngày. Lớp kem mặn béo hòa cùng cà phê phin đậm vị. Ghé tiệm hoặc nhắn tin để được giao trong 30 phút nhé!' },
+  { days: -7, hour: 9, platform: 'Facebook', status: 'Published', content: 'Tiệm mở cửa từ 7h sáng. Hôm nay có thêm bánh quy bơ mới ra lò' },
   { days: -5, hour: 20, platform: 'Instagram', status: 'Published', content: 'Behind the scenes: 5 bước pha một ly cà phê muối chuẩn vị. Bạn đoán bước nào khó nhất? #caphemuoi #hauruong' },
-  { days: -3, hour: 19, platform: 'Facebook', status: 'Published', content: '“Uống một lần là ghiền” — cảm ơn chị Mai đã review cho tiệm 💛 Mua 2 ly tặng 1 bánh quy đến hết Chủ nhật!' },
+  { days: -3, hour: 19, platform: 'Facebook', status: 'Published', content: '“Uống một lần là ghiền” — cảm ơn chị Mai đã review cho tiệm! Mua 2 ly tặng 1 bánh quy đến hết Chủ nhật!' },
   { days: -2, hour: 12, platform: 'Facebook', status: 'Failed', content: 'Combo trưa văn phòng: cà phê muối + bánh mì chỉ 49.000đ. (Bài này lỗi vì token hết hạn, bấm Thử lại sau khi kết nối lại kênh.)' },
-  { days: 1, hour: 20, platform: 'Facebook', status: 'Scheduled', content: 'Tối nay tiệm mở đến 22h. Ghé chill với ly cà phê muối nhé ✨' },
+  { days: 1, hour: 20, platform: 'Facebook', status: 'Scheduled', content: 'Tối nay tiệm mở đến 22h. Ghé chill với ly cà phê muối nhé' },
   { days: 3, hour: 19, platform: 'Instagram', status: 'Scheduled', content: 'Cuối tuần này: mua 2 tặng 1 bánh quy. Lưu bài để không quên nha! #caphemuoi' },
 ]
 
@@ -78,7 +78,7 @@ let shopProfile: Record<string, unknown> = {
   defaultTone: 'Thân thiện, gần gũi',
   phone: '0900 000 000',
   address: 'Quận 3, TP.HCM',
-  signature: '📍 Quận 3, TP.HCM · ☎ 0900 000 000',
+  signature: 'Địa chỉ: Quận 3, TP.HCM | Hotline: 0900 000 000',
   brandHashtags: '#CaPheMuoiMau',
   complete: true,
 }
@@ -101,11 +101,11 @@ function generatedDraft(body: { productName?: string; highlights?: string; platf
   const contents: Record<string, Record<string, string>> = {}
   for (const platform of body.platforms ?? ['FACEBOOK']) {
     const text = platform === 'THREADS'
-      ? `Ai đã thử ${product} chưa? ${highlights}. Kể shop nghe cảm nhận của bạn nhé 👇`
+      ? `Ai đã thử ${product} chưa? ${highlights}. Kể shop nghe cảm nhận của bạn nhé`
       : platform === 'INSTAGRAM'
-        ? `${product} ✨ ${highlights}. Lưu bài này để lần sau ghé shop nha!`
+        ? `${product}: ${highlights}. Lưu bài này để lần sau ghé shop nha!`
         : `Giới thiệu ${product}: ${highlights}. Nhắn tin cho shop để được tư vấn và đặt hàng ngay hôm nay!`
-    contents[platform] = { title: product, [platform === 'INSTAGRAM' ? 'caption' : 'content']: `[Bài mẫu] ${text}` }
+    contents[platform] = { title: product, [platform === 'INSTAGRAM' ? 'caption' : 'content']: text }
   }
   return {
     postId: `demo-draft-${crypto.randomUUID()}`,

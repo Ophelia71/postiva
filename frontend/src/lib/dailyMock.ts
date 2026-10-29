@@ -29,8 +29,8 @@ function sampleInsights(): PerformanceSummary {
     warning: null,
     averageEngagement: 24.5,
     topPosts: [
-      { excerpt: '[Dữ liệu mẫu] Video pha chế ly cà phê muối đầu tiên của ngày ☕ #caphe', publishedAt: null, mediaType: 'VIDEO', engagement: 86, likes: 52, comments: 9, shares: 5, views: null },
-      { excerpt: '[Dữ liệu mẫu] Khách quen review: "uống một lần là ghiền" #feedback', publishedAt: null, mediaType: 'IMAGE', engagement: 61, likes: 40, comments: 6, shares: 3, views: null },
+      { excerpt: 'Video pha chế ly cà phê muối đầu tiên của ngày #caphe', publishedAt: null, mediaType: 'VIDEO', engagement: 86, likes: 52, comments: 9, shares: 5, views: null },
+      { excerpt: 'Khách quen review: "uống một lần là ghiền" #feedback', publishedAt: null, mediaType: 'IMAGE', engagement: 61, likes: 40, comments: 6, shares: 3, views: null },
     ],
     weakPosts: [],
     bestWeekdays: [5, 6, 3],
@@ -105,7 +105,7 @@ function simulateDrafting(planId: string, request: CreateWeeklyPlanRequest) {
               [current.platform ?? 'FACEBOOK']: {
                 title: entry.topic ?? '',
                 [current.platform === 'INSTAGRAM' ? 'caption' : 'content']:
-                  `[Bản nháp mẫu] ${entry.topic}: ${request.productName} — ${request.highlights}. Nhắn shop để đặt ngay nhé!`,
+                  `${entry.topic}: ${request.productName} — ${request.highlights}. Nhắn shop để đặt ngay nhé!`,
               },
             },
             hashtags: ['#postiva', '#daily'],
@@ -187,7 +187,7 @@ export async function handleDailyMock(api: AxiosInstance, method: string, url: s
         endDate: localDate(end.toISOString()),
         goal: request.goal,
         timezone: request.timezone,
-        strategy: `[Dữ liệu mẫu] Tuần này tập trung vào ${request.goal.toLowerCase()}: mở bằng câu chuyện, giữa tuần chia sẻ giá trị, cuối tuần chốt đơn bằng ưu đãi.`,
+        strategy: `Tuần này tập trung vào ${request.goal.toLowerCase()}: mở bằng câu chuyện, giữa tuần chia sẻ giá trị, cuối tuần chốt đơn bằng ưu đãi.`,
         error: null,
         performance: sampleInsights(),
         items,

@@ -36,9 +36,9 @@ export function isShopProfileComplete(profile: ShopProfile | null | undefined) {
 /** A ready-made signature from the contact fields, offered when the shop has not written one. */
 export function suggestSignature(profile: Pick<ShopProfile, 'phone' | 'address' | 'openingHours' | 'website'>) {
   return [
-    profile.address ? `📍 ${profile.address}` : '',
-    profile.phone ? `☎ ${profile.phone}` : '',
-    profile.openingHours ? `🕒 ${profile.openingHours}` : '',
-    profile.website ? `🌐 ${profile.website}` : '',
-  ].filter(Boolean).join(' · ')
+    profile.address ? `Địa chỉ: ${profile.address}` : '',
+    profile.phone ? `Hotline: ${profile.phone}` : '',
+    profile.openingHours ? `Mở cửa: ${profile.openingHours}` : '',
+    profile.website ? profile.website : '',
+  ].filter(Boolean).join(' | ')
 }

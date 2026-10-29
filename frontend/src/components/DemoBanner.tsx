@@ -1,4 +1,4 @@
-import { Sparkles, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { DEMO_SIGNUP_EVENT } from '../lib/demo'
 
@@ -24,7 +24,6 @@ export function DemoBanner({ onSignUp, onExit }: { onSignUp: () => void; onExit:
   return (
     <>
       <div role="status" className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-[#c9cff7] bg-[#eef0fd] px-4 py-3 text-sm text-[#344260]">
-        <Sparkles size={16} aria-hidden="true" className="shrink-0" />
         <p className="min-w-0 flex-1">
           <span className="font-bold">Bạn đang dùng thử với dữ liệu mẫu.</span>{' '}
           Cứ bấm thử mọi thứ; chưa có gì được đăng. Tạo tài khoản miễn phí để kết nối kênh và đăng bài thật.
