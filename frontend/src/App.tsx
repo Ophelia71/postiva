@@ -403,9 +403,7 @@ function AccountMenuPanel({ session, itemClass, demo, onLogout, onNavigate, logo
 
 function AppShell({ session, onLogout, onPasswordChanged, demo }: ShellProps) {
   const { t } = usePreferences()
-  // The "Tạo bài mới" shortcut is pointless while the user is already on the create page.
   const pathname = useLocation().pathname
-  const isCreatePage = pathname.startsWith('/app/create')
   // The checklist and the profile page already ask for the profile themselves.
   const isOnboardingPage = pathname.startsWith('/app/start') || pathname.startsWith('/app/shop-profile')
 
@@ -434,6 +432,16 @@ function AppShell({ session, onLogout, onPasswordChanged, demo }: ShellProps) {
             <p className="text-xs font-semibold text-[var(--muted-text)]">Quản lý nội dung</p>
           </div>
         </div>
+
+        <NavLink
+          to="/app/create"
+          className={({ isActive }) =>
+            `mx-1 mt-2 flex h-11 items-center justify-center gap-2 rounded-full px-4 text-sm font-semibold text-white transition ${isActive ? 'bg-[#505db8]' : 'bg-[#6672d8] hover:bg-[#505db8]'}`
+          }
+        >
+          <PlusCircle size={16} aria-hidden="true" />
+          {t('Tạo bài mới')}
+        </NavLink>
 
         <nav aria-label="Điều hướng chính" className="flex-1 space-y-2 py-5">
           {navItems.map((item) => {
@@ -482,17 +490,6 @@ function AppShell({ session, onLogout, onPasswordChanged, demo }: ShellProps) {
         <div className="mx-auto min-h-svh max-w-[1320px] px-4 py-5 sm:px-6 lg:px-10 lg:py-8">
           {demo && <DemoBanner onSignUp={demo.onSignUp} onExit={demo.onExit} />}
           {!isOnboardingPage && <ShopProfileReminder />}
-          {!isCreatePage && (
-            <div className="mb-8 hidden items-center justify-end lg:flex">
-              <NavLink
-                to="/app/create"
-                className="flex h-11 items-center justify-center gap-2 rounded-full bg-[#6672d8] px-4 text-sm font-semibold text-white hover:-translate-y-0.5 hover:bg-[#505db8]"
-              >
-                <PlusCircle size={16} aria-hidden="true" />
-                {t('Tạo bài mới')}
-              </NavLink>
-            </div>
-          )}
           <Routes>
             <Route path="/" element={<AppIndexRedirect />} />
             <Route path="/products" element={<Navigate to="/app/reports" replace />} />
