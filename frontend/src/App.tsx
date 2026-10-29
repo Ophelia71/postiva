@@ -45,14 +45,17 @@ import { DailyPage } from './pages/DailyPage'
 import { ShopProfilePage } from './pages/ShopProfilePage'
 import { ShopProfileReminder } from './components/ShopProfileReminder'
 import { AppIndexRedirect, StartPage } from './pages/StartPage'
+import { type AppOverview, normalizeAppOverview, useAppDataResource } from './lib/appDataApi'
+import { getOnboardingState } from './lib/onboarding'
+import { isShopProfileComplete, type ShopProfile } from './lib/shopProfile'
 
 const navItems = [
   { to: '/app/schedule', label: 'Lịch đăng', icon: CalendarDays },
   { to: '/app/daily', label: 'Daily', icon: CalendarClock },
   { to: '/app/reports', label: 'Báo cáo', icon: BarChart3 },
-  { to: '/app/connections', label: 'Kết nối', icon: Link2 },
-  { to: '/app/billing', label: 'Gói & thanh toán', icon: CreditCard },
+  { to: '/app/connections', label: 'Kết nối kênh', icon: Link2 },
 ]
+// Account settings (shop profile, plan, security) live in the account menu, not here.
 
 // Billing lives in the account menu on small screens; the create action is the primary thumb target.
 const mobileNavItems = [
@@ -292,44 +295,93 @@ function AccountMenu({ session, onLogout, placement, demo }: { session: AuthSess
           role="menu"
           className={`absolute z-30 w-64 rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] p-2 shadow-xl shadow-slate-200/40 ${placement === 'above' ? 'bottom-14 left-0' : 'right-0 top-12'}`}
         >
-          <div className="border-b border-[var(--app-border)] px-3 py-3">
-            <p className="truncate text-sm font-bold">{session.fullName}</p>
-            <p className="mt-1 truncate text-xs text-[var(--muted-text)]">{session.email}</p>
-          </div>
-          <Link role="menuitem" to="/app/start" onClick={() => setOpen(false)} className={`${itemClass} mt-2`}>
-            <Rocket size={16} aria-hidden="true" />
-            Hướng dẫn bắt đầu
-          </Link>
-          <Link role="menuitem" to="/app/shop-profile" onClick={() => setOpen(false)} className={itemClass}>
-            <Store size={16} aria-hidden="true" />
-            Hồ sơ shop
-          </Link>
-          <Link role="menuitem" to="/app/daily" onClick={() => setOpen(false)} className={`${itemClass} lg:hidden`}>
-            <CalendarClock size={16} aria-hidden="true" />
-            Daily
-          </Link>
-          <Link role="menuitem" to="/app/billing" onClick={() => setOpen(false)} className={itemClass}>
-            <CreditCard size={16} aria-hidden="true" />
-            Gói &amp; thanh toán
-          </Link>
-          {demo ? (
-            <button role="menuitem" type="button" onClick={demo.onSignUp} className={itemClass}>
-              <KeyRound size={16} aria-hidden="true" />
-              Tạo tài khoản miễn phí
-            </button>
-          ) : (
-            <Link role="menuitem" to="/app/security" onClick={() => setOpen(false)} className={itemClass}>
-              <KeyRound size={16} aria-hidden="true" />
-              Bảo mật tài khoản
-            </Link>
-          )}
-          <button role="menuitem" type="button" onClick={onLogout} className={itemClass}>
-            <LogOut size={16} aria-hidden="true" />
-            {demo ? 'Thoát dùng thử' : t('Đăng xuất')}
-          </button>
+          <AccountMenuPanel session={session} itemClass={itemClass} demo={demo} onLogout={onLogout} onNavigate={() => setOpen(false)} logoutLabel={demo ? 'Thoát dùng thử' : t('Đăng xuất')} />
         </div>
       )}
     </div>
+  )
+}
+
+type UsageSummary = { plan: 'FREE' | 'PRO'; remaining: number; limit: number }
+
+/**
+ * Body of the account menu: settings only. Rendered while the menu is open, so the plan and onboarding
+ * lookups run when someone actually looks, not on every page.
+ */
+function AccountMenuPanel({ session, itemClass, demo, onLogout, onNavigate, logoutLabel }: {
+  session: AuthSession
+  itemClass: string
+  demo?: DemoControls
+  onLogout: () => void
+  onNavigate: () => void
+  logoutLabel: string
+}) {
+  const usage = useAppDataResource<UsageSummary>('/usage')
+  const overview = useAppDataResource<AppOverview>('/app-data/overview')
+  const profile = useAppDataResource<ShopProfile | null>('/shop-profile')
+  // The guide stays until the checklist is done; afterwards it would only take up space.
+  const onboardingOpen = !overview.data || !isShopProfileComplete(profile.data)
+    || !getOnboardingState(normalizeAppOverview(overview.data)).isSetUp
+
+  return (
+    <>
+      <div className="border-b border-[var(--app-border)] px-3 py-3">
+        <p className="truncate text-sm font-bold">{session.fullName}</p>
+        <p className="mt-1 truncate text-xs text-[var(--muted-text)]">{session.email}</p>
+        {usage.data && (
+          <Link
+            to="/app/billing"
+            onClick={onNavigate}
+            className="mt-3 flex items-center justify-between gap-2 rounded-lg bg-[var(--soft-bg)] px-3 py-2 text-xs font-semibold hover:bg-[#e4e7fb]"
+          >
+            <span className={`rounded-full px-2 py-0.5 font-bold ${usage.data.plan === 'PRO' ? 'bg-[#505db8] text-white' : 'bg-white text-[#344260]'}`}>
+              {usage.data.plan === 'PRO' ? 'Pro' : 'Free'}
+            </span>
+            <span className="text-[var(--muted-text)]">Còn <strong className="text-[var(--app-text)]">{usage.data.remaining}</strong>/{usage.data.limit} lượt AI</span>
+          </Link>
+        )}
+      </div>
+
+      <div className="py-2">
+        <Link role="menuitem" to="/app/shop-profile" onClick={onNavigate} className={itemClass}>
+          <Store size={16} aria-hidden="true" />
+          Hồ sơ shop
+        </Link>
+        <Link role="menuitem" to="/app/billing" onClick={onNavigate} className={itemClass}>
+          <CreditCard size={16} aria-hidden="true" />
+          Gói &amp; thanh toán
+        </Link>
+        {demo ? (
+          <button role="menuitem" type="button" onClick={demo.onSignUp} className={itemClass}>
+            <KeyRound size={16} aria-hidden="true" />
+            Tạo tài khoản miễn phí
+          </button>
+        ) : (
+          <Link role="menuitem" to="/app/security" onClick={onNavigate} className={itemClass}>
+            <KeyRound size={16} aria-hidden="true" />
+            Bảo mật tài khoản
+          </Link>
+        )}
+        {/* The phone bottom bar has no room for Daily, so it is reachable from here on small screens. */}
+        <Link role="menuitem" to="/app/daily" onClick={onNavigate} className={`${itemClass} lg:hidden`}>
+          <CalendarClock size={16} aria-hidden="true" />
+          Daily
+        </Link>
+        {onboardingOpen && (
+          <Link role="menuitem" to="/app/start" onClick={onNavigate} className={itemClass}>
+            <Rocket size={16} aria-hidden="true" />
+            Hướng dẫn bắt đầu
+          </Link>
+        )}
+      </div>
+
+      <div className="border-t border-[var(--app-border)] pt-2">
+        <button role="menuitem" type="button" onClick={onLogout} className={`${itemClass} hover:text-rose-700`}>
+          <LogOut size={16} aria-hidden="true" />
+          {logoutLabel}
+        </button>
+      </div>
+    </>
   )
 }
 
