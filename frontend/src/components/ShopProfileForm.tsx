@@ -202,7 +202,7 @@ export function ShopProfileForm({ initial, mode, onSaved, onSkip }: {
       {error && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-800">{error}</p>}
 
       <div className="flex flex-wrap items-center justify-end gap-3">
-        {onSkip && <button type="button" onClick={onSkip} className="mr-auto min-h-11 text-sm font-semibold underline underline-offset-4">Để sau</button>}
+        {onSkip && <button type="button" onClick={onSkip} className="mr-auto min-h-11 text-sm font-semibold underline underline-offset-4">Làm bước này sau</button>}
         <button type="submit" disabled={saving} className="min-h-11 rounded-full bg-[#505db8] px-5 text-sm font-bold text-white hover:bg-[#434fa0] disabled:bg-slate-400">
           {saving ? 'Đang lưu...' : mode === 'onboarding' ? 'Lưu hồ sơ shop' : 'Lưu thay đổi'}
         </button>

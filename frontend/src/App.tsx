@@ -341,6 +341,19 @@ function AppShell({ session, onLogout, onPasswordChanged, demo }: ShellProps) {
   // The checklist and the profile page already ask for the profile themselves.
   const isOnboardingPage = pathname.startsWith('/app/start') || pathname.startsWith('/app/shop-profile')
 
+  // Onboarding is a focused, full-screen flow: no sidebar, no bottom bar, no "Tạo bài mới".
+  if (pathname.startsWith('/app/start')) {
+    return (
+      <div className="app-shell">
+        <StartPage
+          session={session}
+          onLogout={onLogout}
+          banner={demo && <DemoBanner onSignUp={demo.onSignUp} onExit={demo.onExit} />}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="app-shell min-h-svh bg-[var(--app-bg)] text-[var(--app-text)]">
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-[272px] flex-col border-r border-[var(--app-border)] bg-[var(--panel-bg)] p-3 lg:flex">
@@ -414,7 +427,6 @@ function AppShell({ session, onLogout, onPasswordChanged, demo }: ShellProps) {
           )}
           <Routes>
             <Route path="/" element={<AppIndexRedirect />} />
-            <Route path="/start" element={<StartPage session={session} />} />
             <Route path="/products" element={<Navigate to="/app/reports" replace />} />
             <Route path="/schedule" element={<SchedulePage />} />
             <Route path="/daily" element={<DailyPage />} />
