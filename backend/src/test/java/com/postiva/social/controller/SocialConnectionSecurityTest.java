@@ -54,6 +54,12 @@ class SocialConnectionSecurityTest {
     private FacebookPostSyncService facebookPostSyncService;
 
     @MockBean
+    private com.postiva.social.sync.ChannelSyncService channelSyncService;
+
+    @MockBean
+    private com.postiva.social.sync.ChannelDeletionService channelDeletionService;
+
+    @MockBean
     private MetaSignedRequestService signedRequestService;
 
     @Test

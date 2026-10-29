@@ -112,7 +112,7 @@ public class InstagramGraphClient {
     public List<PostMetrics> getRecentMediaMetrics(String accountId, String accessToken, ApiMode apiMode, int limit) {
         String body = client(apiMode).get()
                 .uri(uri -> uri.path("/{accountId}/media")
-                        .queryParam("fields", "id,caption,media_type,media_product_type,timestamp,like_count,comments_count")
+                        .queryParam("fields", "id,caption,media_type,media_product_type,timestamp,like_count,comments_count,permalink")
                         .queryParam("limit", limit)
                         .queryParam("access_token", accessToken)
                         .build(accountId))
@@ -141,7 +141,8 @@ public class InstagramGraphClient {
                         node.path("like_count").canConvertToInt() ? node.path("like_count").asInt() : null,
                         node.path("comments_count").canConvertToInt() ? node.path("comments_count").asInt() : null,
                         null,
-                        null
+                        null,
+                        node.path("permalink").asText(null)
                 ));
             }
             return posts;

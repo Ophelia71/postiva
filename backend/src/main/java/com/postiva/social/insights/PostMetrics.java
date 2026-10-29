@@ -17,9 +17,20 @@ public record PostMetrics(
         Integer likes,
         Integer comments,
         Integer shares,
-        Integer views
+        Integer views,
+        /** Public link to the post, when the platform returned one. */
+        String permalink
 ) {
+    public PostMetrics(String externalId, Platform platform, Instant publishedAt, String text, String mediaType,
+                       Integer likes, Integer comments, Integer shares, Integer views) {
+        this(externalId, platform, publishedAt, text, mediaType, likes, comments, shares, views, null);
+    }
+
     public PostMetrics withInsights(Integer likes, Integer comments, Integer shares, Integer views) {
-        return new PostMetrics(externalId, platform, publishedAt, text, mediaType, likes, comments, shares, views);
+        return new PostMetrics(externalId, platform, publishedAt, text, mediaType, likes, comments, shares, views, permalink);
+    }
+
+    public boolean hasMetrics() {
+        return likes != null || comments != null || shares != null || views != null;
     }
 }

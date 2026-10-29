@@ -37,13 +37,21 @@ public class PostInsightsService {
     }
 
     public RecentPosts recentPosts(SocialAccount account, String accessToken) {
+        return recentPosts(account, accessToken, POST_LIMIT, THREADS_INSIGHTS_LIMIT);
+    }
+
+    /**
+     * {@code limit} posts at most; on Threads only the newest {@code threadsMeasured} get engagement numbers, because
+     * each one costs a separate call. Posts beyond that are still returned, without numbers.
+     */
+    public RecentPosts recentPosts(SocialAccount account, String accessToken, int limit, int threadsMeasured) {
         try {
             return switch (account.getProvider()) {
                 case FACEBOOK -> new RecentPosts(
-                        facebookClient.getPagePostMetrics(account.getPageId(), accessToken, POST_LIMIT), null);
+                        facebookClient.getPagePostMetrics(account.getPageId(), accessToken, limit), null);
                 case INSTAGRAM -> new RecentPosts(instagramClient.getRecentMediaMetrics(account.getPageId(), accessToken,
-                        InstagramGraphClient.ApiMode.fromAccountMetadata(account.getAccountMetadata()), POST_LIMIT), null);
-                case THREADS -> threadsPosts(accessToken);
+                        InstagramGraphClient.ApiMode.fromAccountMetadata(account.getAccountMetadata()), limit), null);
+                case THREADS -> threadsPosts(accessToken, limit, threadsMeasured);
             };
         } catch (RuntimeException exception) {
             log.warn("Could not read recent posts for social account {}: {}", account.getId(), exception.getMessage());
@@ -55,10 +63,11 @@ public class PostInsightsService {
         }
     }
 
-    private RecentPosts threadsPosts(String accessToken) {
-        List<PostMetrics> posts = threadsClient.getRecentThreads(accessToken, POST_LIMIT);
+    private RecentPosts threadsPosts(String accessToken, int limit, int measuredLimit) {
+        List<PostMetrics> posts = threadsClient.getRecentThreads(accessToken, limit);
         List<PostMetrics> measured = new ArrayList<>();
-        for (PostMetrics post : posts.subList(0, Math.min(THREADS_INSIGHTS_LIMIT, posts.size()))) {
+        int toMeasure = Math.min(measuredLimit, posts.size());
+        for (PostMetrics post : posts.subList(0, toMeasure)) {
             Map<String, Integer> metrics;
             try {
                 metrics = threadsClient.getThreadInsights(post.externalId(), accessToken);
@@ -72,6 +81,7 @@ public class PostInsightsService {
                     ? metrics.getOrDefault("reposts", 0) + metrics.getOrDefault("quotes", 0) : null;
             measured.add(post.withInsights(metrics.get("likes"), metrics.get("replies"), shares, metrics.get("views")));
         }
+        measured.addAll(posts.subList(toMeasure, posts.size()));
         return new RecentPosts(measured, null);
     }
 

@@ -125,7 +125,7 @@ public class ThreadsGraphClient {
     public List<PostMetrics> getRecentThreads(String accessToken, int limit) {
         String body = apiClient.get()
                 .uri(uri -> uri.path("/me/threads")
-                        .queryParam("fields", "id,text,media_type,timestamp")
+                        .queryParam("fields", "id,text,media_type,timestamp,permalink")
                         .queryParam("limit", limit)
                         .queryParam("access_token", accessToken)
                         .build())
@@ -149,7 +149,8 @@ public class ThreadsGraphClient {
                         parseTimestamp(node.path("timestamp").asText()),
                         node.path("text").asText(""),
                         node.path("media_type").asText("TEXT_POST"),
-                        null, null, null, null
+                        null, null, null, null,
+                        node.path("permalink").asText(null)
                 ));
             }
             return posts;

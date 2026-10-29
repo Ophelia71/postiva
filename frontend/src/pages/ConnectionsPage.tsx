@@ -19,6 +19,8 @@ type ManualConnectionForm = {
   accessToken: string
 }
 type PendingConfirm = { kind: 'delete' | 'test'; channelId: string }
+type SyncResult = { imported: number; updated: number; removed: number; metricsAvailable: boolean; warning?: string | null }
+type DeletionImpact = { publishedPosts: number; scheduledPosts: number; failedPosts: number; weeklyPlans: number }
 
 const channelTypes = [
   {
@@ -90,6 +92,19 @@ export function ConnectionsPage() {
   const [syncingPageId, setSyncingPageId] = useState<string | null>(null)
   const [connectingType, setConnectingType] = useState<SocialPlatform | null>(null)
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null)
+  // What deleting the channel being confirmed will remove; null while loading or if it could not be counted.
+  const [deletionImpact, setDeletionImpact] = useState<{ channelId: string; impact: DeletionImpact | null } | null>(null)
+
+  async function askToDelete(channel: AppChannel) {
+    setPendingConfirm({ kind: 'delete', channelId: channel.id })
+    setDeletionImpact(null)
+    try {
+      const response = await api.get<DeletionImpact>(`/social/meta/accounts/${channel.id}/deletion-impact`)
+      setDeletionImpact({ channelId: channel.id, impact: response.data })
+    } catch {
+      setDeletionImpact({ channelId: channel.id, impact: null })
+    }
+  }
   const [manualConnections, setManualConnections] = useState<Record<SocialPlatform, ManualConnectionForm>>({
     facebook: emptyManualConnection(),
     instagram: emptyManualConnection(),
@@ -156,7 +171,7 @@ export function ConnectionsPage() {
         [platform]: emptyManualConnection(),
       }))
       setConnectStatusTone('success')
-      setConnectStatus(`${t('Đã kết nối')} ${response.data.pageName} (ID ${response.data.pageId}). Bước tiếp theo: tạo bài đầu tiên.`)
+      setConnectStatus(`${t('Đã kết nối')} ${response.data.pageName} (ID ${response.data.pageId}). Postiva đang lấy các bài đã đăng và lượt tương tác; xem ở Báo cáo sau ít phút.`)
       reload()
     } catch (error) {
       trackOnboardingStep(`connect-failed/${platform}`)
@@ -187,28 +202,21 @@ export function ConnectionsPage() {
   }
 
   async function handleSync(channel: AppChannel) {
-    const isFacebook = channel.badge === 'Facebook'
     setSyncingPageId(channel.id)
     setConnectStatusTone('info')
-    setConnectStatus(isFacebook
-      ? `${t('Đang cập nhật bài đăng từ')} ${channel.name}...`
-      : `${t('Đang cập nhật thông tin từ')} ${channel.name}...`)
+    setConnectStatus(`${t('Đang cập nhật bài đăng và lượt tương tác từ')} ${channel.name}...`)
 
     try {
-      if (isFacebook) {
-        const response = await api.post<{ syncedPosts: number; removedPosts?: number }>('/social/meta/facebook/sync-posts', null, {
-          params: { pageId: channel.accountId },
-          timeout: FACEBOOK_SYNC_TIMEOUT_MS,
-        })
-        const removedPosts = response.data.removedPosts ?? 0
-        setConnectStatusTone('success')
-        setConnectStatus(`${t('Đã cập nhật')} ${response.data.syncedPosts} ${t('bài đăng từ')} ${channel.name}.${removedPosts > 0 ? ` ${t(`Đã gỡ ${removedPosts} bài không còn trên Facebook.`)}` : ''}`)
-      } else {
-        await api.post(`/social/meta/accounts/${channel.id}/refresh`)
-        setConnectStatusTone('success')
-        setConnectStatus(`${t('Đã cập nhật thông tin từ')} ${channel.name}.`)
-        reload()
-      }
+      // Instagram and Threads also refresh their profile (name, token) first; Facebook Pages do that while syncing.
+      if (channel.badge !== 'Facebook') await api.post(`/social/meta/accounts/${channel.id}/refresh`)
+      const response = await api.post<SyncResult>(`/social/meta/accounts/${channel.id}/sync`, null, { timeout: FACEBOOK_SYNC_TIMEOUT_MS })
+      const { imported, updated, removed, warning } = response.data
+      const parts = [`${t('Đã cập nhật')} ${imported + updated} ${t('bài từ')} ${channel.name}${imported > 0 ? ` (${imported} ${t('bài mới')})` : ''}.`]
+      if (removed > 0) parts.push(`${t('Đã gỡ')} ${removed} ${t('bài không còn trên')} ${channel.badge}.`)
+      if (warning) parts.push(warning)
+      setConnectStatusTone(warning ? 'info' : 'success')
+      setConnectStatus(parts.join(' '))
+      reload()
     } catch (error) {
       setConnectStatusTone('error')
       setConnectStatus(getSocialErrorMessage(error, `Không thể cập nhật ${channel.type}.`))
@@ -290,7 +298,7 @@ export function ConnectionsPage() {
                     </div>
                     <button
                       type="button"
-                      onClick={() => setPendingConfirm({ kind: 'delete', channelId: channel.id })}
+                      onClick={() => void askToDelete(channel)}
                       disabled={deletingPageId === channel.id}
                       className="flex h-11 w-11 items-center justify-center rounded-lg text-slate-600 hover:bg-rose-50 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-50"
                       aria-label={`${t('Xóa kết nối')} ${channel.name}`}
@@ -300,14 +308,17 @@ export function ConnectionsPage() {
                   </div>
 
                   {confirming && (
-                    <div role="alertdialog" aria-label="Xác nhận" className="mt-3 flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between">
-                      <p>
-                        {confirming === 'delete'
-                          ? `Xóa kết nối "${channel.name}"? Lịch đăng đang chờ của kênh này sẽ không chạy nữa.`
-                          : 'Postiva sẽ tạo một bài thử không công khai trên Page này để kiểm tra quyền đăng. Tiếp tục?'}
-                      </p>
-                      <div className="flex gap-2">
-                        <button type="button" onClick={() => setPendingConfirm(null)} className="min-h-11 rounded-lg border border-amber-300 px-4 text-sm font-semibold hover:bg-amber-100">
+                    <div role="alertdialog" aria-label="Xác nhận" className="mt-3 flex flex-col gap-3 rounded-lg border border-[var(--app-border)] bg-[var(--soft-bg)] p-4 text-sm sm:flex-row sm:items-start sm:justify-between">
+                      {confirming === 'delete' ? (
+                        <DeleteChannelSummary
+                          channel={channel}
+                          impact={deletionImpact?.channelId === channel.id ? deletionImpact.impact : undefined}
+                        />
+                      ) : (
+                        <p>Postiva sẽ tạo một bài thử không công khai trên Page này để kiểm tra quyền đăng. Tiếp tục?</p>
+                      )}
+                      <div className="flex shrink-0 gap-2">
+                        <button type="button" onClick={() => setPendingConfirm(null)} className="min-h-11 rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] px-4 text-sm font-semibold hover:bg-[var(--soft-bg)]">
                           Hủy
                         </button>
                         <button
@@ -315,7 +326,7 @@ export function ConnectionsPage() {
                           onClick={() => void (confirming === 'delete' ? handleDelete(channel) : handleTestPost(channel))}
                           className={`min-h-11 rounded-lg px-4 text-sm font-bold text-white ${confirming === 'delete' ? 'bg-rose-600 hover:bg-rose-700' : 'bg-blue-600 hover:bg-blue-700'}`}
                         >
-                          {confirming === 'delete' ? 'Xóa kết nối' : 'Tạo bài thử'}
+                          {confirming === 'delete' ? 'Xóa kênh' : 'Tạo bài thử'}
                         </button>
                       </div>
                     </div>
@@ -442,6 +453,29 @@ export function ConnectionsPage() {
         </div>
       </section>
     </section>
+  )
+}
+
+/** What removing a channel deletes, so nobody deletes a channel just to fix a token. */
+function DeleteChannelSummary({ channel, impact }: { channel: AppChannel; impact: DeletionImpact | null | undefined }) {
+  const counts = impact ? [
+    [impact.publishedPosts, 'bài đã đăng'],
+    [impact.scheduledPosts, 'bài đang hẹn giờ'],
+    [impact.failedPosts, 'bài lỗi hoặc đã hủy'],
+    [impact.weeklyPlans, 'kế hoạch tuần'],
+  ].filter(([count]) => (count as number) > 0) : []
+  return (
+    <div className="space-y-2">
+      <p className="font-semibold">Xóa kênh "{channel.name}" và toàn bộ lịch sử của kênh trong Postiva?</p>
+      {impact === undefined && <p className="text-[var(--muted-text)]">Đang đếm dữ liệu của kênh...</p>}
+      {impact && (counts.length > 0
+        ? <p>Sẽ xóa vĩnh viễn: {counts.map(([count, label]) => `${count} ${label}`).join(', ')}, cùng số liệu tương tác của các bài này.</p>
+        : <p>Kênh này chưa có bài nào trong Postiva.</p>)}
+      <p className="text-[var(--muted-text)]">
+        Bài đã đăng trên {channel.badge} vẫn còn ở đó; kết nối lại kênh sẽ lấy lại các bài đã đăng. Bài đang hẹn giờ, bản nháp và lịch sử lỗi thì mất hẳn.
+        Nếu chỉ lỗi token, hãy bấm <span className="font-semibold text-[var(--app-text)]">Cập nhật</span> thay vì xóa.
+      </p>
+    </div>
   )
 }
 

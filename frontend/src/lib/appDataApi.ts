@@ -30,6 +30,16 @@ export type AppPost = {
   mediaTitle: string
   mediaUrls: string[]
   mediaIds: string[]
+  /** Engagement last read from the platform. A missing count means it could not be read, not zero. */
+  metrics?: PostMetrics
+}
+
+export type PostMetrics = {
+  likes?: number
+  comments?: number
+  shares?: number
+  views?: number
+  fetchedAt?: string
 }
 
 export type AppOverview = {

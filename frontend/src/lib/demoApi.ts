@@ -54,6 +54,9 @@ function posts(): AppPost[] {
       mediaTitle: '',
       mediaUrls: [],
       mediaIds: [],
+      metrics: sample.status === 'Published'
+        ? { likes: 18 + index * 9, comments: 2 + index, shares: index % 3, fetchedAt: new Date().toISOString() }
+        : {},
     }
   })
 }

@@ -6,6 +6,7 @@ import com.postiva.common.Platform;
 import com.postiva.common.PostStatus;
 import com.postiva.social.dto.SocialAccountResponse;
 import com.postiva.social.service.SocialAccountService;
+import com.postiva.social.sync.PostMetricsReader;
 import com.postiva.post.entity.GeneratedPost;
 import com.postiva.post.repository.GeneratedPostRepository;
 import com.postiva.scheduler.entity.ScheduledPost;
@@ -54,6 +55,7 @@ public class AppDataController {
     private final PublishLogRepository logRepository;
     private final FacebookGraphClient facebookGraphClient;
     private final FileService fileService;
+    private final PostMetricsReader metricsReader;
 
     public AppDataController(CurrentUserService currentUserService,
                              SocialAccountService socialAccountService,
@@ -61,7 +63,9 @@ public class AppDataController {
                              ScheduledPostRepository scheduledRepository,
                              PublishLogRepository logRepository,
                              FacebookGraphClient facebookGraphClient,
-                             FileService fileService) {
+                             FileService fileService,
+                             PostMetricsReader metricsReader) {
+        this.metricsReader = metricsReader;
         this.currentUserService = currentUserService;
         this.socialAccountService = socialAccountService;
         this.postRepository = postRepository;
@@ -294,6 +298,7 @@ public class AppDataController {
             }
         });
         Map<UUID, List<UploadedFile>> mediaByPost = new HashMap<>();
+        Map<UUID, Map<String, Object>> metrics = metricsReader.forUser(userId);
         return postRepository.findAllByUserIdOrderByCreatedAtDesc(userId).stream()
                 .flatMap(post -> {
                     List<ScheduledPost> postSchedules = schedulesByPost.getOrDefault(post.getId(), List.of());
@@ -301,12 +306,12 @@ public class AppDataController {
                             post.getId(), ignored -> fileService.allMediaForPost(post.getId()));
                     if (!postSchedules.isEmpty()) {
                         return postSchedules.stream().map(schedule -> safePostMap(
-                                post, schedule, latestLog.get(schedule.getId()), mediaFiles));
+                                post, schedule, latestLog.get(schedule.getId()), mediaFiles, metrics.get(schedule.getId())));
                     }
                     if (postsWithSchedules.contains(post.getId()) || !shouldShowInAppData(post)) {
                         return Stream.empty();
                     }
-                    return Stream.of(safePostMap(post, null, null, mediaFiles));
+                    return Stream.of(safePostMap(post, null, null, mediaFiles, null));
                 })
                 .toList();
     }
@@ -314,14 +319,19 @@ public class AppDataController {
     private Map<String, Object> safePostMap(GeneratedPost post,
                                             ScheduledPost schedule,
                                             PublishLog publishLog,
-                                            List<UploadedFile> mediaFiles) {
+                                            List<UploadedFile> mediaFiles,
+                                            Map<String, Object> metrics) {
+        Map<String, Object> result;
         try {
-            return postMap(post, schedule, publishLog, mediaFiles);
+            result = postMap(post, schedule, publishLog, mediaFiles);
         } catch (RuntimeException exception) {
             log.warn("Could not map app post data. postId={}, scheduleId={}",
                     post.getId(), schedule == null ? null : schedule.getId(), exception);
-            return fallbackPostMap(post, schedule, mediaFiles);
+            result = fallbackPostMap(post, schedule, mediaFiles);
         }
+        // Engagement last read from the platform; empty when never synced or not readable.
+        result.put("metrics", metrics == null ? Map.of() : metrics);
+        return result;
     }
 
     private boolean shouldShowInAppData(GeneratedPost post) {

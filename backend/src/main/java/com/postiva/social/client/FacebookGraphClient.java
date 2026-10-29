@@ -237,7 +237,7 @@ public class FacebookGraphClient {
     public List<PostMetrics> getPagePostMetrics(String pageId, String accessToken, int limit) {
         String body = webClient.get()
                 .uri(uri -> uri.path("/{pageId}/posts")
-                        .queryParam("fields", "id,message,created_time,shares,attachments{media_type},"
+                        .queryParam("fields", "id,message,created_time,permalink_url,shares,attachments{media_type},"
                                 + "reactions.summary(total_count).limit(0),comments.summary(total_count).limit(0)")
                         .queryParam("limit", limit)
                         .queryParam("access_token", accessToken)
@@ -266,7 +266,8 @@ public class FacebookGraphClient {
                         countOrNull(node.path("comments").path("summary").path("total_count")),
                         // Meta omits "shares" entirely when a post has never been shared.
                         node.path("shares").path("count").canConvertToInt() ? node.path("shares").path("count").asInt() : 0,
-                        null
+                        null,
+                        node.path("permalink_url").asText(null)
                 ));
             }
             return posts;

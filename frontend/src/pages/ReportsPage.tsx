@@ -1,4 +1,4 @@
-import { BarChart3, Eye, X } from 'lucide-react'
+import { BarChart3, Eye, Heart, MessageCircle, Repeat2, X } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
 import { EmptyState } from '../components/EmptyState'
 import { SetupReminder } from '../components/SetupReminder'
@@ -8,7 +8,7 @@ import { getPaginatedItems, PaginationControls } from '../components/PaginationC
 import { PostDetailModal, PostThumbnail } from '../components/PostDetails'
 import { RepostPostModal } from '../components/RepostPostModal'
 import { api } from '../lib/api'
-import { normalizeAppOverview, type AppOverview, type AppPost, useAppDataResource } from '../lib/appDataApi'
+import { normalizeAppOverview, type AppOverview, type AppPost, type PostMetrics, useAppDataResource } from '../lib/appDataApi'
 import { addDays, toDateKey } from '../lib/dates'
 import { getErrorMessage } from '../lib/errors'
 import { sortPostsNewestFirst } from '../lib/posts'
@@ -97,6 +97,7 @@ export function ReportsPage() {
   const selectedBucket = chartBuckets.find((bucket) => bucket.key === selectedChartBucket) ?? null
   const platformCounts = getPlatformCounts(reportPosts)
   const totalPostsForPlatformChart = Math.max(reportPosts.length, 1)
+  const engagement = sumMetrics(publishedPosts)
   const finishedPosts = normalizedOverview.publishedPosts + normalizedOverview.failedPosts
   const successRate = finishedPosts === 0 ? 0 : Math.round((normalizedOverview.publishedPosts / finishedPosts) * 100)
 
@@ -106,10 +107,34 @@ export function ReportsPage() {
       <PageHeader
         title={t('Báo cáo trạng thái đăng', 'Publishing status report')}
         subtitle={t(
-          'Tổng hợp lịch và kết quả do Postiva ghi nhận. Lượt xem, tương tác và bình luận chưa được đồng bộ; hãy xem trực tiếp trên nền tảng.',
-          'Shows schedules and publishing results recorded by Postiva. Views, engagement, and comments are not synced; check them on the platform.',
+          'Kết quả đăng và lượt tương tác của các bài. Số liệu được lấy từ nền tảng khi kết nối kênh và khi bạn bấm Cập nhật ở trang Kết nối.',
+          'Publishing results and engagement. Numbers are read from each platform when a channel is connected and when you press Update on the Connections page.',
         )}
       />
+
+      <div className="rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] p-5 shadow-sm">
+        <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-base font-bold">{t('Tương tác', 'Engagement')}</h2>
+          <span className="text-xs text-[var(--muted-text)]">
+            {engagement.fetchedAt
+              ? `${t('Cập nhật', 'Updated')} ${formatPostDateTime(engagement.fetchedAt)} · ${engagement.measured}/${publishedPosts.length} ${t('bài có số liệu', 'posts measured')}`
+              : t('Chưa có số liệu. Bấm Cập nhật ở trang Kết nối để lấy.', 'No numbers yet. Press Update on the Connections page.')}
+          </span>
+        </div>
+        <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {([
+            [t('Lượt thích', 'Likes'), engagement.likes, Heart],
+            [t('Bình luận', 'Comments'), engagement.comments, MessageCircle],
+            [t('Chia sẻ', 'Shares'), engagement.shares, Repeat2],
+            [t('Lượt xem', 'Views'), engagement.views, Eye],
+          ] as const).map(([label, value, Icon]) => (
+            <div key={label} className="rounded-lg border border-[var(--app-border)] px-4 py-3">
+              <dt className="flex items-center gap-2 text-xs text-[var(--muted-text)]"><Icon size={14} aria-hidden="true" />{label}</dt>
+              <dd className="mt-1 text-xl font-bold">{value === null ? '—' : value.toLocaleString('vi-VN')}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] p-5 shadow-sm">
@@ -256,10 +281,11 @@ export function ReportsPage() {
                 key={postRowKey(post)}
                 type="button"
                 onClick={() => setDetailPost(post)}
-                className="flex w-full flex-wrap items-center gap-x-4 gap-y-2 px-5 py-4 text-left text-sm hover:bg-[var(--soft-bg)] md:grid md:grid-cols-[90px_minmax(0,1fr)_110px_90px_32px]"
+                className="flex w-full flex-wrap items-center gap-x-4 gap-y-2 px-5 py-4 text-left text-sm hover:bg-[var(--soft-bg)] md:grid md:grid-cols-[90px_minmax(0,1fr)_170px_110px_90px_32px]"
               >
                 <PlatformBadge platform={post.platform} />
                 <span className="basis-full truncate text-slate-700 md:basis-auto" title={post.content}>{post.content || 'Không có nội dung chữ.'}</span>
+                <MetricsInline metrics={post.metrics} />
                 <StatusBadge status={post.status} />
                 <span className="text-xs leading-5 text-[var(--muted-text)]">{formatPostDateTime(post.time)}</span>
                 <span className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400">
@@ -392,6 +418,47 @@ export function ReportsPage() {
     }
   }
 
+}
+
+/** Totals over posts with numbers; a metric no post could report stays null and shows as "—". */
+function sumMetrics(posts: AppPost[]) {
+  const totals = { likes: null as number | null, comments: null as number | null, shares: null as number | null, views: null as number | null }
+  let fetchedAt: string | null = null
+  let measured = 0
+  for (const post of posts) {
+    const metrics = post.metrics
+    if (!metrics || metrics.fetchedAt === undefined) continue
+    measured += 1
+    for (const key of ['likes', 'comments', 'shares', 'views'] as const) {
+      const value = metrics[key]
+      if (typeof value === 'number') totals[key] = (totals[key] ?? 0) + value
+    }
+    if (!fetchedAt || metrics.fetchedAt > fetchedAt) fetchedAt = metrics.fetchedAt
+  }
+  return { ...totals, fetchedAt, measured }
+}
+
+function MetricsInline({ metrics }: { metrics?: PostMetrics }) {
+  const items = ([
+    ['likes', Heart, 'lượt thích'],
+    ['comments', MessageCircle, 'bình luận'],
+    ['shares', Repeat2, 'chia sẻ'],
+    ['views', Eye, 'lượt xem'],
+  ] as const).flatMap(([key, Icon, label]) => {
+    const value = metrics?.[key]
+    return typeof value === 'number' ? [{ key, Icon, label, value }] : []
+  })
+  if (items.length === 0) return <span className="text-xs text-[var(--muted-text)]">—</span>
+  return (
+    <span className="flex flex-wrap items-center gap-3 text-xs text-[var(--muted-text)]">
+      {items.map(({ key, Icon, label, value }) => (
+        <span key={key} className="inline-flex items-center gap-1" title={label}>
+          <Icon size={13} aria-hidden="true" />
+          <span className="sr-only">{label}: </span>{value.toLocaleString('vi-VN')}
+        </span>
+      ))}
+    </span>
+  )
 }
 
 function canEditReportedPost(post: AppPost) {

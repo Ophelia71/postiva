@@ -80,8 +80,8 @@ class DatabaseMigrationTest {
 
     @Test
     void emptyDatabaseMigratesAndValidatesAllApplicationEntities() {
-        assertEquals(14, flyway(null).migrate().migrationsExecuted);
-        assertEquals("14", flyway(null).info().current().getVersion().getVersion());
+        assertEquals(15, flyway(null).migrate().migrationsExecuted);
+        assertEquals("15", flyway(null).info().current().getVersion().getVersion());
         assertTrue(flyway(null).validateWithResult().validationSuccessful);
         validateEntities();
     }
@@ -98,7 +98,7 @@ class DatabaseMigrationTest {
         assertThrows(FlywayException.class, () -> flyway(null).migrate());
         assertEquals(original, snapshot());
         flyway(null).baseline();
-        assertEquals(13, flyway(null).migrate().migrationsExecuted);
+        assertEquals(14, flyway(null).migrate().migrationsExecuted);
         assertEquals(original, snapshot());
         assertEquals("ACTIVE", query("SELECT status FROM " + schema + ".users WHERE id = '" + USER + "'"));
         assertEquals("0", query("SELECT count(*) FROM " + schema + ".admin_audit_logs"));
@@ -140,7 +140,7 @@ class DatabaseMigrationTest {
         execute("INSERT INTO " + schema + ".pending_registrations (full_name,email,password_hash,otp_hash,otp_expires_at) VALUES "
                 + "('Pending fixture','pending@example.test','original-password-hash','original-otp-hash',TIMESTAMP '2030-01-01')");
         String before = query("SELECT (to_jsonb(p))::text FROM " + schema + ".pending_registrations p");
-        assertEquals(10, flyway(null).migrate().migrationsExecuted);
+        assertEquals(11, flyway(null).migrate().migrationsExecuted);
         assertEquals(before, query("SELECT (to_jsonb(p) - 'failed_attempts')::text FROM " + schema + ".pending_registrations p"));
         assertEquals("0", query("SELECT failed_attempts FROM " + schema + ".pending_registrations"));
         assertEquals("0", query("SELECT count(*) FROM " + schema + ".subscription_periods"));
@@ -170,7 +170,7 @@ class DatabaseMigrationTest {
                 + "('" + requestId + "', DATE '2026-10-17', DATE '2026-10-01', 'gpt-4o-mini', 0.15, 0.075, 0.60, 'RESERVED', 0.01)");
         String before = query("SELECT to_jsonb(cost)::text FROM " + schema + ".ai_provider_costs cost WHERE request_id = '" + requestId + "'");
 
-        assertEquals(6, flyway(null).migrate().migrationsExecuted);
+        assertEquals(7, flyway(null).migrate().migrationsExecuted);
         assertEquals(before, query("SELECT (to_jsonb(cost) - ARRAY['cache_write_input_rate_usd_per_million', "
                 + "'cache_write_input_tokens'])::text FROM " + schema + ".ai_provider_costs cost WHERE request_id = '" + requestId + "'"));
         assertEquals("0.0000000000", query("SELECT cache_write_input_rate_usd_per_million::text FROM " + schema
@@ -191,7 +191,7 @@ class DatabaseMigrationTest {
                 + "('" + expiredPeriodId + "', '" + USER + "', 'FREE', CURRENT_TIMESTAMP - INTERVAL '40 days', "
                 + "CURRENT_TIMESTAMP - INTERVAL '10 days', 5, 5)");
 
-        assertEquals(4, flyway(null).migrate().migrationsExecuted);
+        assertEquals(5, flyway(null).migrate().migrationsExecuted);
         assertEquals("30", query("SELECT ai_limit FROM " + schema + ".subscription_periods WHERE id = '" + activePeriodId + "'"));
         assertEquals("3", query("SELECT ai_used FROM " + schema + ".subscription_periods WHERE id = '" + activePeriodId + "'"));
         assertEquals("5", query("SELECT ai_limit FROM " + schema + ".subscription_periods WHERE id = '" + expiredPeriodId + "'"));
@@ -208,7 +208,7 @@ class DatabaseMigrationTest {
                 + "TIMESTAMP '2026-10-19 10:15:00', TIMESTAMP '2026-10-18 09:00:00', "
                 + "TIMESTAMP '2026-10-18 09:30:00', 'PUBLISHING')");
 
-        assertEquals(9, flyway(null, "UTC", "Asia/Ho_Chi_Minh").migrate().migrationsExecuted);
+        assertEquals(10, flyway(null, "UTC", "Asia/Ho_Chi_Minh").migrate().migrationsExecuted);
 
         assertEquals("UNKNOWN", query("SELECT status FROM " + schema + ".scheduled_posts"));
         assertEquals("2026-10-20 15:30:00", query("SELECT to_char(scheduled_time AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') FROM " + schema + ".scheduled_posts"));
@@ -262,7 +262,7 @@ class DatabaseMigrationTest {
                 + "('" + USER + "', 'Old shop', 'cafe', 'Old description')");
         String before = query("SELECT (to_jsonb(p) - 'id')::text FROM " + schema + ".business_profiles p");
 
-        assertEquals(1, flyway(null).migrate().migrationsExecuted);
+        assertEquals(2, flyway(null).migrate().migrationsExecuted);
         assertEquals(before, query("SELECT (to_jsonb(p) - ARRAY['id', 'industry_name', 'main_products', 'highlights', "
                 + "'price_range', 'phone', 'address', 'opening_hours', 'website', 'policies', 'signature', 'brand_hashtags'])::text FROM "
                 + schema + ".business_profiles p"));
@@ -283,7 +283,7 @@ class DatabaseMigrationTest {
                 + "('" + calendarId + "', DATE '2026-11-02', 'FACEBOOK', 'Topic', 'PLANNED')");
         String before = query("SELECT (to_jsonb(i) - 'id')::text FROM " + schema + ".calendar_items i");
 
-        assertEquals(2, flyway(null).migrate().migrationsExecuted);
+        assertEquals(3, flyway(null).migrate().migrationsExecuted);
         assertEquals("READY", query("SELECT status FROM " + schema + ".content_calendars WHERE id = '" + calendarId + "'"));
         assertEquals(before, query("SELECT (to_jsonb(i) - ARRAY['id', 'scheduled_time', 'reason', 'scheduled_post_id', 'error'])::text FROM "
                 + schema + ".calendar_items i"));

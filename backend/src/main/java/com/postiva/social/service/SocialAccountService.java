@@ -320,10 +320,10 @@ public class SocialAccountService {
         GeneratedPost post = generatedPostRepository.findById(schedule.getPostId()).orElse(null);
         if (post == null) return null;
 
-        boolean importedFacebookPost = account.getProvider() == Platform.FACEBOOK
-                && productBriefRepository != null
+        // Posts imported by channel sync are marked "<PLATFORM>_IMPORT" (see ChannelSyncService).
+        boolean importedFacebookPost = productBriefRepository != null
                 && productBriefRepository.findById(post.getBriefId())
-                .map(brief -> "FACEBOOK_IMPORT".equalsIgnoreCase(brief.getIndustryCode()))
+                .map(brief -> (account.getProvider().name() + "_IMPORT").equalsIgnoreCase(brief.getIndustryCode()))
                 .orElse(false);
         boolean sharedWithAnotherAccount = scheduledPostRepository.findByPostId(post.getId()).stream()
                 .anyMatch(other -> other.getSocialAccountId() != null
