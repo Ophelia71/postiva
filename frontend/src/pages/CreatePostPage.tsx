@@ -27,6 +27,7 @@ import { type AppChannel, type AppOverview, normalizeAppOverview, useAppDataReso
 import { dismissOnboarding } from '../lib/onboarding'
 import { trackOnboardingStep } from '../lib/webAnalytics'
 import { getErrorMessage } from '../lib/errors'
+import type { ShopProfile } from '../lib/shopProfile'
 import { formatFileSize } from '../lib/format'
 import { resolveMediaUrl } from '../lib/media'
 import { usePreferences } from '../lib/preferences'
@@ -132,6 +133,17 @@ function CreatePostForm({ onNewPost }: { onNewPost: () => void }) {
   const [targetAudience, setTargetAudience] = useState('')
   const [highlights, setHighlights] = useState('')
   const [goal, setGoal] = useState('')
+  const shopProfile = useAppDataResource<ShopProfile | null>('/shop-profile')
+  const didPrefill = useRef(false)
+  // Shop-level facts fill empty fields once; the shop can still change them for this post.
+  useEffect(() => {
+    const profile = shopProfile.data
+    if (!profile || didPrefill.current) return
+    didPrefill.current = true
+    if (profile.targetCustomer) setTargetAudience((current) => current || profile.targetCustomer || '')
+    if (profile.highlights) setHighlights((current) => current || profile.highlights || '')
+    if (profile.priceRange) setPrice((current) => current || profile.priceRange || '')
+  }, [shopProfile.data])
   const [selectedPlatforms, setSelectedPlatforms] = useState<Platform[]>([])
   const [sourceContent, setSourceContent] = useState('')
   const [platformCaptions, setPlatformCaptions] = useState<Partial<Record<Platform, string>>>({})

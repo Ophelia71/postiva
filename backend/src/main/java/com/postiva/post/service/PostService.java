@@ -1,6 +1,9 @@
 package com.postiva.post.service;
 
 import com.postiva.ai.dto.AiPostResult;
+import com.postiva.ai.dto.ShopContext;
+import com.postiva.business.entity.BusinessProfile;
+import com.postiva.business.service.ShopProfileService;
 import com.postiva.ai.service.OpenAiService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -45,6 +48,7 @@ public class PostService {
     private final OpenAiProperties openAiProperties;
     private final ObjectMapper json;
     private final TransactionTemplate transactions;
+    private final ShopProfileService shopProfiles;
 
     public PostService(ProductBriefRepository briefRepository,
                        GeneratedPostRepository postRepository,
@@ -52,7 +56,9 @@ public class PostService {
                        OpenAiService openAiService,
                        CurrentUserService currentUserService,
                        FileService fileService, AiUsageService usage, OpenAiProperties openAiProperties,
-                       ObjectMapper json, PlatformTransactionManager transactionManager) {
+                       ObjectMapper json, PlatformTransactionManager transactionManager,
+                       ShopProfileService shopProfiles) {
+        this.shopProfiles = shopProfiles;
         this.briefRepository = briefRepository;
         this.postRepository = postRepository;
         this.templateService = templateService;
@@ -74,7 +80,12 @@ public class PostService {
         if (idempotencyKey == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Thiếu Idempotency-Key");
         if (!openAiProperties.enabled()) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Dịch vụ AI chưa sẵn sàng");
         fileService.validateAttachments(request.imageIds(), userId);
-        IndustryTemplate template = templateService.findByCode(request.industryCode()).orElse(null);
+        BusinessProfile profile = shopProfiles.forUser(userId).orElse(null);
+        // The shop's own industry fills in for drafts that do not name one.
+        String industryCode = request.industryCode() != null && !request.industryCode().isBlank()
+                ? request.industryCode() : profile == null ? null : ShopProfileService.templateCode(profile);
+        IndustryTemplate template = industryCode == null ? null : templateService.findByCode(industryCode).orElse(null);
+        ShopContext shop = profile == null ? null : shopProfiles.context(profile);
         String fingerprint;
         try { fingerprint = PersistentRateLimiter.sha256(json.writeValueAsString(request)); }
         catch (JsonProcessingException e) { throw new IllegalArgumentException("Nội dung yêu cầu không hợp lệ", e); }
@@ -85,8 +96,10 @@ public class PostService {
         }
         try {
             // External I/O is outside the database transaction and does not hold a connection/row lock.
-            AiPostResult result = openAiService.generatePost(request, template,
+            AiPostResult generated = openAiService.generatePost(request, template, shop,
                     providerUsage -> usage.recordProviderUsage(reservation.requestId(), providerUsage));
+            AiPostResult result = profile == null ? generated
+                    : ShopSignature.apply(generated, profile.getSignature(), profile.getBrandHashtags());
             return transactions.execute(status -> {
                 GeneratePostResponse saved = saveGenerated(request, userId, result);
                 usage.succeed(userId, reservation.requestId(), saved.postId());

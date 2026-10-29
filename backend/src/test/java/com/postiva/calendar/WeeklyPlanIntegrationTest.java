@@ -128,8 +128,8 @@ class WeeklyPlanIntegrationTest {
             }
             return new WeeklyIdeasResult("Tuần tập trung vào video.", ideas);
         });
-        when(ai.generatePost(any(), any(), any())).thenAnswer(invocation -> {
-            Consumer<ProviderTokenUsage> observer = invocation.getArgument(2);
+        when(ai.generatePost(any(), any(), any(), any())).thenAnswer(invocation -> {
+            Consumer<ProviderTokenUsage> observer = invocation.getArgument(3);
             observer.accept(new ProviderTokenUsage(500, 0, 100, "gpt-4o-mini", "fixture-post"));
             return new AiPostResult("Tiêu đề", Map.of("FACEBOOK", Map.of("title", "Tiêu đề", "content", "Nội dung bài tuần")),
                     List.of("#caphe"), "Nhắn shop ngay", "Ảnh ly cà phê");

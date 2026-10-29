@@ -70,3 +70,13 @@ test('dismissal is remembered and survives unavailable storage', () => {
   assert.doesNotThrow(() => onboarding.dismissOnboarding())
   window.localStorage = original
 })
+
+test('dismissal belongs to the signed-in account, not the browser', () => {
+  window.localStorage.setItem('postiva.auth', JSON.stringify({ userId: 'first-account' }))
+  onboarding.dismissOnboarding()
+  assert.equal(onboarding.isOnboardingDismissed(), true)
+
+  window.localStorage.setItem('postiva.auth', JSON.stringify({ userId: 'new-account' }))
+  assert.equal(onboarding.isOnboardingDismissed(), false)
+  window.localStorage.removeItem('postiva.auth')
+})

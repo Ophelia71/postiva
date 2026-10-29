@@ -20,6 +20,8 @@ public record WeeklyPlanPromptInput(
         List<String> findings,
         List<String> topPostExcerpts,
         List<String> templatePostTypes,
-        List<String> templateContentAngles
+        List<String> templateContentAngles,
+        /** The shop's saved profile, or null when it has none yet. */
+        ShopContext shop
 ) {
 }

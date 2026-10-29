@@ -1,10 +1,12 @@
-import { Check, Link2, PenLine, Send } from 'lucide-react'
-import { useEffect } from 'react'
+import { Check, Link2, PenLine, Send, Store } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { PageHeader, PageState } from '../components/PageUi'
 import { type AppOverview, normalizeAppOverview, useAppDataResource } from '../lib/appDataApi'
 import { dismissOnboarding, getOnboardingState, isOnboardingDismissed } from '../lib/onboarding'
 import { trackOnboardingStep } from '../lib/webAnalytics'
+import { isShopProfileComplete, type ShopProfile } from '../lib/shopProfile'
+import { ShopProfileForm } from '../components/ShopProfileForm'
 import type { AuthSession } from '../lib/auth'
 
 type Step = {
@@ -17,12 +19,15 @@ type Step = {
   icon: typeof Link2
 }
 
-/** Where /app goes: new accounts land on the checklist, everyone else on reports. */
+/** Where /app goes: new accounts and shops without a profile land on the checklist, everyone else on reports. */
 export function AppIndexRedirect() {
   const { data, loading, error, reload } = useAppDataResource<AppOverview>('/app-data/overview')
-  if (loading) return <PageState title="Đang tải không gian làm việc..." />
+  const profileState = useAppDataResource<ShopProfile | null>('/shop-profile')
+  if (loading || profileState.loading) return <PageState title="Đang tải không gian làm việc..." />
   // A failed request must not silently send a brand-new user to an empty report page; let them retry.
   if (error || !data) return <OverviewError onRetry={reload} />
+  // The profile is what the AI writes from, so it is asked for even after the rest of the checklist was skipped.
+  if (!profileState.error && !isShopProfileComplete(profileState.data)) return <Navigate to="/app/start" replace />
   const { isSetUp } = getOnboardingState(normalizeAppOverview(data))
   return <Navigate to={isSetUp || isOnboardingDismissed() ? '/app/reports' : '/app/start'} replace />
 }
@@ -30,6 +35,9 @@ export function AppIndexRedirect() {
 export function StartPage({ session }: { session: AuthSession }) {
   const navigate = useNavigate()
   const { data, loading, error, reload } = useAppDataResource<AppOverview>('/app-data/overview')
+  const profileState = useAppDataResource<ShopProfile | null>('/shop-profile')
+  const [profileSkipped, setProfileSkipped] = useState(false)
+  const profileDone = isShopProfileComplete(profileState.data)
 
   // Milestones are derived from real data, so they are recorded the first time each one is true.
   useEffect(() => {
@@ -39,12 +47,27 @@ export function StartPage({ session }: { session: AuthSession }) {
     if (progress.hasPost) trackOnboardingStep('step/create')
     if (progress.hasPublishedOrScheduled) trackOnboardingStep('step/publish')
   }, [data])
+  useEffect(() => {
+    if (profileDone) trackOnboardingStep('step/profile')
+  }, [profileDone])
 
-  if (loading) return <PageState title="Đang tải không gian làm việc..." />
+  if (loading || profileState.loading) return <PageState title="Đang tải không gian làm việc..." />
   if (error || !data) return <OverviewError onRetry={reload} />
 
-  const { hasChannel, hasPost, hasPublishedOrScheduled, doneCount } = getOnboardingState(normalizeAppOverview(data))
+  const progress = getOnboardingState(normalizeAppOverview(data))
+  const { hasChannel, hasPost, hasPublishedOrScheduled } = progress
+  const doneCount = progress.doneCount + (profileDone ? 1 : 0)
+  const showProfileForm = !profileDone && !profileSkipped && !profileState.error
   const steps: Step[] = [
+    {
+      key: 'profile',
+      title: 'Thiết lập hồ sơ shop',
+      description: 'Tên shop, ngành hàng và sản phẩm chính. AI dùng thông tin này cho mọi bài; số điện thoại, địa chỉ có thể thêm sau.',
+      done: profileDone,
+      to: '/app/shop-profile',
+      action: 'Điền hồ sơ shop',
+      icon: Store,
+    },
     {
       key: 'connect',
       title: 'Kết nối kênh đầu tiên',
@@ -86,12 +109,20 @@ export function StartPage({ session }: { session: AuthSession }) {
     <section aria-labelledby="start-heading">
       <PageHeader
         title={`Chào ${session.fullName.split(' ').slice(-1)[0] || 'bạn'}, bắt đầu thôi`}
-        subtitle="Ba việc để đăng được bài đầu tiên. Làm lần lượt; bước kết nối kênh cần chuẩn bị token từ Meta."
+        subtitle="Bốn việc để đăng được bài đầu tiên. Làm lần lượt; bước kết nối kênh cần chuẩn bị token từ Meta."
       />
       <p id="start-heading" className="sr-only">Danh sách thiết lập</p>
       <p className="mb-4 text-sm font-semibold text-[var(--muted-text)]" aria-live="polite">
         Đã xong {doneCount}/{steps.length}
       </p>
+
+      {showProfileForm && (
+        <div className="mb-6 rounded-2xl border border-[#8594ea] bg-[var(--panel-bg)] p-5">
+          <h2 className="flex items-center gap-2 text-lg font-bold"><Store size={18} aria-hidden="true" />Bước 1: Hồ sơ shop</h2>
+          <p className="mb-4 mt-1 text-sm text-[var(--muted-text)]">Chỉ 3 ô bắt buộc. Mọi thông tin khác có thể bổ sung sau ở menu tài khoản → Hồ sơ shop.</p>
+          <ShopProfileForm initial={profileState.data ?? null} mode="onboarding" onSaved={() => profileState.reload()} onSkip={() => setProfileSkipped(true)} />
+        </div>
+      )}
 
       <ol className="space-y-3">
         {steps.map((step, index) => {
@@ -115,7 +146,7 @@ export function StartPage({ session }: { session: AuthSession }) {
                 </h2>
                 <p className="mt-1 text-sm text-[var(--muted-text)]">{step.description}</p>
               </div>
-              {!step.done && (
+              {!step.done && !(step.key === 'profile' && showProfileForm) && (
                 <Link
                   to={step.to}
                   className={`inline-flex min-h-11 items-center justify-center rounded-full px-5 text-sm font-bold ${isNext ? 'bg-[#505db8] text-white hover:bg-[#434fa0]' : 'border border-[var(--app-border)] text-[var(--app-text)] hover:bg-[var(--soft-bg)]'}`}

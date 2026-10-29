@@ -7,6 +7,8 @@ import com.postiva.ai.dto.WeeklyIdeasResult;
 import com.postiva.ai.dto.WeeklyPlanPromptInput;
 import com.postiva.ai.service.OpenAiService;
 import com.postiva.auth.security.PersistentRateLimiter;
+import com.postiva.business.entity.BusinessProfile;
+import com.postiva.business.service.ShopProfileService;
 import com.postiva.calendar.dto.CreateWeeklyPlanRequest;
 import com.postiva.calendar.entity.CalendarItem;
 import com.postiva.calendar.entity.CalendarItemStatus;
@@ -74,6 +76,7 @@ public class WeeklyPlanGenerator {
     private final AiUsageService usage;
     private final PostService posts;
     private final TemplateService templates;
+    private final ShopProfileService shopProfiles;
     private final ObjectMapper json;
     private final TransactionTemplate transactions;
     private final Executor executor;
@@ -82,6 +85,7 @@ public class WeeklyPlanGenerator {
                                SocialAccountService accounts, PostInsightsService insights,
                                PerformanceAnalyzer analyzer, OpenAiService ai, OpenAiProperties aiProperties,
                                AiUsageService usage, PostService posts, TemplateService templates, ObjectMapper json,
+                               ShopProfileService shopProfiles,
                                PlatformTransactionManager transactionManager,
                                @Qualifier("weeklyPlanExecutor") Executor executor) {
         this.plans = plans;
@@ -94,6 +98,7 @@ public class WeeklyPlanGenerator {
         this.usage = usage;
         this.posts = posts;
         this.templates = templates;
+        this.shopProfiles = shopProfiles;
         this.json = json;
         this.transactions = new TransactionTemplate(transactionManager);
         this.executor = executor;
@@ -152,7 +157,10 @@ public class WeeklyPlanGenerator {
 
     private WeeklyIdeasResult planIdeas(UUID userId, CreateWeeklyPlanRequest brief, Platform platform,
                                         List<Instant> slots, PerformanceSummary summary, ZoneId zone) {
-        IndustryTemplate template = brief.industryCode() == null ? null : templates.findByCode(brief.industryCode()).orElse(null);
+        BusinessProfile profile = shopProfiles.forUser(userId).orElse(null);
+        String industryCode = brief.industryCode() != null && !brief.industryCode().isBlank()
+                ? brief.industryCode() : profile == null ? null : ShopProfileService.templateCode(profile);
+        IndustryTemplate template = industryCode == null ? null : templates.findByCode(industryCode).orElse(null);
         List<String> slotLabels = slots.stream().map(slot -> slotLabel(slot, zone)).toList();
         WeeklyPlanPromptInput input = new WeeklyPlanPromptInput(
                 brief.productName(), brief.productDescription(), brief.price(), brief.industryCode(),
@@ -161,7 +169,8 @@ public class WeeklyPlanGenerator {
                 summary.topPosts().stream().filter(post -> !post.excerpt().isBlank())
                         .map(post -> post.excerpt() + " (" + Math.round(post.engagement()) + " điểm tương tác)").toList(),
                 template == null ? List.of() : template.getPostTypes(),
-                template == null ? List.of() : template.getContentAngles());
+                template == null ? List.of() : template.getContentAngles(),
+                profile == null ? null : shopProfiles.context(profile));
 
         String fingerprint;
         try {

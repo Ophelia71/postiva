@@ -1,10 +1,25 @@
 import type { AppOverview } from './appDataApi'
 
-const DISMISSED_KEY = 'postiva-onboarding-dismissed'
+/** Same key as AUTH_STORAGE_KEY in auth.ts; read directly so this module stays dependency-free for its tests. */
+const AUTH_KEY = 'postiva.auth'
+
+function currentUserId() {
+  try {
+    const session = JSON.parse(window.localStorage.getItem(AUTH_KEY) ?? 'null') as { userId?: unknown } | null
+    return typeof session?.userId === 'string' ? session.userId : 'anonymous'
+  } catch {
+    return 'anonymous'
+  }
+}
+
+/** Per account: skipping the checklist on one account must not hide it from the next one on the same browser. */
+function dismissedKey() {
+  return `postiva-onboarding-dismissed:${currentUserId()}`
+}
 
 export function isOnboardingDismissed() {
   try {
-    return window.localStorage.getItem(DISMISSED_KEY) === '1'
+    return window.localStorage.getItem(dismissedKey()) === '1'
   } catch {
     return false
   }
@@ -12,7 +27,7 @@ export function isOnboardingDismissed() {
 
 export function dismissOnboarding() {
   try {
-    window.localStorage.setItem(DISMISSED_KEY, '1')
+    window.localStorage.setItem(dismissedKey(), '1')
   } catch {
     // Storage can be blocked; the checklist is derived from account data anyway.
   }

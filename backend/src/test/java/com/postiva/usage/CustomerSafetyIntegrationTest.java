@@ -108,9 +108,9 @@ class CustomerSafetyIntegrationTest {
             assertFalse(TransactionSynchronizationManager.isActualTransactionActive(), "SMTP must not hold a DB transaction");
             return null;
         }).when(email).sendRegistrationSuccess(anyString(), anyString());
-        when(ai.generatePost(any(), any(), any())).thenAnswer(invocation -> {
+        when(ai.generatePost(any(), any(), any(), any())).thenAnswer(invocation -> {
             assertFalse(TransactionSynchronizationManager.isActualTransactionActive(), "Provider I/O must not hold a DB transaction");
-            Consumer<ProviderTokenUsage> observer = invocation.getArgument(2);
+            Consumer<ProviderTokenUsage> observer = invocation.getArgument(3);
             observer.accept(new ProviderTokenUsage(500, 0, 100, "gpt-4o-mini", "fixture-request"));
             return result();
         });
@@ -183,12 +183,12 @@ class CustomerSafetyIntegrationTest {
         Result again = call("POST", "/api/posts/generate", token, key, input("A"));
         assertEquals(first.body(), again.body());
         assertEquals(409, call("POST", "/api/posts/generate", token, key, input("Changed")).status());
-        verify(ai, times(1)).generatePost(any(), any(), any());
+        verify(ai, times(1)).generatePost(any(), any(), any(), any());
         assertEquals(200, call("POST", "/api/posts/generate", token, UUID.randomUUID(), input("B")).status());
         assertEquals(429, call("POST", "/api/posts/generate", token, UUID.randomUUID(), input("C")).status());
         assertEquals(2, usage.summary(user.getId()).used());
         assertEquals(0, usage.summary(user.getId()).reserved());
-        verify(ai, times(2)).generatePost(any(), any(), any());
+        verify(ai, times(2)).generatePost(any(), any(), any(), any());
         assertEquals(2, jdbc.queryForObject("SELECT count(*) FROM ai_provider_costs c JOIN ai_usage_requests r ON r.id = c.request_id WHERE r.user_id = ? AND c.status = 'SETTLED'", Integer.class, user.getId()));
         User other = user();
         assertEquals(0, call("GET", "/api/usage/requests", jwt.generateToken(other), null, null).body().path("data").path("total").asInt());
@@ -203,10 +203,10 @@ class CustomerSafetyIntegrationTest {
             assertFalse(TransactionSynchronizationManager.isActualTransactionActive());
             started.countDown();
             assertTrue(finish.await(10, TimeUnit.SECONDS));
-            Consumer<ProviderTokenUsage> observer = inv.getArgument(2);
+            Consumer<ProviderTokenUsage> observer = inv.getArgument(3);
             observer.accept(new ProviderTokenUsage(500, 0, 100, "gpt-4o-mini", "fixture-request"));
             return result();
-        }).when(ai).generatePost(any(), any(), any());
+        }).when(ai).generatePost(any(), any(), any(), any());
         var first = CompletableFuture.supplyAsync(() -> call("POST", "/api/posts/generate", token, key, input("Concurrent")));
         try {
             assertTrue(started.await(10, TimeUnit.SECONDS));
@@ -215,20 +215,20 @@ class CustomerSafetyIntegrationTest {
         } finally { finish.countDown(); }
         assertEquals(200, first.join().status());
         assertEquals(200, call("POST", "/api/posts/generate", token, key, input("Concurrent")).status());
-        verify(ai, times(1)).generatePost(any(), any(), any());
+        verify(ai, times(1)).generatePost(any(), any(), any(), any());
         assertEquals(1, usage.summary(user.getId()).used());
     }
 
     @Test void providerFailureRefundsQuotaButRetainsCostAttemptsAndKeyCannotRestart() {
         User user = user(); String token = jwt.generateToken(user); UUID key = UUID.randomUUID();
         doThrow(new ResponseStatusException(HttpStatus.GATEWAY_TIMEOUT, "Fixture timeout"))
-                .when(ai).generatePost(any(), any(), any());
+                .when(ai).generatePost(any(), any(), any(), any());
         assertEquals(504, call("POST", "/api/posts/generate", token, key, input("Timeout")).status());
         assertEquals(2, usage.summary(user.getId()).remaining());
         assertEquals("UNKNOWN", usage.history(user.getId(), 0, 10).items().getFirst().status());
         assertEquals(409, call("POST", "/api/posts/generate", token, key, input("Timeout")).status());
         assertEquals(1, jdbc.queryForObject("SELECT sum(attempts) FROM ai_daily_budgets", Integer.class));
-        verify(ai, times(1)).generatePost(any(), any(), any());
+        verify(ai, times(1)).generatePost(any(), any(), any(), any());
     }
 
     @Test void databaseFailureRollsBackPostAndQuotaChargeTogether() {
@@ -347,12 +347,12 @@ class CustomerSafetyIntegrationTest {
         assertEquals(400, call("POST", "/api/posts/generate", token, UUID.randomUUID(), foreignMedia).status());
         verifyNoInteractions(ai);
         doThrow(new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Fixture refusal"))
-                .when(ai).generatePost(any(), any(), any());
+                .when(ai).generatePost(any(), any(), any(), any());
         assertEquals(422, call("POST", "/api/posts/generate", token, UUID.randomUUID(), input("Refused")).status());
         assertEquals(2, usage.summary(user.getId()).remaining());
         assertEquals("FAILED", usage.history(user.getId(), 0, 10).items().getFirst().status());
         assertEquals(429, call("POST", "/api/posts/generate", token, UUID.randomUUID(), input("Another")).status());
-        verify(ai, times(1)).generatePost(any(), any(), any());
+        verify(ai, times(1)).generatePost(any(), any(), any(), any());
     }
 
     @Test void ipLimitCoversInvalidPayloadsBeforeValidationAndIgnoresSpoofedHeaders() {

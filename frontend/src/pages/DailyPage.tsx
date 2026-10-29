@@ -22,6 +22,7 @@ import {
   WEEKDAY_NAMES,
 } from '../lib/dailyApi'
 import { installDailyMock } from '../lib/dailyMock'
+import type { ShopProfile } from '../lib/shopProfile'
 import { isDemoActive } from '../lib/demo'
 import { getErrorMessage } from '../lib/errors'
 
@@ -267,6 +268,7 @@ type Form = {
 
 function PlanWizard({ channels, onCancel, onCreated }: { channels: AppChannel[]; onCancel: () => void; onCreated: (plan: WeeklyPlan) => void }) {
   const usageState = useAppDataResource<{ remaining: number }>('/usage')
+  const shopProfile = useAppDataResource<ShopProfile | null>('/shop-profile')
   const [form, setForm] = useState<Form>({
     socialAccountId: channels[0]?.id ?? '',
     startDate: nextMonday(),
@@ -290,6 +292,22 @@ function PlanWizard({ channels, onCancel, onCreated }: { channels: AppChannel[];
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [insights, setInsights] = useState<{ accountId: string; summary: PerformanceSummary | null; error: string } | null>(null)
+  const [didPrefill, setDidPrefill] = useState(false)
+
+  // The shop profile fills empty product fields once; the week can still be about something else.
+  useEffect(() => {
+    const profile = shopProfile.data
+    if (!profile || didPrefill) return
+    setDidPrefill(true)
+    setForm((current) => ({
+      ...current,
+      productDescription: current.productDescription || profile.mainProducts || '',
+      targetAudience: current.targetAudience || profile.targetCustomer || '',
+      highlights: current.highlights || profile.highlights || '',
+      price: current.price || profile.priceRange || '',
+      tone: profile.defaultTone && TONES.includes(profile.defaultTone) ? profile.defaultTone : current.tone,
+    }))
+  }, [shopProfile.data, didPrefill])
 
   const set = <K extends keyof Form>(key: K, value: Form[K]) => setForm((current) => ({ ...current, [key]: value }))
   const selectedBadge = channels.find((channel) => channel.id === form.socialAccountId)?.badge

@@ -10,6 +10,7 @@ import {
   PenLine,
   PlusCircle,
   Rocket,
+  Store,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
@@ -41,6 +42,8 @@ import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { ChangePasswordPage } from './pages/ChangePasswordPage'
 import { BillingPage } from './pages/BillingPage'
 import { DailyPage } from './pages/DailyPage'
+import { ShopProfilePage } from './pages/ShopProfilePage'
+import { ShopProfileReminder } from './components/ShopProfileReminder'
 import { AppIndexRedirect, StartPage } from './pages/StartPage'
 
 const navItems = [
@@ -297,7 +300,11 @@ function AccountMenu({ session, onLogout, placement, demo }: { session: AuthSess
             <Rocket size={16} aria-hidden="true" />
             Hướng dẫn bắt đầu
           </Link>
-          <Link role="menuitem" to="/app/daily" onClick={() => setOpen(false)} className={` lg:hidden`}>
+          <Link role="menuitem" to="/app/shop-profile" onClick={() => setOpen(false)} className={itemClass}>
+            <Store size={16} aria-hidden="true" />
+            Hồ sơ shop
+          </Link>
+          <Link role="menuitem" to="/app/daily" onClick={() => setOpen(false)} className={`${itemClass} lg:hidden`}>
             <CalendarClock size={16} aria-hidden="true" />
             Daily
           </Link>
@@ -329,7 +336,10 @@ function AccountMenu({ session, onLogout, placement, demo }: { session: AuthSess
 function AppShell({ session, onLogout, onPasswordChanged, demo }: ShellProps) {
   const { t } = usePreferences()
   // The "Tạo bài mới" shortcut is pointless while the user is already on the create page.
-  const isCreatePage = useLocation().pathname.startsWith('/app/create')
+  const pathname = useLocation().pathname
+  const isCreatePage = pathname.startsWith('/app/create')
+  // The checklist and the profile page already ask for the profile themselves.
+  const isOnboardingPage = pathname.startsWith('/app/start') || pathname.startsWith('/app/shop-profile')
 
   return (
     <div className="app-shell min-h-svh bg-[var(--app-bg)] text-[var(--app-text)]">
@@ -390,6 +400,7 @@ function AppShell({ session, onLogout, onPasswordChanged, demo }: ShellProps) {
       <main className="pb-24 lg:pb-0 lg:pl-[272px]">
         <div className="mx-auto min-h-svh max-w-[1320px] px-4 py-5 sm:px-6 lg:px-10 lg:py-8">
           {demo && <DemoBanner onSignUp={demo.onSignUp} onExit={demo.onExit} />}
+          {!isOnboardingPage && <ShopProfileReminder />}
           {!isCreatePage && (
             <div className="mb-8 hidden items-center justify-end lg:flex">
               <NavLink
@@ -411,6 +422,7 @@ function AppShell({ session, onLogout, onPasswordChanged, demo }: ShellProps) {
             <Route path="/connections" element={<ConnectionsPage />} />
             <Route path="/create" element={<CreatePostPage />} />
             <Route path="/billing" element={<BillingPage />} />
+            <Route path="/shop-profile" element={<ShopProfilePage />} />
             <Route path="/security" element={<ChangePasswordPage onPasswordChanged={onPasswordChanged} />} />
             <Route path="/admin/*" element={<Navigate to="/app/reports" replace />} />
           </Routes>

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.postiva.ai.dto.AiPostResult;
 import com.postiva.ai.dto.ProviderTokenUsage;
+import com.postiva.ai.dto.ShopContext;
 import com.postiva.ai.dto.WeeklyIdeasResult;
 import com.postiva.ai.dto.WeeklyPlanPromptInput;
 import com.postiva.common.Platform;
@@ -58,6 +59,12 @@ public class OpenAiService {
 
     public AiPostResult generatePost(GeneratePostRequest request, IndustryTemplate template,
                                      Consumer<ProviderTokenUsage> usageObserver) {
+        return generatePost(request, template, null, usageObserver);
+    }
+
+    /** {@code shop} is the saved shop profile, or null when the shop has not set one up. */
+    public AiPostResult generatePost(GeneratePostRequest request, IndustryTemplate template, ShopContext shop,
+                                     Consumer<ProviderTokenUsage> usageObserver) {
         if (!properties.enabled()) {
             throw new ResponseStatusException(
                     HttpStatus.SERVICE_UNAVAILABLE,
@@ -65,11 +72,15 @@ public class OpenAiService {
             );
         }
 
-        String response = callOpenAi(buildRequestPayload(request, template), usageObserver);
+        String response = callOpenAi(buildRequestPayload(request, template, shop), usageObserver);
         return parseOpenAiResponse(response, request);
     }
 
     Map<String, Object> buildRequestPayload(GeneratePostRequest request, IndustryTemplate template) {
+        return buildRequestPayload(request, template, null);
+    }
+
+    Map<String, Object> buildRequestPayload(GeneratePostRequest request, IndustryTemplate template, ShopContext shop) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("model", properties.model());
         payload.put("messages", List.of(
@@ -79,7 +90,7 @@ public class OpenAiService {
                 ),
                 Map.of(
                         "role", "user",
-                        "content", promptBuilder.buildGeneratePostPrompt(request, template)
+                        "content", promptBuilder.buildGeneratePostPrompt(request, template, shop)
                 )
         ));
         payload.put("response_format", Map.of(

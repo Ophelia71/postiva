@@ -88,6 +88,6 @@ class OpenAiWeeklyPlanTest {
                 "Tăng đơn", "Thân thiện", Platform.FACEBOOK,
                 List.of("2026-11-02 (Thứ Hai) 19:00", "2026-11-05 (Thứ Năm) 19:00"),
                 List.of("Bài video đạt tương tác gấp 3 lần bài chỉ có chữ."), List.of("Bài cũ hay nhất"),
-                List.of(), List.of());
+                List.of(), List.of(), null);
     }
 }

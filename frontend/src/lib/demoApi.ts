@@ -70,6 +70,26 @@ function overview() {
   }
 }
 
+let shopProfile: Record<string, unknown> = {
+  businessName: 'Tiệm Cà Phê Muối (mẫu)',
+  industryCode: 'cafe',
+  mainProducts: 'Cà phê muối pha phin, bánh quy bơ làm tại tiệm',
+  targetCustomer: 'Dân văn phòng 22–35 tuổi',
+  defaultTone: 'Thân thiện, gần gũi',
+  phone: '0900 000 000',
+  address: 'Quận 3, TP.HCM',
+  signature: '📍 Quận 3, TP.HCM · ☎ 0900 000 000',
+  brandHashtags: '#CaPheMuoiMau',
+  complete: true,
+}
+
+const INDUSTRIES = [
+  { industryCode: 'cafe', industryName: 'Café / Đồ uống' },
+  { industryCode: 'fashion', industryName: 'Thời trang' },
+  { industryCode: 'beauty', industryName: 'Mỹ phẩm / Làm đẹp' },
+  { industryCode: 'education', industryName: 'Khóa học / Giáo dục' },
+]
+
 function usage() {
   return { plan: 'FREE', limit: 30, used: 4, reserved: 0, remaining: 26, endsAt: at(26, 0) }
 }
@@ -129,6 +149,13 @@ async function handle(api: AxiosInstance, method: string, url: string, body: unk
     if (path === '/usage/requests') return { items: [], page: 0, size: 10, total: 0 }
     if (path === '/billing/offer') return { available: false, amountVnd: 0, aiLimit: 50, periodDays: 30, refundPolicyUrl: null }
     if (path === '/billing/orders') return []
+    if (path === '/shop-profile') return shopProfile
+    if (path === '/templates') return INDUSTRIES
+  }
+  // Editing the sample profile is harmless and shows how the form works; it only lives in this tab.
+  if (method === 'put' && path === '/shop-profile') {
+    shopProfile = { ...(body as Record<string, unknown>), complete: true }
+    return shopProfile
   }
   if (method === 'post' && path === '/posts/generate') {
     // A short pause so the demo feels like the real AI step.

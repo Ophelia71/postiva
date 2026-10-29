@@ -1,5 +1,6 @@
 import type { AxiosAdapter, AxiosInstance, InternalAxiosRequestConfig } from 'axios'
 import type { AppChannel } from './appDataApi'
+import { isDemoActive } from './demo'
 import type { CreateWeeklyPlanRequest, PerformanceSummary, WeeklyPlan, WeeklyPlanItem } from './dailyApi'
 
 /**
@@ -257,7 +258,8 @@ export function installDailyMock(api: AxiosInstance) {
   }
 
   api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-    if (isDailyMockPath(String(config.url ?? ''))) config.adapter = adapter
+    // The demo serves these paths itself and asks for sign-up on approval; the dev mock must not answer first.
+    if (isDailyMockPath(String(config.url ?? '')) && !isDemoActive()) config.adapter = adapter
     return config
   })
 }

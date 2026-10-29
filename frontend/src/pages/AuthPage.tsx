@@ -5,7 +5,7 @@ import { api } from '../lib/api'
 import type { AuthSession } from '../lib/auth'
 import { getErrorMessage } from '../lib/errors'
 import { usePreferences } from '../lib/preferences'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
 type AuthMode = 'LOGIN' | 'REGISTER'
 
@@ -24,6 +24,7 @@ type RegisterPendingResponse = {
 export function AuthPage({ onAuthenticated, notice }: { onAuthenticated: (session: AuthSession) => void; notice?: string }) {
   const { t } = usePreferences()
   const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
   const [mode, setMode] = useState<AuthMode>(() => (searchParams.get('mode') === 'register' ? 'REGISTER' : 'LOGIN'))
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -96,6 +97,8 @@ export function AuthPage({ onAuthenticated, notice }: { onAuthenticated: (sessio
           email: verificationEmail,
           code: verificationCode,
         })
+        // A brand-new account always starts with onboarding, wherever the sign-up form was opened from.
+        navigate('/app/start', { replace: true })
         onAuthenticated(response.data)
         return
       }
