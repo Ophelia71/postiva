@@ -198,10 +198,10 @@ function SessionApp() {
     navigate('/app?mode=register')
   }
 
-  function handlePasswordChanged() {
+  function handlePasswordChanged(notice?: string) {
     clearAuthSession()
     setSession(null)
-    setAuthNotice('Mật khẩu đã được cập nhật hoặc các phiên đã bị thu hồi. Vui lòng đăng nhập lại.')
+    setAuthNotice(notice ?? 'Mật khẩu đã được cập nhật hoặc các phiên đã bị thu hồi. Vui lòng đăng nhập lại.')
   }
 
   return (
@@ -238,7 +238,7 @@ function SessionLoading() {
 }
 
 type DemoControls = { onSignUp: () => void; onExit: () => void }
-type ShellProps = { session: AuthSession; onLogout: () => void; onPasswordChanged: () => void; demo?: DemoControls }
+type ShellProps = { session: AuthSession; onLogout: () => void; onPasswordChanged: (notice?: string) => void; demo?: DemoControls }
 
 function AccountMenu({ session, onLogout, placement, demo }: { session: AuthSession; onLogout: () => void; placement: 'above' | 'below'; demo?: DemoControls }) {
   const [open, setOpen] = useState(false)

@@ -250,6 +250,49 @@ class ChannelSyncIntegrationTest {
         assertEquals(1, call("GET", "/api/app-data/overview", token, null).body().path("data").path("totalPosts").asInt());
     }
 
+    @Test void deletingTheAccountRemovesItsDataAndKeepsOnlyAnonymousUsage() throws Exception {
+        User user = user();
+        String token = jwt.generateToken(user);
+        String originalEmail = user.getEmail();
+        SocialAccount page = account(user, Platform.FACEBOOK, "page-" + UUID.randomUUID());
+        GeneratedPost post = post(user, "Bài của tài khoản sắp xóa");
+        ScheduledPost published = schedule(post, page, ScheduledPostStatus.PUBLISHED);
+        jdbc.update("INSERT INTO post_metrics (scheduled_post_id, likes) VALUES (?, 5)", published.getId());
+        jdbc.update("INSERT INTO business_profiles (user_id, business_name) VALUES (?, 'Tiệm sắp xóa')", user.getId());
+        UUID usageId = aiUsageFor(user, post);
+        String storedName = UUID.randomUUID() + ".png";
+        java.nio.file.Path image = java.nio.file.Path.of("target/channel-sync-uploads", storedName);
+        java.nio.file.Files.createDirectories(image.getParent());
+        java.nio.file.Files.write(image, new byte[] {1, 2, 3});
+        jdbc.update("INSERT INTO uploaded_files (user_id, post_id, file_url, public_id, storage_provider) VALUES (?, ?, 'local', ?, 'LOCAL')",
+                user.getId(), post.getId(), storedName);
+
+        assertEquals(400, call("POST", "/api/auth/account/delete", token, Map.of("currentPassword", "wrong-password-123")).status());
+        published.setStatus(ScheduledPostStatus.PUBLISHING);
+        schedules.saveAndFlush(published);
+        assertEquals(409, call("POST", "/api/auth/account/delete", token, Map.of("currentPassword", "isolated-test-password-123")).status());
+        published.setStatus(ScheduledPostStatus.PUBLISHED);
+        schedules.saveAndFlush(published);
+
+        Result deleted = call("POST", "/api/auth/account/delete", token, Map.of("currentPassword", "isolated-test-password-123"));
+        assertEquals(204, deleted.status(), deleted.body().toString());
+        for (String table : List.of("social_accounts", "generated_posts", "product_briefs", "business_profiles", "uploaded_files")) {
+            assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM " + table + " WHERE user_id = ?", Integer.class, user.getId()), table);
+        }
+        assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM scheduled_posts WHERE id = ?", Integer.class, published.getId()));
+        assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM post_metrics WHERE scheduled_post_id = ?", Integer.class, published.getId()));
+        assertTrue(java.nio.file.Files.notExists(image));
+        // Usage stays for accounting, attached to a row with no name, email or way to sign in.
+        assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM ai_usage_requests WHERE id = ?", Integer.class, usageId));
+        Map<String, Object> left = jdbc.queryForMap("SELECT full_name, email, status FROM users WHERE id = ?", user.getId());
+        assertEquals(User.DELETED_NAME, left.get("full_name"));
+        assertTrue(!left.get("email").toString().contains(originalEmail));
+        assertEquals("LOCKED", left.get("status"));
+        assertEquals(401, call("GET", "/api/auth/me", token, null).status());
+        assertEquals(401, call("POST", "/api/auth/login", null,
+                Map.of("email", originalEmail, "password", "isolated-test-password-123")).status());
+    }
+
     private static PostMetrics igPost(String id, Instant at, int likes) {
         return new PostMetrics(id, Platform.INSTAGRAM, at, id + "-caption", "IMAGE", likes, 1, null, null, "https://instagram.test/" + id);
     }

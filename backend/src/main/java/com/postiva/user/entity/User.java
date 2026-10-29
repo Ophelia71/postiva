@@ -148,6 +148,29 @@ public class User {
         lockReason = reason.trim();
     }
 
+    /**
+     * What is left of an account its owner deleted: no name, no usable email or password, never signs in again.
+     * The row stays only because payment and AI usage records point at it.
+     */
+    public void anonymizeAfterDeletion(String passwordHash) {
+        fullName = DELETED_NAME;
+        email = "deleted-" + id + DELETED_EMAIL_DOMAIN;
+        this.passwordHash = passwordHash;
+        mfaEnabled = false;
+        status = Status.LOCKED;
+        lockedAt = Instant.now();
+        lockedBy = id;
+        lockReason = "Người dùng đã tự xóa tài khoản";
+        incrementAuthVersion();
+    }
+
+    public boolean isDeletedByOwner() {
+        return email != null && email.endsWith(DELETED_EMAIL_DOMAIN);
+    }
+
+    public static final String DELETED_NAME = "Tài khoản đã xóa";
+    private static final String DELETED_EMAIL_DOMAIN = "@deleted.postiva.invalid";
+
     public void unlock() {
         status = Status.ACTIVE;
         lockedAt = null;
