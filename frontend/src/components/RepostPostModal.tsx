@@ -7,6 +7,7 @@ import { getErrorMessage } from '../lib/errors'
 import { formatFileSize } from '../lib/format'
 import { resolveMediaUrl } from '../lib/media'
 import { usePreferences } from '../lib/preferences'
+import { useSessionWork } from '../lib/idleSession'
 
 type UploadedMedia = {
   id: string
@@ -45,6 +46,7 @@ export function RepostPostModal({
   const [isPublishing, setIsPublishing] = useState(false)
   const [status, setStatus] = useState(() => t('Nội dung được sao chép từ bài cũ. Bạn có thể chỉnh sửa trước khi tạo bài mới.'))
   const [statusTone, setStatusTone] = useState<'info' | 'success' | 'error'>('info')
+  useSessionWork({ busy: isUploadingMedia || isPublishing, unsaved: true })
 
   useEffect(() => {
     if (!selectedChannelId && facebookChannels[0]) {

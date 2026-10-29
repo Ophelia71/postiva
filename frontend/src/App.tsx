@@ -20,6 +20,8 @@ import { installDemoApi } from './lib/demoApi'
 import { DemoBanner } from './components/DemoBanner'
 import { identifyWebAnalyticsUser, WebAnalyticsTracker } from './lib/webAnalytics'
 import { AdminShell } from './components/AdminShell'
+import { IdleSessionGuard } from './components/IdleSessionGuard'
+import { idleLogoutNotice, idleState, readIdleNotice, startIdleClock, storedSessionIsIdle } from './lib/idleSession'
 import {
   AUTH_EXPIRED_EVENT,
   AUTH_STORAGE_KEY,
@@ -92,7 +94,7 @@ function App() {
 function SessionApp() {
   const [session, setSession] = useState<AuthSession | null>(() => getAuthSession())
   const [isSessionReady, setIsSessionReady] = useState(false)
-  const [authNotice, setAuthNotice] = useState('')
+  const [authNotice, setAuthNotice] = useState(() => readIdleNotice())
 
   useEffect(() => {
     let ignore = false
@@ -101,6 +103,16 @@ function SessionApp() {
       const storedSession = getAuthSession()
       if (!storedSession) {
         if (!ignore) {
+          setSession(null)
+          setIsSessionReady(true)
+        }
+        return
+      }
+      // A session left open (browser closed, laptop asleep) past the idle limit does not come back.
+      if (storedSessionIsIdle(storedSession.role)) {
+        clearAuthSession()
+        if (!ignore) {
+          setAuthNotice(idleLogoutNotice(idleState(storedSession.role).limit, false))
           setSession(null)
           setIsSessionReady(true)
         }
@@ -176,6 +188,7 @@ function SessionApp() {
 
   function handleAuthenticated(nextSession: AuthSession) {
     exitDemo()
+    startIdleClock()
     saveAuthSession(nextSession)
     identifyWebAnalyticsUser()
     setSession(nextSession)
@@ -214,9 +227,12 @@ function SessionApp() {
               !isSessionReady ? (
                 <SessionLoading />
               ) : session ? (
-                    session.role === 'ADMIN'
-                      ? <AdminShell session={session} onLogout={handleLogout} onPasswordChanged={handlePasswordChanged} />
-                      : <AppShell session={session} onLogout={handleLogout} onPasswordChanged={handlePasswordChanged} />
+                <>
+                  <IdleSessionGuard key={session.token} role={session.role} onIdleLogout={handlePasswordChanged} />
+                  {session.role === 'ADMIN'
+                    ? <AdminShell session={session} onLogout={handleLogout} onPasswordChanged={handlePasswordChanged} />
+                    : <AppShell session={session} onLogout={handleLogout} onPasswordChanged={handlePasswordChanged} />}
+                </>
               ) : inDemo ? (
                 <AppShell session={DEMO_SESSION} onLogout={leaveDemo} onPasswordChanged={leaveDemo} demo={{ onSignUp: signUpFromDemo, onExit: leaveDemo }} />
               ) : (

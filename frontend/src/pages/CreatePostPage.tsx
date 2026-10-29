@@ -31,6 +31,7 @@ import type { ShopProfile } from '../lib/shopProfile'
 import { formatFileSize } from '../lib/format'
 import { resolveMediaUrl } from '../lib/media'
 import { usePreferences } from '../lib/preferences'
+import { clearDraft, readDraft, useSessionWork } from '../lib/idleSession'
 import axios from 'axios'
 import { UsagePanel } from '../components/UsagePanel'
 
@@ -73,6 +74,27 @@ type GeneratePostResponse = {
 
 type MediaType = 'NONE' | 'IMAGE' | 'VIDEO' | 'MIXED'
 type PublishMode = 'NOW' | 'SCHEDULE'
+
+// What the form keeps on this device when an idle sign-out interrupts a post.
+const CREATE_DRAFT_KEY = 'create'
+type CreateDraft = {
+  productName: string
+  productDescription: string
+  price: string
+  targetAudience: string
+  highlights: string
+  goal: string
+  selectedPlatforms: Platform[]
+  selectedAccountIds: Partial<Record<Platform, string>>
+  sourceContent: string
+  platformCaptions: Partial<Record<Platform, string>>
+  platformCtas: Partial<Record<Platform, string>>
+  platformHashtags: Partial<Record<Platform, string>>
+  uploadedMedia: UploadedMedia[]
+  publishMode: PublishMode
+  scheduledTime: string
+  step: number
+}
 const EMPTY_CHANNELS: AppChannel[] = []
 const STEPS = [
   { label: 'Kênh đăng', optional: false },
@@ -125,14 +147,19 @@ function CreatePostForm({ onNewPost }: { onNewPost: () => void }) {
     [channelsByPlatform],
   )
   const didInitializeTargets = useRef(false)
+  const [restored] = useState(() => readDraft<CreateDraft>(CREATE_DRAFT_KEY))
+  const [showRestored, setShowRestored] = useState(restored !== null)
+  useEffect(() => {
+    if (restored) clearDraft(CREATE_DRAFT_KEY)
+  }, [restored])
 
   const [selectedAccountIds, setSelectedAccountIds] = useState<Partial<Record<Platform, string>>>({})
-  const [productName, setProductName] = useState('')
-  const [productDescription, setProductDescription] = useState('')
-  const [price, setPrice] = useState('')
-  const [targetAudience, setTargetAudience] = useState('')
-  const [highlights, setHighlights] = useState('')
-  const [goal, setGoal] = useState('')
+  const [productName, setProductName] = useState(restored?.productName ?? '')
+  const [productDescription, setProductDescription] = useState(restored?.productDescription ?? '')
+  const [price, setPrice] = useState(restored?.price ?? '')
+  const [targetAudience, setTargetAudience] = useState(restored?.targetAudience ?? '')
+  const [highlights, setHighlights] = useState(restored?.highlights ?? '')
+  const [goal, setGoal] = useState(restored?.goal ?? '')
   const shopProfile = useAppDataResource<ShopProfile | null>('/shop-profile')
   const didPrefill = useRef(false)
   // Shop-level facts fill empty fields once; the shop can still change them for this post.
@@ -145,15 +172,15 @@ function CreatePostForm({ onNewPost }: { onNewPost: () => void }) {
     if (profile.priceRange) setPrice((current) => current || profile.priceRange || '')
   }, [shopProfile.data])
   const [selectedPlatforms, setSelectedPlatforms] = useState<Platform[]>([])
-  const [sourceContent, setSourceContent] = useState('')
-  const [platformCaptions, setPlatformCaptions] = useState<Partial<Record<Platform, string>>>({})
-  const [platformCtas, setPlatformCtas] = useState<Partial<Record<Platform, string>>>({})
-  const [platformHashtags, setPlatformHashtags] = useState<Partial<Record<Platform, string>>>({})
+  const [sourceContent, setSourceContent] = useState(restored?.sourceContent ?? '')
+  const [platformCaptions, setPlatformCaptions] = useState<Partial<Record<Platform, string>>>(restored?.platformCaptions ?? {})
+  const [platformCtas, setPlatformCtas] = useState<Partial<Record<Platform, string>>>(restored?.platformCtas ?? {})
+  const [platformHashtags, setPlatformHashtags] = useState<Partial<Record<Platform, string>>>(restored?.platformHashtags ?? {})
   const [activePreviewPlatform, setActivePreviewPlatform] = useState<Platform>('FACEBOOK')
-  const [uploadedMedia, setUploadedMedia] = useState<UploadedMedia[]>([])
-  const [publishMode, setPublishMode] = useState<PublishMode>('NOW')
+  const [uploadedMedia, setUploadedMedia] = useState<UploadedMedia[]>(restored?.uploadedMedia ?? [])
+  const [publishMode, setPublishMode] = useState<PublishMode>(restored?.publishMode ?? 'NOW')
   const [scheduledTime, setScheduledTime] = useState(function () {
-    return toDateTimeLocalValue(getNextActiveTime())
+    return restored?.scheduledTime ?? toDateTimeLocalValue(getNextActiveTime())
   })
   const [previewDevice, setPreviewDevice] = useState<'DESKTOP' | 'MOBILE'>('DESKTOP')
   const [status, setStatus] = useState(function () {
@@ -165,12 +192,24 @@ function CreatePostForm({ onNewPost }: { onNewPost: () => void }) {
   const generationRequest = useRef<{ fingerprint: string; key: string } | null>(null)
   const [usageVersion, setUsageVersion] = useState(0)
   const [isPublishing, setIsPublishing] = useState(false)
-  const [step, setStep] = useState(0)
+  const [step, setStep] = useState(restored?.step ?? 0)
   const [result, setResult] = useState<{ first: boolean; scheduled: boolean; when: string } | null>(null)
   const [publishFailed, setPublishFailed] = useState(false)
   const [stepNotice, setStepNotice] = useState('')
   const stepsAnchorRef = useRef<HTMLDivElement>(null)
   const hasMountedRef = useRef(false)
+  // Fields the shop profile prefills do not count: opening the page is not writing a post.
+  const hasWrittenSomething = Boolean(productName.trim() || productDescription.trim() || sourceContent.trim()
+    || Object.values(platformCaptions).some((caption) => caption?.trim()) || uploadedMedia.length > 0)
+  useSessionWork({
+    busy: isUploadingMedia || isGeneratingContent || isPublishing,
+    unsaved: result === null && hasWrittenSomething,
+    draftKey: CREATE_DRAFT_KEY,
+    draft: (): CreateDraft => ({
+      productName, productDescription, price, targetAudience, highlights, goal, selectedPlatforms, selectedAccountIds,
+      sourceContent, platformCaptions, platformCtas, platformHashtags, uploadedMedia, publishMode, scheduledTime, step,
+    }),
+  })
 
   // After changing step, bring the stepper back to the top of the viewport so the new step is visible without scrolling.
   useEffect(() => {
@@ -191,13 +230,20 @@ function CreatePostForm({ onNewPost }: { onNewPost: () => void }) {
     }
     const initialAccounts: Partial<Record<Platform, string>> = {}
     availablePlatforms.forEach((platform) => {
-      initialAccounts[platform] = channelsByPlatform[platform][0]?.id
+      // A restored draft keeps its channel while that channel is still connected.
+      const kept = restored?.selectedAccountIds[platform]
+      initialAccounts[platform] = channelsByPlatform[platform].some((channel) => channel.id === kept)
+        ? kept
+        : channelsByPlatform[platform][0]?.id
     })
+    const platforms = restored
+      ? availablePlatforms.filter((platform) => restored.selectedPlatforms.includes(platform))
+      : availablePlatforms
     setSelectedAccountIds(initialAccounts)
-    setSelectedPlatforms(availablePlatforms)
-    setActivePreviewPlatform(availablePlatforms[0] ?? 'FACEBOOK')
+    setSelectedPlatforms(platforms)
+    setActivePreviewPlatform(platforms[0] ?? 'FACEBOOK')
     didInitializeTargets.current = true
-  }, [availablePlatforms, channelsByPlatform, channelsState.loading])
+  }, [availablePlatforms, channelsByPlatform, channelsState.loading, restored])
 
   useEffect(() => {
     if (!selectedPlatforms.includes(activePreviewPlatform) && selectedPlatforms[0]) {
@@ -648,6 +694,15 @@ function CreatePostForm({ onNewPost }: { onNewPost: () => void }) {
           <Link to="/app/connections" className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full bg-amber-700 px-4 text-sm font-bold text-white hover:bg-amber-800">
             Kết nối kênh
           </Link>
+        </div>
+      )}
+      {showRestored && (
+        <div role="status" className="mb-3 flex shrink-0 flex-col gap-2 rounded-[8px] border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 sm:flex-row sm:items-center sm:justify-between">
+          <p>Đã mở lại bài bạn đang viết dở trước khi bị đăng xuất.</p>
+          <div className="flex shrink-0 gap-2">
+            <button type="button" onClick={onNewPost} className="min-h-11 rounded-full px-4 text-sm font-semibold text-slate-700 underline underline-offset-4 hover:bg-slate-50">Bỏ bài này, viết bài mới</button>
+            <button type="button" onClick={() => setShowRestored(false)} className="min-h-11 rounded-full border border-slate-200 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">Viết tiếp</button>
+          </div>
         </div>
       )}
       <div ref={stepsAnchorRef} aria-hidden="true" className="scroll-mt-[64px] lg:scroll-mt-4" />

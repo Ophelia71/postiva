@@ -1,5 +1,6 @@
 import { X } from 'lucide-react'
 import type { FormEvent } from 'react'
+import { useSessionWork } from '../lib/idleSession'
 
 type EditPostModalProps = {
   title: string
@@ -24,6 +25,8 @@ export function EditPostModal({
   onClose,
   onSubmit,
 }: EditPostModalProps) {
+  // An open editor means a post is being written; saving is Postiva working.
+  useSessionWork({ busy: saving, unsaved: true })
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 px-4">
       <form onSubmit={onSubmit} className="w-full max-w-2xl rounded-2xl bg-white p-5 shadow-xl">

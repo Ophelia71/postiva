@@ -1,5 +1,5 @@
 import { ArrowLeft, ArrowRight, CalendarClock, Check, Clock3, Film, Link2, Trash2, Undo2 } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { EmptyState } from '../components/EmptyState'
 import { PageState } from '../components/PageUi'
@@ -23,6 +23,7 @@ import {
 import { installDailyMock } from '../lib/dailyMock'
 import { isDemoActive } from '../lib/demo'
 import { getErrorMessage } from '../lib/errors'
+import { clearDraft, readDraft, useSessionWork } from '../lib/idleSession'
 import { isShopProfileComplete, type ShopProfile } from '../lib/shopProfile'
 
 if (DAILY_USE_MOCK) installDailyMock(api)
@@ -390,6 +391,7 @@ function PlanCreator({ channels, onCancel, onCreated }: { channels: AppChannel[]
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
+  useSessionWork({ busy: saving || uploading, unsaved: Boolean(customGoal.trim()) || brief !== null })
 
   const profileComplete = isShopProfileComplete(profileState.data)
   const currentBrief = brief ?? briefFromProfile(profileState.data)
@@ -619,6 +621,8 @@ function PlanView({ planId, initialItemId, onBack, onCreateNew }: { planId: stri
   const [confirmDelete, setConfirmDelete] = useState(false)
   const { reload, updateData } = planState
   const status = planState.data?.status
+  // The shop waits while the week is being written; that wait is not inactivity.
+  useSessionWork({ busy: busy || status === 'GENERATING' })
 
   useEffect(() => {
     if (status !== 'GENERATING') return
@@ -800,7 +804,9 @@ function DayDetail({ plan, item, onChanged, onNotice, onPrev, onNext }: {
   onNext?: () => void
 }) {
   const original = draftText(item.post, plan.platform)
-  const [content, setContent] = useState(original)
+  const draftKey = `daily:${item.id}`
+  const [restoredText] = useState(() => readDraft<string>(draftKey))
+  const [content, setContent] = useState(restoredText ?? original)
   const [time, setTime] = useState(toLocalInput(item.scheduledTime))
   const [editingTime, setEditingTime] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -809,7 +815,17 @@ function DayDetail({ plan, item, onChanged, onNotice, onPrev, onNext }: {
   const platform = plan.platform ?? 'FACEBOOK'
   const accountName = plan.accountName ?? PLATFORM_NAMES[platform] ?? 'Shop'
 
-  useEffect(() => { setContent(original) }, [original])
+  // A new server version replaces the text, but not on first render, where a restored draft may be showing.
+  const shownOriginal = useRef(original)
+  useEffect(() => {
+    if (shownOriginal.current === original) return
+    shownOriginal.current = original
+    setContent(original)
+  }, [original])
+  useEffect(() => {
+    if (restoredText !== null) clearDraft(draftKey)
+  }, [restoredText, draftKey])
+  useSessionWork({ busy, unsaved: editable && content !== original, draftKey, draft: () => content })
 
   async function patch(change: { scheduledTime?: string; skipped?: boolean }, success: string) {
     setBusy(true)
