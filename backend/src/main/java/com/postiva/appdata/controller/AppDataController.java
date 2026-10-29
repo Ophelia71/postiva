@@ -279,13 +279,14 @@ public class AppDataController {
     }
 
     private List<Map<String, Object>> postData(UUID userId) {
-        List<ScheduledPost> schedules = safeAllSchedules(userId);
+        // Posts ever scheduled, including on removed channels, so those posts are not shown again as drafts.
         Set<UUID> postsWithSchedules = new java.util.HashSet<>();
-        schedules.forEach(schedule -> {
+        safeAllSchedules(userId).forEach(schedule -> {
             if (schedule.getPostId() != null) postsWithSchedules.add(schedule.getPostId());
         });
+        // Only connected channels count: a removed channel's history no longer belongs in reports.
         Map<UUID, List<ScheduledPost>> schedulesByPost = new LinkedHashMap<>();
-        schedules.forEach(schedule -> {
+        safeConnectedSchedules(userId).forEach(schedule -> {
             if (schedule.getPostId() != null) {
                 schedulesByPost.computeIfAbsent(schedule.getPostId(), ignored -> new ArrayList<>())
                         .add(schedule);
@@ -344,6 +345,15 @@ public class AppDataController {
             return scheduledRepository.findAllIncludingDisconnectedForUser(userId);
         } catch (RuntimeException exception) {
             log.warn("Could not load schedules including disconnected accounts for app data. userId={}", userId, exception);
+            return List.of();
+        }
+    }
+
+    private List<ScheduledPost> safeConnectedSchedules(UUID userId) {
+        try {
+            return scheduledRepository.findAllForUser(userId);
+        } catch (RuntimeException exception) {
+            log.warn("Could not load schedules for app data. userId={}", userId, exception);
             return List.of();
         }
     }

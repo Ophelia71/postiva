@@ -228,6 +228,28 @@ class ChannelSyncIntegrationTest {
         assertEquals(2, sync(token, page).path("imported").asInt());
     }
 
+    @Test void postsOfAChannelRemovedBeforeDeletionExistedAreLeftOutOfReports() {
+        User user = user();
+        String token = jwt.generateToken(user);
+        SocialAccount removed = account(user, Platform.FACEBOOK, "page-" + UUID.randomUUID());
+        SocialAccount connected = account(user, Platform.FACEBOOK, "page-" + UUID.randomUUID());
+        GeneratedPost old = post(user, "Bài của kênh đã gỡ");
+        schedule(old, removed, ScheduledPostStatus.PUBLISHED);
+        GeneratedPost plannedOld = post(user, "Bản hẹn giờ của kênh đã gỡ");
+        plannedOld.setStatus(PostStatus.PLANNED);
+        posts.saveAndFlush(plannedOld);
+        schedule(plannedOld, removed, ScheduledPostStatus.FAILED);
+        GeneratedPost current = post(user, "Bài của kênh đang nối");
+        schedule(current, connected, ScheduledPostStatus.PUBLISHED);
+        // The old disconnect only stamped the account and kept its schedules.
+        jdbc.update("UPDATE social_accounts SET disconnected_at = now(), access_token_encrypted = NULL WHERE id = ?", removed.getId());
+
+        List<String> contents = new java.util.ArrayList<>();
+        call("GET", "/api/app-data/posts", token, null).body().path("data").forEach(post -> contents.add(post.path("content").asText()));
+        assertEquals(List.of("Bài của kênh đang nối"), contents);
+        assertEquals(1, call("GET", "/api/app-data/overview", token, null).body().path("data").path("totalPosts").asInt());
+    }
+
     private static PostMetrics igPost(String id, Instant at, int likes) {
         return new PostMetrics(id, Platform.INSTAGRAM, at, id + "-caption", "IMAGE", likes, 1, null, null, "https://instagram.test/" + id);
     }
