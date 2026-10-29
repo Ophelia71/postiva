@@ -7,6 +7,8 @@ import {
   KeyRound,
   Link2,
   LogOut,
+  PanelLeftClose,
+  PanelLeftOpen,
   PenLine,
   PlusCircle,
   Rocket,
@@ -257,7 +259,7 @@ function SessionLoading() {
 type DemoControls = { onSignUp: () => void; onExit: () => void }
 type ShellProps = { session: AuthSession; onLogout: () => void; onPasswordChanged: (notice?: string) => void; demo?: DemoControls }
 
-function AccountMenu({ session, onLogout, placement, demo }: { session: AuthSession; onLogout: () => void; placement: 'above' | 'below'; demo?: DemoControls }) {
+function AccountMenu({ session, onLogout, placement, demo, collapsed = false }: { session: AuthSession; onLogout: () => void; placement: 'above' | 'below'; demo?: DemoControls; collapsed?: boolean }) {
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
   const { t } = usePreferences()
@@ -289,14 +291,15 @@ function AccountMenu({ session, onLogout, placement, demo }: { session: AuthSess
         aria-expanded={open}
         aria-haspopup="menu"
         aria-label={`Tài khoản của ${session.fullName}`}
+        title={collapsed ? session.fullName : undefined}
         className={compact
           ? 'flex h-11 w-11 items-center justify-center rounded-full bg-[#d8ddfb] text-sm font-bold text-[#344260]'
-          : 'flex min-h-12 w-full items-center gap-3 rounded-xl px-2 text-left text-sm hover:bg-[var(--soft-bg)]'}
+          : `flex min-h-12 w-full items-center rounded-xl text-left text-sm hover:bg-[var(--soft-bg)] ${collapsed ? 'justify-center' : 'gap-3 px-2'}`}
       >
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#d8ddfb] text-xs font-bold text-[#344260]" aria-hidden="true">
           {session.fullName.charAt(0)}
         </span>
-        {!compact && (
+        {!compact && !collapsed && (
           <>
             <span className="min-w-0 flex-1">
               <span className="block truncate font-bold">{session.fullName}</span>
@@ -402,10 +405,36 @@ function AccountMenuPanel({ session, itemClass, demo, onLogout, onNavigate, logo
   )
 }
 
+// Remembered per browser: a convenience only, so a blocked storage just means the menu starts open.
+const SIDEBAR_COLLAPSED_KEY = 'postiva.sidebar.collapsed'
+
+function readSidebarCollapsed() {
+  try {
+    return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function writeSidebarCollapsed(collapsed: boolean) {
+  try {
+    window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? '1' : '0')
+  } catch {
+    // Ignored, see above.
+  }
+}
+
 function AppShell({ session, onLogout, onPasswordChanged, demo }: ShellProps) {
   const pathname = useLocation().pathname
   // The checklist and the profile page already ask for the profile themselves.
   const isOnboardingPage = pathname.startsWith('/app/start') || pathname.startsWith('/app/shop-profile')
+  const [collapsed, setCollapsed] = useState(readSidebarCollapsed)
+  const toggleSidebar = () => {
+    setCollapsed((value) => {
+      writeSidebarCollapsed(!value)
+      return !value
+    })
+  }
 
   // Onboarding is a focused, full-screen flow: no sidebar, no bottom bar, no "Tạo bài mới".
   if (pathname.startsWith('/app/start')) {
@@ -422,15 +451,28 @@ function AppShell({ session, onLogout, onPasswordChanged, demo }: ShellProps) {
 
   return (
     <div className="app-shell min-h-svh bg-[var(--app-bg)] text-[var(--app-text)]">
-      <aside className="fixed inset-y-0 left-0 z-20 hidden w-[272px] flex-col border-r border-[var(--app-border)] bg-[var(--panel-bg)] p-3 lg:flex">
-        <div className="flex h-20 items-center gap-3 px-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#6672d8] text-white">
-            <PlusCircle size={18} aria-hidden="true" />
-          </div>
-          <div>
-            <p className="text-lg font-bold tracking-tight">Postiva</p>
-            <p className="text-xs font-semibold text-[var(--muted-text)]">Quản lý nội dung</p>
-          </div>
+      <aside className={`fixed inset-y-0 left-0 z-20 hidden flex-col border-r border-[var(--app-border)] bg-[var(--panel-bg)] p-3 transition-[width] duration-200 lg:flex ${collapsed ? 'w-[76px]' : 'w-[272px]'}`}>
+        <div className={`flex h-20 items-center ${collapsed ? 'justify-center' : 'gap-3 pl-3'}`}>
+          {!collapsed && (
+            <>
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#6672d8] text-white">
+                <PlusCircle size={18} aria-hidden="true" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-lg font-bold tracking-tight">Postiva</p>
+                <p className="truncate text-xs font-semibold text-[var(--muted-text)]">Quản lý nội dung</p>
+              </div>
+            </>
+          )}
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            aria-label={collapsed ? 'Mở rộng menu' : 'Thu gọn menu'}
+            title={collapsed ? 'Mở rộng menu' : 'Thu gọn menu'}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-[var(--muted-text)] hover:bg-[var(--soft-bg)] hover:text-[var(--app-text)]"
+          >
+            {collapsed ? <PanelLeftOpen size={18} aria-hidden="true" /> : <PanelLeftClose size={18} aria-hidden="true" />}
+          </button>
         </div>
 
         <nav aria-label="Điều hướng chính" className="flex-1 space-y-2 py-5">
@@ -440,9 +482,11 @@ function AppShell({ session, onLogout, onPasswordChanged, demo }: ShellProps) {
               <NavLink
                 key={item.to}
                 to={item.to}
+                title={collapsed ? item.label : undefined}
                 className={({ isActive }) =>
                   [
-                    'relative flex h-12 items-center gap-3 rounded-xl px-4 text-sm font-semibold transition',
+                    'relative flex h-12 items-center rounded-xl text-sm font-semibold transition',
+                    collapsed ? 'justify-center' : 'gap-3 px-4',
                     isActive
                       ? 'bg-[#d8ddfb] text-[#344260]'
                       : 'text-[var(--muted-text)] hover:bg-[var(--soft-bg)] hover:text-[var(--app-text)]',
@@ -452,8 +496,8 @@ function AppShell({ session, onLogout, onPasswordChanged, demo }: ShellProps) {
                 {({ isActive }) => (
                   <>
                     <Icon size={17} aria-hidden="true" />
-                    <span>{item.label}</span>
-                    {isActive && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-[#6672d8]" />}
+                    <span className={collapsed ? 'sr-only' : ''}>{item.label}</span>
+                    {isActive && !collapsed && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-[#6672d8]" />}
                   </>
                 )}
               </NavLink>
@@ -462,7 +506,7 @@ function AppShell({ session, onLogout, onPasswordChanged, demo }: ShellProps) {
         </nav>
 
         <div className="border-t border-[var(--app-border)] pt-3">
-          <AccountMenu session={session} onLogout={onLogout} placement="above" demo={demo} />
+          <AccountMenu session={session} onLogout={onLogout} placement="above" demo={demo} collapsed={collapsed} />
         </div>
       </aside>
 
@@ -476,7 +520,7 @@ function AppShell({ session, onLogout, onPasswordChanged, demo }: ShellProps) {
         <AccountMenu session={session} onLogout={onLogout} placement="below" demo={demo} />
       </header>
 
-      <main className="pb-24 lg:pb-0 lg:pl-[272px]">
+      <main className={`pb-24 transition-[padding] duration-200 lg:pb-0 ${collapsed ? 'lg:pl-[76px]' : 'lg:pl-[272px]'}`}>
         <div className="mx-auto min-h-svh max-w-[1320px] px-4 py-5 sm:px-6 lg:px-10 lg:py-8">
           {demo && <DemoBanner onSignUp={demo.onSignUp} onExit={demo.onExit} />}
           {!isOnboardingPage && <ShopProfileReminder />}
