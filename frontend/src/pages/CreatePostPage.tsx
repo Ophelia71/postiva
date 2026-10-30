@@ -1003,22 +1003,7 @@ function CreatePostForm({ onNewPost }: { onNewPost: () => void }) {
         {/* The preview fills its column; photos stay at most about 45% of the screen tall and the frame around them absorbs the rest. */}
         <div className="min-w-0 xl:flex xl:flex-col">
         <div className="xl:flex xl:flex-1 xl:flex-col">
-          {/* On the content step the editor's own tabs pick the platform; a second row here would only repeat them. */}
-          <div className={cn('mb-3 flex shrink-0 flex-wrap justify-center gap-2', step === 3 && 'hidden')}>
-            {selectedPlatforms.map((platform) => (
-              <button
-                key={platform}
-                type="button"
-                onClick={() => setActivePreviewPlatform(platform)}
-                className={cn(
-                  'rounded-full border bg-white px-3 py-1.5 text-xs font-bold shadow-sm',
-                  activePreviewPlatform === platform ? 'border-violet-400 text-violet-700' : 'border-slate-200 text-slate-500',
-                )}
-              >
-                {PLATFORM_LABELS[platform]}
-              </button>
-            ))}
-          </div>
+          {/* The platform is picked in one place only: the content step's tabs. The preview follows them. */}
           <SocialFeedPreview
             platform={activePreviewPlatform}
             caption={previewMessage}
