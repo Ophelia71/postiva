@@ -138,9 +138,7 @@ export function ConnectionsPage() {
         await api.post(`/social/meta/accounts/${channel.id}/check`)
       }
       setConnectStatusTone('success')
-      setConnectStatus(isFacebook
-        ? `${t('Kết nối hoạt động tốt trên')} ${channel.name}.`
-        : `${t('Token truy cập được tài khoản', 'Token can access account')} ${channel.name}. ${t('Chưa kiểm tra quyền đăng bài và URL media công khai.', 'Publishing permission and public media URL have not been tested.')}`)
+      setConnectStatus(`${t('Kết nối hoạt động tốt trên')} ${channel.name}.`)
     } catch (error) {
       setConnectStatusTone('error')
       setConnectStatus(getSocialErrorMessage(error, `Không thể kiểm tra ${channel.type}.`))
@@ -159,7 +157,7 @@ export function ConnectionsPage() {
     }
     setConnectingType(platform)
     setConnectStatusTone('info')
-    setConnectStatus(`${t('Đang kiểm tra access token cho')} ${title}...`)
+    setConnectStatus(`${t('Đang kiểm tra kết nối với')} ${title}...`)
 
     try {
       const body = platform === 'facebook'
@@ -171,7 +169,7 @@ export function ConnectionsPage() {
         [platform]: emptyManualConnection(),
       }))
       setConnectStatusTone('success')
-      setConnectStatus(`${t('Đã kết nối')} ${response.data.pageName} (ID ${response.data.pageId}). Postiva đang lấy các bài đã đăng và lượt tương tác; xem ở Báo cáo sau ít phút.`)
+      setConnectStatus(`${t('Đã kết nối')} ${response.data.pageName}. Postiva đang lấy các bài cũ của kênh, vài phút nữa sẽ thấy ở Báo cáo.`)
       reload()
     } catch (error) {
       trackOnboardingStep(`connect-failed/${platform}`)
@@ -508,10 +506,10 @@ function getStatusClassName(tone: StatusTone) {
 function getSocialErrorMessage(error: unknown, fallback: string) {
   const message = getErrorMessage(error, fallback)
   if (/invalid oauth access token|access token.*(expired|invalid|revoked)|session has expired|token.*(hết hạn|không hợp lệ|bị thu hồi)/i.test(message)) {
-    return 'Token đã hết hạn hoặc bị Meta thu hồi. Hãy lấy Page Access Token mới, kết nối lại rồi bấm Kiểm tra.'
+    return 'Token đã hết hạn. Hãy lấy token mới theo hướng dẫn rồi kết nối lại.'
   }
   if (/permission|permissions|thiếu quyền|không có quyền/i.test(message)) {
-    return 'Token chưa có quyền cần thiết cho thao tác này. Hãy kiểm tra quyền Page trong cấu hình Meta; nếu vừa cấp quyền, hãy tạo token mới rồi kết nối lại.'
+    return 'Token này chưa đủ quyền đăng bài. Hãy tạo token mới theo hướng dẫn rồi kết nối lại.'
   }
   return message
 }

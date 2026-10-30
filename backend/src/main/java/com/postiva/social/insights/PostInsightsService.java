@@ -56,9 +56,9 @@ public class PostInsightsService {
         } catch (RuntimeException exception) {
             log.warn("Could not read recent posts for social account {}: {}", account.getId(), exception.getMessage());
             return new RecentPosts(List.of(), switch (account.getProvider()) {
-                case FACEBOOK -> "Không đọc được tương tác bài cũ trên Facebook. Token cần quyền pages_read_engagement.";
-                case INSTAGRAM -> "Không đọc được bài cũ trên Instagram. Hãy kiểm tra lại token của tài khoản.";
-                case THREADS -> "Không đọc được bài cũ trên Threads. Hãy kiểm tra lại token của tài khoản.";
+                case FACEBOOK -> "Chưa đọc được bài cũ trên Facebook. Bạn thử kết nối lại kênh ở trang Kết nối kênh.";
+                case INSTAGRAM -> "Chưa đọc được bài cũ trên Instagram. Bạn thử kết nối lại kênh ở trang Kết nối kênh.";
+                case THREADS -> "Chưa đọc được bài cũ trên Threads. Bạn thử kết nối lại kênh ở trang Kết nối kênh.";
             });
         }
     }
@@ -75,7 +75,7 @@ public class PostInsightsService {
                 // The first failure is almost always a missing scope; every other post would fail the same way.
                 log.warn("Threads insights unavailable: {}", exception.getMessage());
                 return new RecentPosts(posts,
-                        "Chưa đọc được lượt xem/thích trên Threads. Token cần quyền threads_manage_insights.");
+                        "Chưa đọc được lượt xem và lượt thích trên Threads. Bạn thử kết nối lại kênh ở trang Kết nối kênh.");
             }
             Integer shares = metrics.containsKey("reposts") || metrics.containsKey("quotes")
                     ? metrics.getOrDefault("reposts", 0) + metrics.getOrDefault("quotes", 0) : null;

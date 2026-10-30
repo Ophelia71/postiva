@@ -47,7 +47,7 @@ export function IdleSessionGuard({ role, onIdleLogout }: { role: UserRole; onIdl
       const { elapsed, limit } = idleState(role, now)
       if (elapsed >= limit) {
         done = true
-        onIdleLogoutRef.current(announceIdleLogout(limit))
+        onIdleLogoutRef.current(announceIdleLogout())
         return
       }
       setRemaining(limit - elapsed <= WARNING_MS ? limit - elapsed : null)

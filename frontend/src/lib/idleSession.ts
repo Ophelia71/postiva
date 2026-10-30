@@ -89,17 +89,14 @@ export function storedSessionIsIdle(role: UserRole) {
   return elapsed >= limit
 }
 
-export function idleLogoutNotice(limit: number, keptDrafts: boolean) {
-  const span = limit >= 60 * 60_000 ? `${Math.round(limit / (60 * 60_000))} giờ` : `${Math.round(limit / 60_000)} phút`
-  return `Bạn đã được đăng xuất vì không thao tác trong ${span}.`
-    + (keptDrafts ? ' Bài đang viết dở đã được giữ lại và sẽ hiện lại khi bạn đăng nhập.' : '')
-}
+// The sign-in page says nothing about a plain idle sign-out; it only speaks up when a half-written post was kept.
+const DRAFT_KEPT_NOTICE = 'Bài bạn đang viết dở vẫn còn. Đăng nhập lại để viết tiếp.'
 
-/** Saves unsaved work, tells other tabs, and leaves the notice for whichever tab shows the sign-in page. */
-export function announceIdleLogout(limit: number) {
-  const kept = saveDrafts()
-  const notice = idleLogoutNotice(limit, kept > 0)
-  write(NOTICE_KEY, JSON.stringify({ at: Date.now(), notice }))
+/** Saves unsaved work, tells other tabs, and leaves the notice (if any) for whichever tab shows the sign-in page. */
+export function announceIdleLogout() {
+  const notice = saveDrafts() > 0 ? DRAFT_KEPT_NOTICE : ''
+  if (notice) write(NOTICE_KEY, JSON.stringify({ at: Date.now(), notice }))
+  else remove(NOTICE_KEY)
   write(LOGOUT_KEY, String(Date.now()))
   return notice
 }

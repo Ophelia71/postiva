@@ -178,7 +178,7 @@ export function AuthPage({ onAuthenticated, notice }: { onAuthenticated: (sessio
             </p>
           </div>
 
-          {notice && <p role="status" className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">{notice}</p>}
+          {notice && !isRegister && !isVerifyingRegistration && <p role="status" className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">{notice}</p>}
           <form onSubmit={(event) => void submitAuth(event)} className="space-y-4">
             {isVerifyingRegistration ? (
               <label className="block text-sm font-bold">

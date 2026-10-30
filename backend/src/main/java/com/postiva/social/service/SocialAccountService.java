@@ -426,10 +426,10 @@ public class SocialAccountService {
 
     void ensureTokenUsable(SocialAccount account) {
         if (account.getTokenExpiresAt() != null && account.getTokenExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, providerLabel(account) + " token đã hết hạn, hãy kết nối lại tài khoản");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Kết nối " + providerLabel(account) + " đã hết hạn. Vào Kết nối kênh để kết nối lại.");
         }
         if (account.getAccessTokenEncrypted() == null || account.getAccessTokenEncrypted().isBlank()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, providerLabel(account) + " chưa có access token");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Kết nối " + providerLabel(account) + " đã hết hạn. Vào Kết nối kênh để kết nối lại.");
         }
     }
 

@@ -130,7 +130,7 @@ public class AppDataController {
                 && platform != Platform.FACEBOOK) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
-                    "API hiện chưa hỗ trợ sửa bài " + platformLabel(platform) + " sau khi đã đăng"
+                    platformLabel(platform) + " không cho sửa bài sau khi đã đăng. Bạn sửa trực tiếp trên " + platformLabel(platform) + "."
             );
         }
 
@@ -189,7 +189,7 @@ public class AppDataController {
                 .toList();
         if (!unsupportedPlatforms.isEmpty()) {
             String message = "Chưa thể xóa bài đã đăng trên " + String.join(", ", unsupportedPlatforms)
-                    + " qua API. Bài trong Postiva được giữ lại để tránh mất dấu nội dung đang còn trên nền tảng.";
+                    + " từ Postiva. Bạn xóa trực tiếp trên ứng dụng đó; bài trong Postiva vẫn được giữ lại.";
             return ApiResponse.ok(Map.of(
                     "deleted", false,
                     "facebookDeleted", false,
@@ -555,15 +555,15 @@ public class AppDataController {
                 .findFirstByScheduledPostIdAndStatusOrderByPublishedAtDesc(publishedSchedule.getId(), "SUCCESS")
                 .orElse(null);
         if (publishLog == null || publishLog.getExternalPostId() == null || publishLog.getExternalPostId().isBlank()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Không tìm thấy ID bài viết Facebook để cập nhật");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Không tìm thấy bài này trên Facebook nữa nên chưa sửa được.");
         }
 
         SocialAccount account = socialAccountService.requireActiveAccount(publishedSchedule.getSocialAccountId());
         if (account.getTokenExpiresAt() != null && account.getTokenExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Meta token đã hết hạn, hãy kết nối lại Page");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Kết nối Facebook đã hết hạn. Vào Kết nối kênh để kết nối lại.");
         }
         if (account.getAccessTokenEncrypted() == null || account.getAccessTokenEncrypted().isBlank()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Facebook Page chưa có Page Access Token");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Kết nối Facebook đã hết hạn. Vào Kết nối kênh để kết nối lại.");
         }
 
         facebookGraphClient.updatePostMessage(
@@ -589,15 +589,15 @@ public class AppDataController {
                     .findFirstByScheduledPostIdAndStatusOrderByPublishedAtDesc(publishedSchedule.getId(), "SUCCESS")
                     .orElse(null);
             if (publishLog == null || publishLog.getExternalPostId() == null || publishLog.getExternalPostId().isBlank()) {
-                return "Không tìm thấy ID bài viết Facebook để xóa";
+                return "Không tìm thấy bài này trên Facebook nữa nên chưa xóa được.";
             }
 
             SocialAccount account = socialAccountService.requireActiveAccount(publishedSchedule.getSocialAccountId());
             if (account.getTokenExpiresAt() != null && account.getTokenExpiresAt().isBefore(LocalDateTime.now())) {
-                return "Meta token đã hết hạn, hãy kết nối lại Page";
+                return "Kết nối Facebook đã hết hạn. Vào Kết nối kênh để kết nối lại.";
             }
             if (account.getAccessTokenEncrypted() == null || account.getAccessTokenEncrypted().isBlank()) {
-                return "Facebook Page chưa có Page Access Token";
+                return "Kết nối Facebook đã hết hạn. Vào Kết nối kênh để kết nối lại.";
             }
 
             facebookGraphClient.deletePost(

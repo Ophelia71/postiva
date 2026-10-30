@@ -72,7 +72,7 @@ export function RepostPostModal({
       : resolvedMediaUrl ? newMediaType : 'NONE'
     if (newMediaType !== 'NONE' && selectedMedia.length === 0 && !resolvedMediaUrl) {
       setStatusTone('error')
-      setStatus(t('Hãy chọn file từ máy hoặc nhập URL media công khai.'))
+      setStatus(t('Hãy chọn ảnh hoặc video từ máy, hoặc dán đường link ảnh/video.'))
       return
     }
     if (selectedMedia.some((media) => !media.id)) {
@@ -82,7 +82,7 @@ export function RepostPostModal({
     }
     if (selectedMedia.length > 0 && resolvedMediaUrl) {
       setStatusTone('error')
-      setStatus(t('Không thể trộn media đã chọn với URL. Hãy tải URL media về máy rồi chọn file.'))
+      setStatus(t('Không dùng chung được ảnh đã chọn với đường link. Hãy tải ảnh từ link về máy rồi chọn lại.'))
       return
     }
 
@@ -193,7 +193,7 @@ export function RepostPostModal({
         <div className="mb-5 flex items-start justify-between gap-4">
           <div>
             <h2 className="text-lg font-bold">Tạo bài mới từ bài này</h2>
-            <p className="mt-1 text-xs text-slate-400">Bài cũ không bị thay đổi. Bài mới sẽ có permalink và tương tác riêng.</p>
+            <p className="mt-1 text-xs text-slate-400">Bài cũ giữ nguyên. Bài mới có lượt thích và bình luận riêng.</p>
           </div>
           <button type="button" onClick={onClose} aria-label="Đóng" className="flex h-11 w-11 items-center justify-center rounded-lg hover:bg-slate-100">
             <X size={17} />
@@ -297,7 +297,7 @@ export function RepostPostModal({
 
                 <div className="flex items-center gap-3">
                   <div className="h-px flex-1 bg-slate-200" />
-                  <span className="text-xs font-semibold text-slate-400">hoặc URL công khai</span>
+                  <span className="text-xs font-semibold text-slate-400">hoặc dán đường link ảnh/video</span>
                   <div className="h-px flex-1 bg-slate-200" />
                 </div>
                 <input

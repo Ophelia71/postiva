@@ -182,7 +182,7 @@ public class PasswordRecoveryService {
         if (password == null || password.length() < 8
                 || password.getBytes(StandardCharsets.UTF_8).length > 72) {
             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
-                    "Mật khẩu phải có ít nhất 8 ký tự và không vượt quá 72 byte UTF-8");
+                    "Mật khẩu cần ít nhất 8 ký tự và không quá dài.");
         }
     }
 

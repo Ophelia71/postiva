@@ -109,7 +109,7 @@ public class ChannelSyncService {
         }
         SyncResult result = transactions.execute(status -> apply(account, recent.posts(), limit));
         String warning = recent.warning() != null ? recent.warning()
-                : result.metricsAvailable() ? null : "Đã lấy bài nhưng chưa đọc được lượt tương tác. Token cần thêm quyền đọc tương tác.";
+                : result.metricsAvailable() ? null : "Đã lấy bài nhưng chưa đọc được lượt thích, bình luận. Bạn thử kết nối lại kênh.";
         return new SyncResult(result.imported(), result.updated(), result.removed(), result.metricsAvailable(), warning);
     }
 

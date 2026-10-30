@@ -107,7 +107,8 @@ class OpenAiServiceTest {
         );
 
         assertEquals(503, exception.getStatusCode().value());
-        assertTrue(exception.getReason().contains("OPENAI_API_KEY"));
+        assertTrue(exception.getReason().startsWith("Tính năng AI"));
+        assertFalse(exception.getReason().contains("OPENAI"));
     }
 
     private OpenAiService service(String apiKey) {

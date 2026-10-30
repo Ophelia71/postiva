@@ -1476,9 +1476,7 @@ function formatTargetResults(
       return `${label}: ${t('đã đăng', 'published')}`
     }
     if (target.status === 'UNKNOWN') {
-      const recordedCause = target.errorMessage?.match(/Chi tiết:\s*(.+)$/i)?.[1]
-      const guidance = t('chưa rõ kết quả; hãy kiểm tra trên nền tảng trước khi thử lại', 'outcome unknown; check the platform before retrying')
-      return `${label}: ${guidance}${recordedCause ? ` (${recordedCause})` : ''}`
+      return `${label}: ${t(`chưa rõ đã đăng hay chưa, bạn mở ${label} kiểm tra trước khi thử lại`, `not sure it was published; check ${label} before retrying`)}`
     }
     if (target.status === 'SCHEDULED' || mode === 'SCHEDULE') {
       return `${label}: ${t('đã đặt lịch', 'scheduled')}`

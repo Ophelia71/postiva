@@ -11,6 +11,8 @@ import com.postiva.common.Platform;
 import com.postiva.config.OpenAiProperties;
 import com.postiva.post.dto.GeneratePostRequest;
 import com.postiva.template.entity.IndustryTemplate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -30,6 +32,7 @@ import java.util.function.Consumer;
 
 @Service
 public class OpenAiService {
+    private static final Logger log = LoggerFactory.getLogger(OpenAiService.class);
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(90);
     private static final String OPENAI_BASE_URL = "https://api.openai.com/v1";
 
@@ -66,9 +69,10 @@ public class OpenAiService {
     public AiPostResult generatePost(GeneratePostRequest request, IndustryTemplate template, ShopContext shop,
                                      Consumer<ProviderTokenUsage> usageObserver) {
         if (!properties.enabled()) {
+            log.error("OPENAI_API_KEY is not configured; AI requests are refused");
             throw new ResponseStatusException(
                     HttpStatus.SERVICE_UNAVAILABLE,
-                    "Chưa cấu hình OPENAI_API_KEY trong backend/.env"
+                    "Tính năng AI đang tạm gián đoạn. Bạn thử lại sau ít phút."
             );
         }
 
@@ -143,9 +147,10 @@ public class OpenAiService {
 
     public WeeklyIdeasResult generateWeeklyIdeas(WeeklyPlanPromptInput input, Consumer<ProviderTokenUsage> usageObserver) {
         if (!properties.enabled()) {
+            log.error("OPENAI_API_KEY is not configured; AI requests are refused");
             throw new ResponseStatusException(
                     HttpStatus.SERVICE_UNAVAILABLE,
-                    "Chưa cấu hình OPENAI_API_KEY trong backend/.env"
+                    "Tính năng AI đang tạm gián đoạn. Bạn thử lại sau ít phút."
             );
         }
         return parseWeeklyIdeasResponse(callOpenAi(buildWeeklyIdeasPayload(input), usageObserver), input.slots().size());
@@ -284,30 +289,32 @@ public class OpenAiService {
 
     private ResponseStatusException mapOpenAiError(WebClientResponseException exception) {
         int status = exception.getStatusCode().value();
+        // The shop only learns that AI is unavailable; whoever runs Postiva reads the cause here.
+        log.error("OpenAI call failed with HTTP {}: {}", status, exception.getResponseBodyAsString());
         if (status == 401 || status == 403) {
             return new ResponseStatusException(
                     HttpStatus.BAD_GATEWAY,
-                    "OpenAI API key không hợp lệ hoặc không có quyền sử dụng model đã cấu hình.",
+                    "Tính năng AI đang tạm gián đoạn. Bạn thử lại sau ít phút.",
                     exception
             );
         }
         if (status == 429) {
             return new ResponseStatusException(
                     HttpStatus.TOO_MANY_REQUESTS,
-                    "OpenAI đang giới hạn yêu cầu hoặc tài khoản đã hết quota. Hãy kiểm tra Billing/Usage.",
+                    "AI đang có nhiều yêu cầu cùng lúc. Bạn thử lại sau ít phút.",
                     exception
             );
         }
         if (status == 400 || status == 404) {
             return new ResponseStatusException(
                     HttpStatus.BAD_GATEWAY,
-                    "OpenAI từ chối yêu cầu. Hãy kiểm tra OPENAI_MODEL và quyền truy cập model.",
+                    "Tính năng AI đang tạm gián đoạn. Bạn thử lại sau ít phút.",
                     exception
             );
         }
         return new ResponseStatusException(
                 HttpStatus.BAD_GATEWAY,
-                "OpenAI tạm thời không xử lý được yêu cầu. Hãy thử lại sau.",
+                "Tính năng AI đang tạm gián đoạn. Bạn thử lại sau ít phút.",
                 exception
         );
     }

@@ -20,7 +20,7 @@ const SAMPLE_POSTS: Array<{ days: number; hour: number; platform: string; status
   { days: -7, hour: 9, platform: 'Facebook', status: 'Published', content: 'Tiệm mở cửa từ 7h sáng. Hôm nay có thêm bánh quy bơ mới ra lò' },
   { days: -5, hour: 20, platform: 'Instagram', status: 'Published', content: 'Behind the scenes: 5 bước pha một ly cà phê muối chuẩn vị. Bạn đoán bước nào khó nhất? #caphemuoi #hauruong' },
   { days: -3, hour: 19, platform: 'Facebook', status: 'Published', content: '“Uống một lần là ghiền” — cảm ơn chị Mai đã review cho tiệm! Mua 2 ly tặng 1 bánh quy đến hết Chủ nhật!' },
-  { days: -2, hour: 12, platform: 'Facebook', status: 'Failed', content: 'Combo trưa văn phòng: cà phê muối + bánh mì chỉ 49.000đ. (Bài này lỗi vì token hết hạn, bấm Thử lại sau khi kết nối lại kênh.)' },
+  { days: -2, hour: 12, platform: 'Facebook', status: 'Failed', content: 'Combo trưa văn phòng: cà phê muối + bánh mì chỉ 49.000đ. (Bài này lỗi vì kết nối kênh đã hết hạn, bấm Thử lại sau khi kết nối lại kênh.)' },
   { days: 1, hour: 20, platform: 'Facebook', status: 'Scheduled', content: 'Tối nay tiệm mở đến 22h. Ghé chill với ly cà phê muối nhé' },
   { days: 3, hour: 19, platform: 'Instagram', status: 'Scheduled', content: 'Cuối tuần này: mua 2 tặng 1 bánh quy. Lưu bài để không quên nha! #caphemuoi' },
 ]
@@ -45,7 +45,7 @@ function posts(): AppPost[] {
       scheduledTime: sample.status === 'Scheduled' ? time : null,
       attemptCount: sample.status === 'Failed' ? 3 : sample.status === 'Published' ? 1 : 0,
       nextAttemptAt: null,
-      lastError: sample.status === 'Failed' ? 'Token của Page đã hết hạn. Hãy kết nối lại kênh.' : '',
+      lastError: sample.status === 'Failed' ? 'Kết nối Facebook đã hết hạn. Vào Kết nối kênh để kết nối lại.' : '',
       permalinkUrl: '',
       platformPostId: '',
       mediaType: '',

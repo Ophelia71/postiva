@@ -23,7 +23,7 @@ import { DemoBanner } from './components/DemoBanner'
 import { identifyWebAnalyticsUser, WebAnalyticsTracker } from './lib/webAnalytics'
 import { AdminShell } from './components/AdminShell'
 import { IdleSessionGuard } from './components/IdleSessionGuard'
-import { idleLogoutNotice, idleState, readIdleNotice, startIdleClock, storedSessionIsIdle } from './lib/idleSession'
+import { readIdleNotice, startIdleClock, storedSessionIsIdle } from './lib/idleSession'
 import {
   AUTH_EXPIRED_EVENT,
   AUTH_STORAGE_KEY,
@@ -115,7 +115,6 @@ function SessionApp() {
       if (storedSessionIsIdle(storedSession.role)) {
         clearAuthSession()
         if (!ignore) {
-          setAuthNotice(idleLogoutNotice(idleState(storedSession.role).limit, false))
           setSession(null)
           setIsSessionReady(true)
         }
@@ -217,7 +216,7 @@ function SessionApp() {
   function handlePasswordChanged(notice?: string) {
     clearAuthSession()
     setSession(null)
-    setAuthNotice(notice ?? 'Mật khẩu đã được cập nhật hoặc các phiên đã bị thu hồi. Vui lòng đăng nhập lại.')
+    setAuthNotice(notice ?? 'Vui lòng đăng nhập lại.')
   }
 
   return (
@@ -251,7 +250,7 @@ function SessionApp() {
 function SessionLoading() {
   return (
     <main className="flex min-h-svh items-center justify-center bg-[#f2f4fb] px-4 text-sm font-semibold text-[#344260]">
-      Đang kiểm tra phiên đăng nhập...
+      Đang tải...
     </main>
   )
 }
