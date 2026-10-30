@@ -923,8 +923,9 @@ function DayDetail({ plan, item, onChanged, onNotice, onPrev, onNext }: {
     }
   }
 
+  // From lg the card matches the day list's height; the text box takes the spare room.
   return (
-    <article className="min-w-0 space-y-4 rounded-3xl border border-[var(--app-border)] bg-[var(--panel-bg)] p-4 shadow-sm sm:p-6">
+    <article className="min-w-0 space-y-4 rounded-3xl border border-[var(--app-border)] bg-[var(--panel-bg)] p-4 shadow-sm sm:p-6 lg:flex lg:flex-col lg:gap-4 lg:space-y-0">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-xs font-bold uppercase tracking-wide text-[#6672d8]">{WEEKDAY_NAMES[weekday(item.plannedDate)]}, {shortDate(item.plannedDate)} · {timeOf(item.scheduledTime)}</p>
@@ -944,7 +945,7 @@ function DayDetail({ plan, item, onChanged, onNotice, onPrev, onNext }: {
       {item.error && <p className="rounded-xl border border-[var(--app-border)] bg-[var(--soft-bg)] px-3 py-2 text-sm text-[var(--app-text)]">{item.error}</p>}
 
       {item.post ? (
-        <div className={`overflow-hidden rounded-2xl border border-[var(--app-border)] bg-white text-slate-900 ${skipped ? 'opacity-60' : ''}`} style={{ borderTop: `4px solid ${PLATFORM_COLORS[platform] ?? '#505db8'}` }}>
+        <div className={`overflow-hidden rounded-2xl border border-[var(--app-border)] bg-white text-slate-900 lg:flex lg:flex-1 lg:flex-col ${skipped ? 'opacity-60' : ''}`} style={{ borderTop: `4px solid ${PLATFORM_COLORS[platform] ?? '#505db8'}` }}>
           <div className="flex items-center gap-3 px-4 pt-4">
             <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#eef0fd] text-sm font-bold text-[#505db8]">{accountName.charAt(0).toUpperCase()}</span>
             <span>
@@ -958,7 +959,7 @@ function DayDetail({ plan, item, onChanged, onNotice, onPrev, onNext }: {
               value={content}
               onChange={(event) => setContent(event.target.value)}
               rows={Math.min(14, Math.max(5, content.split('\n').length + 2))}
-              className="mt-3 block w-full resize-y border-0 bg-transparent px-4 text-sm leading-relaxed text-slate-900 outline-none focus:bg-[#f8f9ff]"
+              className="mt-3 block w-full resize-y border-0 bg-transparent px-4 text-sm leading-relaxed text-slate-900 outline-none focus:bg-[#f8f9ff] lg:flex-1"
             />
           ) : (
             <p className="mt-3 whitespace-pre-wrap px-4 text-sm leading-relaxed">{original}</p>

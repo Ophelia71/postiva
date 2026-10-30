@@ -111,8 +111,8 @@ export function BillingPage() {
     />
     {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</p>}
     {notice && <p role="status" className="rounded-lg bg-blue-50 p-3 text-sm text-blue-900">{notice}</p>}
-    {/* Plan on one side, orders and their details on the other once there is room. */}
-    <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
+    {/* Plan on one side, orders and their details on the other once there is room; both sides end level. */}
+    <div className="grid gap-6 lg:grid-cols-2">
     <section className={CARD}>
       <h2 className="text-lg font-bold">Pro</h2>
       {offer ? <>
@@ -123,8 +123,8 @@ export function BillingPage() {
         {!offer.available && <p className="mt-3 text-sm text-slate-600">{t('Gói Pro chưa mở bán. Bạn vẫn dùng Free bình thường.', 'Pro is not on sale yet. Free remains available.')}</p>}
       </> : <p className="mt-2 text-sm">{t('Đang tải giá gói…', 'Loading plan details…')}</p>}
     </section>
-    <div className="space-y-6">
-    <section className={CARD}>
+    <div className="flex flex-col gap-6">
+    <section className={`${CARD} flex-1`}>
       <h2 className="text-lg font-bold">{t('Lịch sử đơn', 'Order history')}</h2>
       {orders.length === 0 ? <p className="mt-3 text-sm text-slate-600">{t('Chưa có đơn thanh toán.', 'No payment orders yet.')}</p> : <ul className="mt-3 space-y-2">{orders.map((order) => <li key={order.id}>
         <button type="button" onClick={() => setSelected(order)} className={`min-h-12 w-full rounded-lg border px-3 py-2 text-left text-sm ${selected?.id === order.id ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200'}`}>

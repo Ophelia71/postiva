@@ -226,14 +226,15 @@ export function ReportsPage() {
           )}
         </div>
 
-        <div className="min-w-0 rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] p-5 shadow-sm">
+        <div className="flex min-w-0 flex-col rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] p-5 shadow-sm">
           <h2 className="mb-6 text-base font-bold">{t('Phân bổ theo nền tảng', 'Platform breakdown')}</h2>
-          <div className="space-y-5">
+          {/* Centred in the height the chart beside it sets, so the card does not end in an empty half. */}
+          <div className="flex flex-1 flex-col justify-center space-y-5">
             {platformCounts.length === 0 ? (
               <p className="text-sm text-[var(--muted-text)]">{t('Chưa có dữ liệu nền tảng.', 'No platform data yet.')}</p>
             ) : (
               platformCounts.map((item) => (
-                <div key={item.platform} className="grid grid-cols-[90px_1fr] items-center gap-3">
+                <div key={item.platform} className="grid grid-cols-[90px_1fr_auto] items-center gap-3">
                   <span className="text-xs text-slate-500">{item.platform}</span>
                   <div className="h-3 rounded-full bg-slate-100">
                     <div
@@ -241,6 +242,9 @@ export function ReportsPage() {
                       style={{ width: `${Math.round((item.count / totalPostsForPlatformChart) * 100)}%` }}
                     />
                   </div>
+                  <span className="w-24 text-right text-xs tabular-nums text-[var(--muted-text)]">
+                    {item.count} {t('bài', 'posts')} · {Math.round((item.count / totalPostsForPlatformChart) * 100)}%
+                  </span>
                 </div>
               ))
             )}
