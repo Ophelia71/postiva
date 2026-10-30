@@ -51,7 +51,8 @@ class BillingIntegrationTest {
     @MockBean PayOsGateway payos;
     @Autowired BillingService billing;
     @Autowired BillingProperties properties;
-    @Autowired SePayWebhookService sepay;
+    @Autowired SePayService sepay;
+    @org.springframework.boot.test.mock.mockito.MockBean SePayClient sepayClient;
     @Autowired com.fasterxml.jackson.databind.ObjectMapper json;
 
     @DynamicPropertySource static void database(DynamicPropertyRegistry registry) {
@@ -273,9 +274,33 @@ class BillingIntegrationTest {
         assertEquals("GRANTED", billing.confirmBankTransfer(admin(), order.id(), "FT26303888").grantStatus());
     }
 
+    @Test void whileTheBuyerWaitsPostivaFindsTheTransferInSePayItself() {
+        openBankTransfer();
+        properties.setSepayApiToken("sepay-user-token");
+        assertTrue(billing.offer().autoConfirm());
+        UUID user = user();
+        BillingStore.Order order = billing.create(user, UUID.randomUUID());
+        org.mockito.Mockito.when(sepayClient.incomingSince(org.mockito.ArgumentMatchers.any())).thenReturn(java.util.List.of(
+                new SePayService.Transfer("77001", "12345678901", 50_000, "tien nha", "FT-OTHER-1"),
+                new SePayService.Transfer("77002", "12345678901", order.amountVnd(), "VUONG THU HUYEN chuyen tien POSTIVA" + order.orderCode(), "FT26304123")));
+        sepay.checkFor(store.require(order.id(), user));
+        BillingStore.Order after = store.require(order.id(), user);
+        assertEquals("PAID", after.status());
+        assertEquals("GRANTED", after.grantStatus());
+        assertEquals("PRO", usage.summary(user).plan());
+        // Seen again on the next check: nothing changes, nothing is granted twice.
+        org.springframework.test.util.ReflectionTestUtils.setField(sepay, "lastCheckAt", 0L);
+        sepay.checkNow();
+        assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM subscription_periods WHERE source_reference = ?",
+                Integer.class, "BANK:" + order.orderCode()));
+        properties.setSepayApiToken("");
+    }
+
     private void openBankTransfer() {
         properties.setEnabled(false);
         properties.setSepayApiKey("");
+        properties.setSepayApiToken("");
+        org.springframework.test.util.ReflectionTestUtils.setField(sepay, "lastCheckAt", 0L);
         properties.setProPriceVnd(149_000);
         properties.setRefundPolicyUrl("http://localhost:5173/refund-policy");
         properties.setBankCode("TPB");

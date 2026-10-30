@@ -261,6 +261,16 @@ public class BillingStore {
         return "PAID";
     }
 
+    /** When the oldest transfer still waiting for money was created, or null when none is waiting. */
+    @Transactional(readOnly = true)
+    public Instant oldestOpenBankTransfer() {
+        Timestamp oldest = jdbc.queryForObject("""
+                SELECT min(created_at) FROM payment_orders WHERE provider = 'BANK_TRANSFER'
+                AND status IN ('PENDING', 'EXPIRED') AND created_at > clock_timestamp() - INTERVAL '4 days'
+                """, Timestamp.class);
+        return instant(oldest);
+    }
+
     @Transactional(readOnly = true)
     public UUID idForCode(long orderCode) {
         return jdbc.query("SELECT id FROM payment_orders WHERE order_code = ?", (rs, row) -> rs.getObject("id", UUID.class), orderCode)

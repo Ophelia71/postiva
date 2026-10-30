@@ -22,9 +22,9 @@ public class BillingController {
     private final BillingService billing;
     private final RefundService refunds;
     private final CurrentUserService current;
-    private final SePayWebhookService sepay;
+    private final SePayService sepay;
 
-    public BillingController(BillingService billing, RefundService refunds, CurrentUserService current, SePayWebhookService sepay) {
+    public BillingController(BillingService billing, RefundService refunds, CurrentUserService current, SePayService sepay) {
         this.billing = billing; this.refunds = refunds; this.current = current; this.sepay = sepay;
     }
 
@@ -43,9 +43,12 @@ public class BillingController {
         return noStore(billing.history(current.requireCurrentUserId()));
     }
 
+    /** The buyer's page asks this every few seconds while a transfer waits; each ask may check SePay. */
     @GetMapping("/orders/{id}")
     public ResponseEntity<ApiResponse<BillingStore.Order>> order(@PathVariable UUID id) {
-        return noStore(billing.order(current.requireCurrentUserId(), id));
+        UUID user = current.requireCurrentUserId();
+        sepay.checkFor(billing.order(user, id));
+        return noStore(billing.order(user, id));
     }
 
     @PostMapping("/orders/{id}/refresh")

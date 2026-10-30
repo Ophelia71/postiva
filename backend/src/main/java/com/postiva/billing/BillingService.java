@@ -32,7 +32,8 @@ public class BillingService {
                 ? new BankAccount(properties.getBankCode(), properties.getBankAccountNo(), properties.getBankAccountName()) : null;
         return new Offer(method != null, properties.getProPriceVnd(), usage.getProAiLimit(), usage.getFreeAiLimit(),
                 usage.getPeriodDays(), method != null ? properties.getRefundPolicyUrl() : null, method, bank,
-                bank != null && !properties.getSepayApiKey().isBlank(), plans(method != null));
+                bank != null && !(properties.getSepayApiKey().isBlank() && properties.getSepayApiToken().isBlank()),
+                plans(method != null));
     }
 
     /**

@@ -84,6 +84,8 @@ postiva:
     bank-account-name: ${POSTIVA_BANK_ACCOUNT_NAME:}
     # Optional: SePay reports incoming transfers so they confirm without the admin.
     sepay-api-key: ${POSTIVA_SEPAY_API_KEY:}
+    # Optional: SePay API token, so Postiva asks SePay for incoming transfers itself (no public address needed).
+    sepay-api-token: ${POSTIVA_SEPAY_API_TOKEN:}
   ai:
     cost:
       enabled: ${POSTIVA_AI_ENABLED:true}

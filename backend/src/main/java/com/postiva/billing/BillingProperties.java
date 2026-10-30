@@ -22,6 +22,8 @@ public class BillingProperties {
     private String bankAccountName = "";
     // SePay watches the bank account and reports incoming transfers, so they confirm themselves.
     private String sepayApiKey = "";
+    // SePay's user API token: lets Postiva ask for the account's incoming transfers itself.
+    private String sepayApiToken = "";
 
     public boolean ready() {
         return enabled && proPriceVnd >= 2_000 && proPriceVnd <= 100_000_000
@@ -69,6 +71,8 @@ public class BillingProperties {
     public String getRefundPolicyUrl() { return refundPolicyUrl; }
     public void setRefundPolicyUrl(String refundPolicyUrl) { this.refundPolicyUrl = refundPolicyUrl == null ? "" : refundPolicyUrl; }
     public String getSepayApiKey() { return sepayApiKey; }
+    public String getSepayApiToken() { return sepayApiToken; }
+    public void setSepayApiToken(String sepayApiToken) { this.sepayApiToken = sepayApiToken == null ? "" : sepayApiToken.trim(); }
     public void setSepayApiKey(String sepayApiKey) { this.sepayApiKey = sepayApiKey == null ? "" : sepayApiKey.trim(); }
     public String getBankCode() { return bankCode; }
     public void setBankCode(String bankCode) { this.bankCode = bankCode == null ? "" : bankCode.trim(); }
