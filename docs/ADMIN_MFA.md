@@ -8,6 +8,8 @@ Backend đọc `POSTIVA_MFA_ENCRYPTION_KEY`: một bí mật ngẫu nhiên ổn 
 
 Khóa TOTP trong database được mã hóa AES-GCM với nonce ngẫu nhiên và gắn với ID admin. Sao lưu khóa mã hóa bằng quy trình quản lý bí mật của đơn vị vận hành. Thay đổi/mất khóa làm các khóa TOTP đã lưu không giải mã được; không đổi khóa tùy tiện trong lúc tài khoản đang dùng MFA.
 
+`POSTIVA_MFA_ISSUER` (mặc định `Postiva`) là tên mục hiện trong ứng dụng xác thực. Mỗi môi trường nên dùng tên riêng, ví dụ `Postiva Local` khi chạy trên máy, để không lấy nhầm mã của môi trường khác. Đổi tên chỉ ảnh hưởng lần thiết lập sau; mục đã thêm vẫn dùng được.
+
 Nếu thiếu khóa, các API nghiệp vụ USER vẫn hoạt động; trang bảo mật báo chưa cấu hình và không cho bắt đầu thiết lập MFA. Backend trả 503 khi không xử lý được dữ liệu mã hóa.
 
 ## Thiết lập lần đầu
@@ -22,7 +24,7 @@ Khóa và mã khôi phục chỉ nằm trong bộ nhớ giao diện, không lưu
 
 ## Đăng nhập và khôi phục
 
-`POST /api/auth/login` tiếp tục nhận email/password, bổ sung `mfaCode` khi ADMIN đã bật MFA. Mật khẩu đúng nhưng thiếu mã trả 428, không cấp JWT; giao diện chuyển sang bước nhập mã. Mã sai/đã dùng trả 401. USER không cần mã MFA.
+`POST /api/auth/login` tiếp tục nhận email/password, bổ sung `mfaCode` khi ADMIN đã bật MFA. Mật khẩu đúng nhưng thiếu mã trả 428, không cấp JWT; giao diện chuyển sang bước nhập mã. Mã sai/đã dùng trả 401. Sai 5 lần liên tiếp thì đăng nhập admin bị khóa 5 phút: trả 429 kèm `Retry-After` và thông báo rõ là đang bị khóa, để người dùng không tưởng mã đúng là sai. USER không cần mã MFA.
 
 TOTP chấp nhận lệch tối đa một chu kỳ. Database lưu chu kỳ đã dùng; cùng một mã không được xác thực lại trong chu kỳ đó. Bật thời gian tự động trên máy chủ và điện thoại.
 

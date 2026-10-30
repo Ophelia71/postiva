@@ -130,6 +130,7 @@ postiva:
     login-attempts-per-15-minutes: ${POSTIVA_LOGIN_ATTEMPTS_PER_15_MINUTES:10}
     token-encryption-key: ${POSTIVA_TOKEN_ENCRYPTION_KEY:}
     mfa-encryption-key: ${POSTIVA_MFA_ENCRYPTION_KEY:}
+    mfa-issuer: ${POSTIVA_MFA_ISSUER:Postiva}
 
   storage:
     upload-dir: ${POSTIVA_UPLOAD_DIR:uploads/images}
