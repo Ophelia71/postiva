@@ -204,7 +204,7 @@ function DailyHome() {
           <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#eef0fd] text-[#505db8]"><CalendarClock size={26} aria-hidden="true" /></span>
           <h2 className="mt-4 text-xl font-bold">Tuần tới đăng gì? Để Postiva lo.</h2>
           <p className="mx-auto mt-2 max-w-lg text-sm text-[var(--muted-text)]">
-            Chọn chủ đề cho tuần, Postiva xem bài nào của shop thu hút nhất rồi soạn sẵn 3–7 bài vào đúng ngày, đúng giờ. Bạn chỉ cần xem lại và bấm duyệt.
+            Chọn chủ đề cho tuần, Postiva xem bài nào của shop thu hút nhất rồi soạn sẵn 1–7 bài vào đúng ngày, đúng giờ. Bạn chỉ cần xem lại và bấm duyệt.
           </p>
           <div className="mt-6 flex justify-center">{createButton}</div>
         </div>
@@ -510,11 +510,21 @@ function PlanCreator({ channels, onCancel, onCreated }: { channels: AppChannel[]
     setPosts(Math.min(MAX_POSTS, Math.max(MIN_POSTS, Math.round(value))))
   }
 
+  const insightsPanel = (stacked: boolean) => (
+    <>
+      {!currentInsights && channelId && <p className="text-sm text-[var(--muted-text)]">Đang đọc bài cũ của kênh...</p>}
+      {currentInsights?.error && <p className="rounded-xl border border-[var(--app-border)] bg-[var(--soft-bg)] px-3 py-2 text-sm text-[var(--app-text)]">{currentInsights.error} Kế hoạch vẫn tạo được, dựa trên hồ sơ shop.</p>}
+      {currentInsights?.summary && <InsightTiles summary={currentInsights.summary} stacked={stacked} platform={channels.find((channel) => channel.id === channelId)?.badge} />}
+    </>
+  )
+
   return (
-    <section className="mx-auto max-w-3xl">
+    <section className="mx-auto max-w-3xl xl:max-w-6xl">
       <button type="button" onClick={onCancel} className="mb-3 inline-flex min-h-11 items-center gap-2 text-sm font-semibold"><ArrowLeft size={16} aria-hidden="true" />Kế hoạch tuần</button>
       <Header title="Tuần tới bạn muốn tập trung vào gì?" subtitle="Một màn hình là xong. Postiva lấy sản phẩm và giọng văn từ hồ sơ shop của bạn." />
 
+      {/* Wide screens keep the findings beside the form instead of stretching one long column. */}
+      <div className="xl:grid xl:grid-cols-[minmax(0,1fr)_340px] xl:items-start xl:gap-6">
       <div className="space-y-6 rounded-3xl border border-[var(--app-border)] bg-[var(--panel-bg)] p-5 shadow-sm sm:p-8">
         <fieldset>
           <legend className="text-sm font-bold">Chủ đề của tuần</legend>
@@ -571,9 +581,7 @@ function PlanCreator({ channels, onCancel, onCreated }: { channels: AppChannel[]
           </div>
         </div>
 
-        {!currentInsights && channelId && <p className="text-sm text-[var(--muted-text)]">Đang đọc bài cũ của kênh...</p>}
-        {currentInsights?.error && <p className="rounded-xl border border-[var(--app-border)] bg-[var(--soft-bg)] px-3 py-2 text-sm text-[var(--app-text)]">{currentInsights.error} Kế hoạch vẫn tạo được, dựa trên hồ sơ shop.</p>}
-        {currentInsights?.summary && <InsightTiles summary={currentInsights.summary} platform={channels.find((channel) => channel.id === channelId)?.badge} />}
+        <div className="space-y-6 xl:hidden">{insightsPanel(false)}</div>
 
         {!profileComplete && (
           <p className="rounded-xl border border-[var(--app-border)] bg-[var(--soft-bg)] px-3 py-2 text-sm text-[var(--app-text)]">
@@ -654,6 +662,8 @@ function PlanCreator({ channels, onCancel, onCreated }: { channels: AppChannel[]
           <p role="alert" className="text-sm font-semibold text-rose-700">Không đủ lượt AI cho {posts} bài. Hãy chọn ít bài hơn.</p>
         )}
       </div>
+      <aside aria-label="Postiva thấy gì từ bài cũ" className="hidden space-y-4 xl:sticky xl:top-8 xl:block">{insightsPanel(true)}</aside>
+      </div>
     </section>
   )
 }
@@ -716,7 +726,7 @@ function PlanView({ planId, initialItemId, onBack, onCreateNew }: { planId: stri
 
   return (
     // Room for the fixed approval bar, which sits above the phone's bottom navigation.
-    <section className="pb-52 lg:pb-28">
+    <section>
       <button type="button" onClick={onBack} className="mb-3 inline-flex min-h-11 items-center gap-2 text-sm font-semibold"><ArrowLeft size={16} aria-hidden="true" />Kế hoạch tuần</button>
       <Header
         title={`Tuần ${weekRange(plan)}`}
@@ -802,8 +812,8 @@ function PlanView({ planId, initialItemId, onBack, onCreateNew }: { planId: stri
       )}
 
       {(plan.status === 'READY' || plan.status === 'FAILED') && (
-        <div className="fixed inset-x-0 bottom-[72px] z-10 border-t border-[var(--app-border)] bg-[var(--panel-bg)]/95 px-4 py-3 shadow-[0_-8px_24px_rgba(15,23,42,0.06)] backdrop-blur lg:bottom-0 lg:left-[272px]">
-          <div className="mx-auto flex max-w-[1240px] flex-wrap items-center justify-end gap-3">
+        <div className="sticky bottom-[84px] z-10 mt-6 rounded-2xl border border-[var(--app-border)] bg-[var(--panel-bg)]/95 px-4 py-3 shadow-[0_-8px_24px_rgba(15,23,42,0.06)] backdrop-blur lg:bottom-4">
+          <div className="flex flex-wrap items-center justify-end gap-3">
             {confirmDelete ? (
               <div role="alertdialog" aria-label="Xác nhận xóa kế hoạch" className="mr-auto flex flex-wrap items-center gap-2 text-sm">
                 <span>Xóa kế hoạch này? Bản nháp vẫn được giữ trong bài viết của bạn.</span>

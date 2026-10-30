@@ -63,9 +63,11 @@ const navItems = [
 // Account settings (shop profile, plan, security) live in the account menu, not here.
 
 // Billing lives in the account menu on small screens; the create action is the primary thumb target.
+// Same order as the sidebar, with shorter labels for five tabs on a narrow phone.
 const mobileNavItems = [
-  { to: '/app/schedule', label: 'Lịch đăng', icon: CalendarDays },
   { to: '/app/create', label: 'Tạo bài', icon: PenLine },
+  { to: '/app/schedule', label: 'Lịch đăng', icon: CalendarDays },
+  { to: '/app/daily', label: 'Daily', icon: CalendarClock },
   { to: '/app/reports', label: 'Báo cáo', icon: BarChart3 },
   { to: '/app/connections', label: 'Kết nối', icon: Link2 },
 ]
@@ -548,7 +550,7 @@ function AppShell({ session, onLogout, onPasswordChanged, demo }: ShellProps) {
 
       <nav
         aria-label="Điều hướng chính"
-        className="fixed inset-x-0 bottom-0 z-20 grid h-[72px] grid-cols-4 border-t border-[var(--app-border)] bg-[var(--panel-bg)] px-2 pb-[env(safe-area-inset-bottom)] lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-20 grid h-[72px] grid-cols-5 border-t border-[var(--app-border)] bg-[var(--panel-bg)] px-2 pb-[env(safe-area-inset-bottom)] lg:hidden"
       >
         {mobileNavItems.map((item) => {
           const Icon = item.icon

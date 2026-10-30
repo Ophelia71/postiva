@@ -652,7 +652,7 @@ function CreatePostForm({ onNewPost }: { onNewPost: () => void }) {
   }
 
   return (
-    <section className="create-post-page -mx-4 min-h-[calc(100svh-8rem)] rounded-[8px] bg-gradient-to-br from-rose-50 via-violet-50 to-cyan-50 px-4 py-3 sm:-mx-6 sm:px-6 lg:mx-0 lg:flex lg:h-[calc(100svh-4rem)] lg:min-h-0 lg:flex-col">
+    <section className="create-post-page -mx-4 min-h-[calc(100svh-8rem)] rounded-[8px] bg-gradient-to-br from-rose-50 via-violet-50 to-cyan-50 px-4 py-3 sm:-mx-6 sm:px-6 lg:mx-0 xl:flex xl:h-[calc(100svh-4rem)] xl:min-h-0 xl:flex-col">
       <div className="mb-3 flex shrink-0 items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <button
@@ -703,7 +703,7 @@ function CreatePostForm({ onNewPost }: { onNewPost: () => void }) {
         </div>
       )}
       <div ref={stepsAnchorRef} aria-hidden="true" className="scroll-mt-[64px] lg:scroll-mt-4" />
-      <nav aria-label="Các bước tạo bài" className="sticky top-[64px] z-10 mb-3 shrink-0 lg:static">
+      <nav aria-label="Các bước tạo bài" className="sticky top-[64px] z-10 mb-3 shrink-0 lg:top-2 xl:static">
         <ol className="grid grid-cols-5 gap-1 rounded-[8px] border border-slate-200 bg-white p-1.5 shadow-sm">
           {STEPS.map((item, index) => {
             const active = index === step
@@ -735,9 +735,9 @@ function CreatePostForm({ onNewPost }: { onNewPost: () => void }) {
           })}
         </ol>
       </nav>
-      <div className="grid gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-2 lg:items-stretch lg:gap-8">
-        <div className="min-w-0 space-y-3 lg:flex lg:min-h-0 lg:flex-col lg:space-y-0 lg:gap-3">
-          <div className="space-y-3 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-1">
+      <div className="grid gap-4 xl:min-h-0 xl:flex-1 xl:grid-cols-2 xl:items-stretch xl:gap-8">
+        <div className="min-w-0 space-y-3 xl:flex xl:min-h-0 xl:flex-col xl:space-y-0 xl:gap-3">
+          <div className="space-y-3 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:pr-1">
             {stepNotice && stepIssue(step) && (
               <p role="alert" className="rounded-[6px] border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-800">
                 {stepNotice}
@@ -951,7 +951,7 @@ function CreatePostForm({ onNewPost }: { onNewPost: () => void }) {
             )}
           </div>
 
-          <div className="sticky bottom-[88px] z-10 flex items-center justify-end gap-2 rounded-[6px] border border-slate-200 bg-white px-4 py-2 shadow-lg shadow-slate-200/70 lg:static lg:shrink-0 lg:shadow-sm">
+          <div className="sticky bottom-[88px] z-10 lg:bottom-4 flex items-center justify-end gap-2 rounded-[6px] border border-slate-200 bg-white px-4 py-2 shadow-lg shadow-slate-200/70 xl:static xl:shrink-0 xl:shadow-sm">
             {step === 0 ? (
               <Link to="/app/schedule" className="mr-auto inline-flex min-h-11 items-center justify-center rounded-[6px] border border-slate-300 px-4 text-sm font-semibold hover:bg-slate-50">
                 {t('Hủy', 'Cancel')}
@@ -998,7 +998,7 @@ function CreatePostForm({ onNewPost }: { onNewPost: () => void }) {
           </div>
         </div>
 
-        <div className="min-w-0 lg:flex lg:min-h-0 lg:flex-col">
+        <div className="min-w-0 xl:flex xl:min-h-0 xl:flex-col">
           <div className="mb-3 flex shrink-0 flex-wrap justify-center gap-2">
             {selectedPlatforms.map((platform) => (
               <button
@@ -1192,7 +1192,7 @@ function SocialFeedPreview({
 
   return (
     <article
-      className={cn('mx-auto flex w-full flex-col overflow-hidden rounded-[6px] bg-white shadow-xl shadow-slate-200/80 lg:min-h-0 lg:flex-1', compact ? 'max-w-[360px]' : 'max-w-[620px]')}
+      className={cn('mx-auto flex w-full flex-col overflow-hidden rounded-[6px] bg-white shadow-xl shadow-slate-200/80 xl:min-h-0 xl:flex-1', compact ? 'max-w-[360px]' : 'max-w-[620px]')}
     >
       <div aria-hidden className="h-1 shrink-0" style={{ backgroundColor: getPlatformColor(platform) }} />
       <header className="flex shrink-0 items-center gap-3 px-5 py-3">
@@ -1207,7 +1207,7 @@ function SocialFeedPreview({
       </header>
 
       {caption.trim() ? (
-        <p className="shrink-0 whitespace-pre-wrap px-5 pb-3 text-sm leading-6 text-slate-900 lg:max-h-28 lg:overflow-y-auto">{caption}</p>
+        <p className="shrink-0 whitespace-pre-wrap px-5 pb-3 text-sm leading-6 text-slate-900 xl:max-h-28 xl:overflow-y-auto">{caption}</p>
       ) : (
         <div className="shrink-0 space-y-3 px-5 pb-4">
           <div className="h-3 w-full rounded-full bg-slate-100" />
@@ -1215,18 +1215,18 @@ function SocialFeedPreview({
         </div>
       )}
 
-      <div className="relative min-h-[430px] overflow-hidden bg-slate-100 lg:min-h-0 lg:flex-1">
+      <div className="relative min-h-[430px] overflow-hidden bg-slate-100 xl:min-h-0 xl:flex-1">
         {previewMedia.length > 0 ? (
-          <div className={cn('grid w-full lg:absolute lg:inset-0 lg:place-content-center', visiblePreviewMedia.length > 1 ? 'grid-cols-2 gap-0.5' : 'grid-cols-1')}>
+          <div className={cn('grid w-full xl:absolute xl:inset-0 xl:place-content-center', visiblePreviewMedia.length > 1 ? 'grid-cols-2 gap-0.5' : 'grid-cols-1')}>
             {visiblePreviewMedia.map((media, index) => (
               <div key={media.url + '-' + index} className="relative">
                 {media.type.startsWith('video/') ? (
-                  <ProtectedMediaVideo src={media.url} controls className="mx-auto max-h-[430px] w-full bg-slate-950 object-contain lg:max-h-[26vh]" />
+                  <ProtectedMediaVideo src={media.url} controls className="mx-auto max-h-[430px] w-full bg-slate-950 object-contain xl:max-h-[26vh]" />
                 ) : (
                   <ProtectedMediaImage
                     src={media.url}
                     alt={`${PLATFORM_LABELS[platform]} post media preview ${index + 1}`}
-                    className="mx-auto h-auto max-h-[430px] w-full object-contain lg:max-h-[26vh]"
+                    className="mx-auto h-auto max-h-[430px] w-full object-contain xl:max-h-[26vh]"
                   />
                 )}
                 {index === visiblePreviewMedia.length - 1 && hiddenImageCount > 0 && (
@@ -1238,7 +1238,7 @@ function SocialFeedPreview({
             ))}
           </div>
         ) : (
-          <div className="flex h-full min-h-[430px] items-center justify-center lg:absolute lg:inset-0 lg:min-h-0">
+          <div className="flex h-full min-h-[430px] items-center justify-center xl:absolute xl:inset-0 xl:min-h-0">
             <EmptyMediaPlaceholder />
           </div>
         )}

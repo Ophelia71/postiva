@@ -138,7 +138,7 @@ export function ReportsPage() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <div className="rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] p-5 shadow-sm">
+        <div className="min-w-0 rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] p-5 shadow-sm">
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-base font-bold">{getChartTitle(chartPeriod, t)}</h2>
             <div className="flex items-center gap-1 rounded-full border border-[var(--app-border)] p-1">
@@ -158,7 +158,7 @@ export function ReportsPage() {
             </div>
           </div>
           <div className="overflow-x-auto pb-1">
-          <div className={`flex h-40 items-end justify-around border-b border-l border-dashed border-slate-200 px-2 sm:px-5 ${chartPeriod === 'MONTH' ? 'min-w-[620px]' : 'min-w-[420px]'}`}>
+          <div className={`flex h-40 items-end justify-around border-b border-l border-dashed border-slate-200 px-2 sm:px-5 ${chartPeriod === 'MONTH' ? 'min-w-[620px]' : 'sm:min-w-[420px]'}`}>
             {chartBuckets.map((bucket) => (
               <button
                 key={bucket.key}
@@ -226,7 +226,7 @@ export function ReportsPage() {
           )}
         </div>
 
-        <div className="rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] p-5 shadow-sm">
+        <div className="min-w-0 rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] p-5 shadow-sm">
           <h2 className="mb-6 text-base font-bold">{t('Phân bổ theo nền tảng', 'Platform breakdown')}</h2>
           <div className="space-y-5">
             {platformCounts.length === 0 ? (

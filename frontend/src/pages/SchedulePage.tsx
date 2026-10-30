@@ -235,11 +235,16 @@ export function SchedulePage() {
             />
           ) : (
             paginatedSchedule.pageItems.map((post) => (
-              <div key={postRowKey(post)} className="grid grid-cols-[72px_minmax(0,1fr)] items-center gap-2 px-4 py-4 text-sm lg:grid-cols-[90px_minmax(0,1fr)_110px_150px_32px_32px_32px_auto] lg:gap-3 lg:px-5">
-                <PlatformBadge platform={post.platform} />
+              // Phones get a card (labels, text, then actions); from lg the groups dissolve into one table row.
+              <div key={postRowKey(post)} className="flex flex-col gap-2 px-4 py-4 text-sm lg:grid lg:grid-cols-[90px_minmax(0,1fr)_110px_150px_32px_32px_32px_auto] lg:items-center lg:gap-3 lg:px-5">
+                <div className="flex flex-wrap items-center gap-2 lg:contents">
+                  <span className="lg:order-1"><PlatformBadge platform={post.platform} /></span>
+                  <span className="whitespace-nowrap lg:order-3"><StatusBadge status={post.status} /></span>
+                  <span className="text-xs text-[var(--muted-text)] lg:order-4">{formatPostDateTime(post.time)}</span>
+                </div>
                 {post.permalinkUrl ? (
-                  <div className="min-w-0">
-                    <a href={post.permalinkUrl} target="_blank" rel="noreferrer" className="block truncate hover:text-violet-700">
+                  <div className="min-w-0 lg:order-2">
+                    <a href={post.permalinkUrl} target="_blank" rel="noreferrer" className="line-clamp-2 hover:text-violet-700 lg:block lg:truncate">
                       {post.content}
                     </a>
                     {post.nextAttemptAt && <p className="mt-1 text-xs text-amber-700">Thử lại lúc {formatPostDateTime(post.nextAttemptAt)}</p>}
@@ -248,50 +253,50 @@ export function SchedulePage() {
                     {post.lastError && <p className="mt-1 line-clamp-2 text-xs text-rose-700">Lỗi gần nhất: {post.lastError}</p>}
                   </div>
                 ) : (
-                  <div className="min-w-0">
-                    <p className="truncate">{post.content}</p>
+                  <div className="min-w-0 lg:order-2">
+                    <p className="line-clamp-2 lg:truncate">{post.content}</p>
                     {post.nextAttemptAt && <p className="mt-1 text-xs text-amber-700">Thử lại lúc {formatPostDateTime(post.nextAttemptAt)}</p>}
                     {post.status === 'Unknown' && <p className="mt-1 text-xs text-amber-800">Kiểm tra bài trên nền tảng trước khi chọn kết quả.</p>}
                     {post.attemptCount > 0 && <p className="mt-1 text-xs text-slate-500">Đã thử đăng {post.attemptCount} lần.</p>}
                     {post.lastError && <p className="mt-1 line-clamp-2 text-xs text-rose-700">Lỗi gần nhất: {post.lastError}</p>}
                   </div>
                 )}
-                <StatusBadge status={post.status} />
-                <span className="text-xs text-[var(--muted-text)]">{formatPostDateTime(post.time)}</span>
-                <button
-                  type="button"
-                  onClick={() => setDetailPost(post)}
-                  aria-label="Xem chi tiết bài"
-                  className="flex h-11 w-11 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-50 hover:text-slate-900 lg:h-8 lg:w-8"
-                >
-                  <Eye size={15} aria-hidden="true" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => openEditPost(post)}
-                  disabled={!isEditableScheduledPost(post)}
-                  aria-label="Sửa bài đã đặt lịch"
-                  className="flex h-11 w-11 items-center justify-center rounded-lg text-slate-600 hover:bg-violet-50 hover:text-violet-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-600 lg:h-8 lg:w-8"
-                  title={isEditableScheduledPost(post) ? 'Sửa bài đã đặt lịch' : 'Chỉ sửa được bài đang chờ đăng'}
-                >
-                  <Pencil size={15} aria-hidden="true" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDeleteCandidate(post)}
-                  aria-label="Xóa bài"
-                  className="flex h-11 w-11 items-center justify-center rounded-lg text-slate-600 hover:bg-rose-50 hover:text-rose-600 lg:h-8 lg:w-8"
-                >
-                  <Trash2 size={15} aria-hidden="true" />
-                </button>
-                {post.status === 'Unknown' ? (
-                  <div className="flex flex-wrap gap-1">
-                    <button type="button" onClick={() => setPendingAction({ kind: 'resolvePublished', post })} className="min-h-11 rounded border border-emerald-200 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">Đã đăng</button>
-                    <button type="button" onClick={() => setPendingAction({ kind: 'resolveNotPublished', post })} className="min-h-11 rounded border border-amber-300 px-3 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-50">Chưa đăng · thử lại</button>
-                  </div>
-                ) : post.status === 'Failed' ? (
-                  <button type="button" onClick={() => setPendingAction({ kind: 'retry', post })} className="min-h-11 rounded border border-blue-200 px-3 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50">Thử lại</button>
-                ) : <span />}
+                <div className="-ml-3 flex flex-wrap items-center gap-1 lg:contents lg:[&>*]:order-5">
+                  <button
+                    type="button"
+                    onClick={() => setDetailPost(post)}
+                    aria-label="Xem chi tiết bài"
+                    className="flex h-11 w-11 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-50 hover:text-slate-900 lg:h-8 lg:w-8"
+                  >
+                    <Eye size={15} aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openEditPost(post)}
+                    disabled={!isEditableScheduledPost(post)}
+                    aria-label="Sửa bài đã đặt lịch"
+                    className="flex h-11 w-11 items-center justify-center rounded-lg text-slate-600 hover:bg-violet-50 hover:text-violet-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-600 lg:h-8 lg:w-8"
+                    title={isEditableScheduledPost(post) ? 'Sửa bài đã đặt lịch' : 'Chỉ sửa được bài đang chờ đăng'}
+                  >
+                    <Pencil size={15} aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteCandidate(post)}
+                    aria-label="Xóa bài"
+                    className="flex h-11 w-11 items-center justify-center rounded-lg text-slate-600 hover:bg-rose-50 hover:text-rose-600 lg:h-8 lg:w-8"
+                  >
+                    <Trash2 size={15} aria-hidden="true" />
+                  </button>
+                  {post.status === 'Unknown' ? (
+                    <div className="flex flex-wrap gap-1">
+                      <button type="button" onClick={() => setPendingAction({ kind: 'resolvePublished', post })} className="min-h-11 rounded border border-emerald-200 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">Đã đăng</button>
+                      <button type="button" onClick={() => setPendingAction({ kind: 'resolveNotPublished', post })} className="min-h-11 rounded border border-amber-300 px-3 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-50">Chưa đăng · thử lại</button>
+                    </div>
+                  ) : post.status === 'Failed' ? (
+                    <button type="button" onClick={() => setPendingAction({ kind: 'retry', post })} className="min-h-11 rounded border border-blue-200 px-3 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50">Thử lại</button>
+                  ) : <span className="hidden lg:block" />}
+                </div>
               </div>
             ))
           )}
