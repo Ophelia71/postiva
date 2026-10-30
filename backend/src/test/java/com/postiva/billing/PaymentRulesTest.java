@@ -31,6 +31,6 @@ class PaymentRulesTest {
 
     private BillingStore.Order order(String status) {
         return new BillingStore.Order(UUID.randomUUID(), UUID.randomUUID(), 1234567, 99_000, 50, 30, status,
-                "NOT_APPLICABLE", "link1234567890", null, "12345678", null, now.plusSeconds(900), null, now, null, null, "PAYOS", null);
+                "NOT_APPLICABLE", "link1234567890", null, "12345678", null, now.plusSeconds(900), null, now, null, null, "PAYOS");
     }
 }

@@ -13,11 +13,11 @@ const money = (amount: number) => new Intl.NumberFormat('vi-VN', { style: 'curre
 
 /**
  * A VietQR code any Vietnamese banking app can scan, with amount and content filled in,
- * plus the same details as text for anyone paying from another device.
+ * plus the same details as text for anyone paying from another device. It disappears by itself
+ * once the order is paid: the page shows it only while the order waits for money.
  */
-export function BankTransferPanel({ bank, orderCode, amountVnd, buyerConfirmed, busy, onTransferred, onCancel }: {
-  bank: BankAccount; orderCode: number; amountVnd: number; buyerConfirmed: boolean; busy: boolean
-  onTransferred: () => void; onCancel: () => void
+export function BankTransferPanel({ bank, orderCode, amountVnd, autoConfirm, busy, onCancel }: {
+  bank: BankAccount; orderCode: number; amountVnd: number; autoConfirm: boolean; busy: boolean; onCancel: () => void
 }) {
   const content = transferContent(orderCode)
   const qr = `https://img.vietqr.io/image/${encodeURIComponent(bank.bankCode)}-${encodeURIComponent(bank.accountNo)}-compact2.png`
@@ -34,12 +34,13 @@ export function BankTransferPanel({ bank, orderCode, amountVnd, buyerConfirmed, 
         <Row label="Số tiền" value={money(amountVnd)} copy={String(amountVnd)} />
         <Row label="Nội dung" value={content} copy strong />
       </dl>
-      {buyerConfirmed
-        ? <p role="status" className="rounded-lg border border-slate-200 bg-slate-50 p-3">Postiva đã nhận được báo của bạn. Gói Pro sẽ bật ngay khi kiểm tra thấy tiền vào tài khoản, thường trong vài giờ (giờ hành chính).</p>
-        : <div className="flex flex-wrap gap-3">
-          <button type="button" disabled={busy} onClick={onTransferred} className="min-h-11 rounded-lg bg-indigo-600 px-5 font-semibold text-white disabled:opacity-60">Tôi đã chuyển khoản</button>
-          <button type="button" disabled={busy} onClick={onCancel} className="min-h-11 rounded-lg border border-slate-300 px-4 font-semibold disabled:opacity-50">Hủy đơn này</button>
-        </div>}
+      <p role="status" className="flex items-center gap-2 text-slate-600">
+        <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-indigo-500" aria-hidden="true" />
+        {autoConfirm
+          ? 'Đang chờ tiền vào. Chuyển xong, mã này tự biến mất và gói Pro bật trong khoảng 1 phút.'
+          : 'Đang chờ tiền vào. Mã này tự biến mất và gói Pro bật khi Postiva thấy tiền, thường trong vài giờ (giờ hành chính).'}
+      </p>
+      <button type="button" disabled={busy} onClick={onCancel} className="min-h-11 rounded-lg border border-slate-300 px-4 font-semibold disabled:opacity-50">Hủy đơn này</button>
     </div>
   </div>
 }

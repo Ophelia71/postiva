@@ -31,7 +31,8 @@ public class BillingService {
         BankAccount bank = BillingStore.BANK_TRANSFER.equals(method)
                 ? new BankAccount(properties.getBankCode(), properties.getBankAccountNo(), properties.getBankAccountName()) : null;
         return new Offer(method != null, properties.getProPriceVnd(), usage.getProAiLimit(), usage.getFreeAiLimit(),
-                usage.getPeriodDays(), method != null ? properties.getRefundPolicyUrl() : null, method, bank);
+                usage.getPeriodDays(), method != null ? properties.getRefundPolicyUrl() : null, method, bank,
+                bank != null && !properties.getSepayApiKey().isBlank());
     }
 
     /** payOS when its keys are set (automatic); otherwise a plain transfer to the shop's account, if one is set. */
@@ -128,13 +129,17 @@ public class BillingService {
         }
     }
 
-    public BillingStore.Order transferred(UUID userId, UUID orderId) { return store.markTransferred(orderId, userId); }
-
     /** Admin saw the money in the bank: record it, then turn Pro on like any paid order. */
     public BillingStore.Order confirmBankTransfer(UUID actorId, UUID orderId, String bankReference) {
         BillingStore.Order order = store.confirmBankTransfer(actorId, orderId, bankReference);
         reconcileReceipt(new BillingStore.Receipt(order.id(), "PAID"));
         return store.adminOrder(orderId);
+    }
+
+    /** A transfer the bank feed matched to an order: turn Pro on like any paid order. */
+    public void grantPaid(long orderCode) {
+        UUID id = store.idForCode(orderCode);
+        if (id != null) reconcileReceipt(new BillingStore.Receipt(id, "PAID"));
     }
 
     public BillingStore.Order rejectBankTransfer(UUID actorId, UUID orderId, String reason) {
@@ -165,6 +170,6 @@ public class BillingService {
     }
 
     public record Offer(boolean available, long amountVnd, int aiLimit, int freeAiLimit, int periodDays, String refundPolicyUrl,
-                        String method, BankAccount bank) { }
+                        String method, BankAccount bank, boolean autoConfirm) { }
     public record BankAccount(String bankCode, String accountNo, String accountName) { }
 }

@@ -185,18 +185,6 @@ public class BillingStore {
         return new Receipt(order.id(), "UNCHANGED");
     }
 
-    /** The buyer says the money is on its way; it only moves the order up the admin's queue. */
-    @Transactional
-    public Order markTransferred(UUID orderId, UUID userId) {
-        Order order = require(orderId, userId);
-        if (!BANK_TRANSFER.equals(order.provider())) throw error(HttpStatus.CONFLICT, "Đơn này không thanh toán bằng chuyển khoản");
-        jdbc.update("""
-                UPDATE payment_orders SET buyer_confirmed_at = COALESCE(buyer_confirmed_at, clock_timestamp()), updated_at = clock_timestamp()
-                WHERE id = ? AND status IN ('PENDING', 'EXPIRED')
-                """, orderId);
-        return require(orderId, userId);
-    }
-
     @Transactional
     public Order cancelBankTransfer(UUID orderId, UUID userId) {
         jdbc.update("""
@@ -219,7 +207,7 @@ public class BillingStore {
             if (("BANK:" + reference).equals(order.providerReference())) return order;
             throw error(HttpStatus.CONFLICT, "Đơn đã được xác nhận trước đó");
         }
-        if (!List.of("PENDING", "EXPIRED", "CANCELLED").contains(order.status())) throw error(HttpStatus.CONFLICT, "Đơn không ở trạng thái chờ tiền");
+        if (!List.of("PENDING", "EXPIRED", "CANCELLED", "REVIEW").contains(order.status())) throw error(HttpStatus.CONFLICT, "Đơn không ở trạng thái chờ tiền");
         if (!jdbc.queryForList("SELECT id FROM payment_orders WHERE provider_transaction_ref = ?", "BANK:" + reference).isEmpty())
             throw error(HttpStatus.CONFLICT, "Mã giao dịch này đã dùng cho một đơn khác");
         jdbc.update("""
@@ -235,25 +223,62 @@ public class BillingStore {
         String clean = reason == null ? "" : reason.trim();
         if (clean.length() < 5 || clean.length() > 1000) throw error(HttpStatus.BAD_REQUEST, "Ghi lý do (5–1000 ký tự)");
         Order order = lockedBankOrder(orderId);
-        if (!List.of("PENDING", "EXPIRED").contains(order.status())) throw error(HttpStatus.CONFLICT, "Đơn không ở trạng thái chờ tiền");
+        if (!List.of("PENDING", "EXPIRED", "REVIEW").contains(order.status())) throw error(HttpStatus.CONFLICT, "Đơn không ở trạng thái chờ tiền");
         jdbc.update("UPDATE payment_orders SET status = 'CANCELLED', updated_at = clock_timestamp() WHERE id = ?", orderId);
         adminAudit(actorId, orderId, "REJECT_BANK_TRANSFER", clean);
         return adminOrder(orderId);
     }
 
-    /** Transfers waiting for the admin: the ones whose buyer said "transferred" first. */
+    /**
+     * A transfer reported by the bank feed (SePay). Pays the order when amount and content match;
+     * anything odd goes to the admin's queue as REVIEW instead of turning Pro on.
+     */
+    @Transactional
+    public String acceptBankTransfer(long orderCode, long amount, String bankReference, String eventKey) {
+        var rows = jdbc.query("SELECT * FROM payment_orders WHERE order_code = ? FOR UPDATE", (rs, row) -> order(rs), orderCode);
+        Order order = rows.isEmpty() ? null : rows.getFirst();
+        String fingerprint = digest("BANK:" + eventKey);
+        if (!event(order == null ? null : order.id(), "BANK_TRANSFER", fingerprint, bankReference, amount,
+                order == null ? "UNKNOWN_ORDER" : "RECEIVED")) return "DUPLICATE";
+        String decision = bankDecision(order, amount, bankReference);
+        jdbc.update("UPDATE payment_events SET decision = ? WHERE signature_sha256 = ?", decision, fingerprint);
+        return decision;
+    }
+
+    private String bankDecision(Order order, long amount, String bankReference) {
+        if (order == null) return "UNKNOWN_ORDER";
+        if (!BANK_TRANSFER.equals(order.provider())) return "NOT_BANK_ORDER";
+        if ("PAID".equals(order.status())) return "ALREADY_PAID";
+        if (amount != order.amountVnd()) { review(order.id(), "BANK_AMOUNT_MISMATCH"); return "REVIEW"; }
+        String reference = "BANK:" + bankReference;
+        if (!jdbc.queryForList("SELECT id FROM payment_orders WHERE provider_transaction_ref = ?", reference).isEmpty()) {
+            review(order.id(), "DUPLICATE_TRANSACTION_REFERENCE"); return "REVIEW";
+        }
+        jdbc.update("""
+                UPDATE payment_orders SET status = 'PAID', grant_status = 'PENDING', provider_transaction_ref = ?,
+                    paid_at = clock_timestamp(), updated_at = clock_timestamp(), review_reason = NULL WHERE id = ?
+                """, reference, order.id());
+        return "PAID";
+    }
+
+    @Transactional(readOnly = true)
+    public UUID idForCode(long orderCode) {
+        return jdbc.query("SELECT id FROM payment_orders WHERE order_code = ?", (rs, row) -> rs.getObject("id", UUID.class), orderCode)
+                .stream().findFirst().orElse(null);
+    }
+
+    /** Transfers waiting for the admin: odd ones (wrong amount) first, then the newest. */
     @Transactional(readOnly = true)
     public List<BankTransfer> bankTransferQueue() {
         return jdbc.query("""
-                SELECT o.id, o.order_code, o.amount_vnd, o.status, o.created_at, o.buyer_confirmed_at, u.email, u.full_name
+                SELECT o.id, o.order_code, o.amount_vnd, o.status, o.created_at, u.email, u.full_name
                 FROM payment_orders o JOIN users u ON u.id = o.user_id
-                WHERE o.provider = 'BANK_TRANSFER' AND o.status IN ('PENDING', 'EXPIRED')
+                WHERE o.provider = 'BANK_TRANSFER' AND o.status IN ('PENDING', 'EXPIRED', 'REVIEW')
                   AND o.created_at > clock_timestamp() - INTERVAL '30 days'
-                ORDER BY o.buyer_confirmed_at DESC NULLS LAST, o.created_at DESC LIMIT 100
+                ORDER BY (o.status = 'REVIEW') DESC, o.created_at DESC LIMIT 100
                 """, (rs, row) -> new BankTransfer(rs.getObject("id", UUID.class), rs.getLong("order_code"),
                 rs.getLong("amount_vnd"), rs.getString("status"), transferContent(rs.getLong("order_code")),
-                rs.getTimestamp("created_at").toInstant(), instant(rs.getTimestamp("buyer_confirmed_at")),
-                rs.getString("email"), rs.getString("full_name")));
+                rs.getTimestamp("created_at").toInstant(), rs.getString("email"), rs.getString("full_name")));
     }
 
     /** What the buyer writes in the transfer, so the admin can match the money to the order. */
@@ -363,7 +388,7 @@ public class BillingStore {
                 rs.getString("recipient_account_number"), rs.getString("provider_transaction_ref"),
                 rs.getTimestamp("expires_at").toInstant(), paid == null ? null : paid.toInstant(),
                 rs.getTimestamp("created_at").toInstant(), rs.getObject("granted_period_id", UUID.class), rs.getString("review_reason"),
-                rs.getString("provider"), instant(rs.getTimestamp("buyer_confirmed_at")));
+                rs.getString("provider"));
     }
 
     private static Instant instant(Timestamp value) { return value == null ? null : value.toInstant(); }
@@ -373,8 +398,8 @@ public class BillingStore {
     public record Order(UUID id, UUID userId, long orderCode, long amountVnd, int aiLimit, int periodDays,
                         String status, String grantStatus, String linkId, String checkoutUrl, String recipientAccountNumber,
                         String providerReference, Instant expiresAt, Instant paidAt, Instant createdAt,
-                        UUID periodId, String reviewReason, String provider, Instant buyerConfirmedAt) { }
+                        UUID periodId, String reviewReason, String provider) { }
     public record BankTransfer(UUID id, long orderCode, long amountVnd, String status, String transferContent,
-                               Instant createdAt, Instant buyerConfirmedAt, String email, String fullName) { }
+                               Instant createdAt, String email, String fullName) { }
     public record Receipt(UUID orderId, String decision) { }
 }

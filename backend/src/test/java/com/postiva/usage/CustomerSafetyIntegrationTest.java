@@ -149,8 +149,10 @@ class CustomerSafetyIntegrationTest {
         jdbc.update("UPDATE request_rate_limits SET expires_at = clock_timestamp() - INTERVAL '1 second' WHERE bucket_key = ?",
                 "register-cooldown:" + PersistentRateLimiter.sha256(address));
         assertEquals(202, call("POST", "/api/auth/register", null, null, registration).status());
-        verify(email, timeout(5_000).times(2)).sendRegistrationOtp(eq(address), anyString(), anyString(), anyLong());
-        Result verified = call("POST", "/api/auth/register/verify", null, null, Map.of("email", address, "code", otp.get()));
+        // Read the new code from the recorded call: the stub's answer may not have stored it yet when verify returns.
+        var codes = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(email, timeout(5_000).times(2)).sendRegistrationOtp(eq(address), anyString(), codes.capture(), anyLong());
+        Result verified = call("POST", "/api/auth/register/verify", null, null, Map.of("email", address, "code", codes.getAllValues().get(1)));
         assertEquals(200, verified.status(), verified.body().toString());
         assertEquals("USER", verified.body().path("role").asText());
         assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM subscription_periods WHERE user_id = ?", Integer.class,

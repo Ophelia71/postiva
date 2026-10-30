@@ -51,6 +51,8 @@ class BillingIntegrationTest {
     @MockBean PayOsGateway payos;
     @Autowired BillingService billing;
     @Autowired BillingProperties properties;
+    @Autowired SePayWebhookService sepay;
+    @Autowired com.fasterxml.jackson.databind.ObjectMapper json;
 
     @DynamicPropertySource static void database(DynamicPropertyRegistry registry) {
         if (URL == null || !URL.matches("jdbc:postgresql://(localhost|127\\.0\\.0\\.1):[0-9]+/postiva_migration_test(\\?.*)?"))
@@ -192,9 +194,9 @@ class BillingIntegrationTest {
         assertTrue(store.reconcileCandidates().stream().noneMatch(candidate -> candidate.id().equals(order.id())));
         assertEquals(HttpStatus.CONFLICT, assertThrows(ResponseStatusException.class, () -> billing.adminReconcile(order.id())).getStatusCode());
 
-        assertNotNull(billing.transferred(user, order.id()).buyerConfirmedAt());
-        assertEquals(order.id(), store.bankTransferQueue().getFirst().id());
-        assertEquals("POSTIVA" + order.orderCode(), store.bankTransferQueue().getFirst().transferContent());
+        assertTrue(store.bankTransferQueue().stream().anyMatch(item -> item.id().equals(order.id())));
+        assertEquals("POSTIVA" + order.orderCode(), store.bankTransferQueue().stream()
+                .filter(item -> item.id().equals(order.id())).findFirst().orElseThrow().transferContent());
 
         BillingStore.Order paid = billing.confirmBankTransfer(admin, order.id(), "FT26303123456");
         assertEquals("PAID", paid.status());
@@ -228,8 +230,52 @@ class BillingIntegrationTest {
         assertEquals("PRO", usage.summary(user).plan());
     }
 
+    @Test void aTransferReportedBySePayPaysTheOrderWithoutAnyone() throws Exception {
+        openBankTransfer();
+        properties.setSepayApiKey("sepay-test-key");
+        assertTrue(billing.offer().autoConfirm());
+        UUID user = user();
+        BillingStore.Order order = billing.create(user, UUID.randomUUID());
+        String body = """
+                {"id": 90001, "gateway": "TPBank", "accountNumber": "12345678901", "transferType": "in",
+                 "transferAmount": %d, "content": "NGUYEN VAN A chuyen tien postiva %d", "referenceCode": "FT26303999"}
+                """.formatted(order.amountVnd(), order.orderCode());
+        assertEquals(HttpStatus.UNAUTHORIZED, assertThrows(ResponseStatusException.class,
+                () -> sepay.handle("Apikey wrong", json.readTree(body))).getStatusCode());
+        assertEquals("PAID", sepay.handle("Apikey sepay-test-key", json.readTree(body)));
+        BillingStore.Order after = store.require(order.id(), user);
+        assertEquals("PAID", after.status());
+        assertEquals("GRANTED", after.grantStatus());
+        assertEquals("BANK:FT26303999", after.providerReference());
+        assertEquals("PRO", usage.summary(user).plan());
+        assertEquals("DUPLICATE", sepay.handle("Apikey sepay-test-key", json.readTree(body)));
+
+        // Money going out, another account, or no order code: nothing happens.
+        assertEquals("IGNORED", sepay.handle("Apikey sepay-test-key", json.readTree(body.replace("\"in\"", "\"out\""))));
+        assertEquals("OTHER_ACCOUNT", sepay.handle("Apikey sepay-test-key", json.readTree(body.replace("12345678901", "999"))));
+        assertEquals("NO_ORDER_CODE", sepay.handle("Apikey sepay-test-key",
+                json.readTree(body.replace("postiva " + order.orderCode(), "tien hang"))));
+    }
+
+    @Test void aSePayTransferWithTheWrongAmountWaitsForTheAdmin() throws Exception {
+        openBankTransfer();
+        properties.setSepayApiKey("sepay-test-key");
+        UUID user = user();
+        BillingStore.Order order = billing.create(user, UUID.randomUUID());
+        String body = """
+                {"id": 90002, "accountNumber": "12345678901", "transferType": "in", "transferAmount": 1000,
+                 "content": "POSTIVA%d", "referenceCode": "FT26303888"}
+                """.formatted(order.orderCode());
+        assertEquals("REVIEW", sepay.handle("Apikey sepay-test-key", json.readTree(body)));
+        assertEquals("REVIEW", store.require(order.id(), user).status());
+        assertEquals("FREE", usage.summary(user).plan());
+        assertEquals(order.id(), store.bankTransferQueue().getFirst().id());
+        assertEquals("GRANTED", billing.confirmBankTransfer(admin(), order.id(), "FT26303888").grantStatus());
+    }
+
     private void openBankTransfer() {
         properties.setEnabled(false);
+        properties.setSepayApiKey("");
         properties.setProPriceVnd(149_000);
         properties.setRefundPolicyUrl("http://localhost:5173/refund-policy");
         properties.setBankCode("TPB");

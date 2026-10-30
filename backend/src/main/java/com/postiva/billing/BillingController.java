@@ -22,9 +22,10 @@ public class BillingController {
     private final BillingService billing;
     private final RefundService refunds;
     private final CurrentUserService current;
+    private final SePayWebhookService sepay;
 
-    public BillingController(BillingService billing, RefundService refunds, CurrentUserService current) {
-        this.billing = billing; this.refunds = refunds; this.current = current;
+    public BillingController(BillingService billing, RefundService refunds, CurrentUserService current, SePayWebhookService sepay) {
+        this.billing = billing; this.refunds = refunds; this.current = current; this.sepay = sepay;
     }
 
     @GetMapping("/offer")
@@ -47,11 +48,6 @@ public class BillingController {
         return noStore(billing.order(current.requireCurrentUserId(), id));
     }
 
-    @PostMapping("/orders/{id}/transferred")
-    public ResponseEntity<ApiResponse<BillingStore.Order>> transferred(@PathVariable UUID id) {
-        return noStore(billing.transferred(current.requireCurrentUserId(), id));
-    }
-
     @PostMapping("/orders/{id}/refresh")
     public ResponseEntity<ApiResponse<BillingStore.Order>> refresh(@PathVariable UUID id) {
         return noStore(billing.refresh(current.requireCurrentUserId(), id));
@@ -71,6 +67,13 @@ public class BillingController {
     @GetMapping("/orders/{id}/refund-requests")
     public ResponseEntity<ApiResponse<List<RefundService.Refund>>> refunds(@PathVariable UUID id) {
         return noStore(refunds.userRefunds(current.requireCurrentUserId(), id));
+    }
+
+    /** SePay's report of a transfer into the shop's bank account; checked against the shared API key. */
+    @PostMapping("/sepay/webhook")
+    public ResponseEntity<ApiResponse<String>> sepayWebhook(@RequestHeader(value = "Authorization", required = false) String authorization,
+                                                            @RequestBody JsonNode body) {
+        return noStore(sepay.handle(authorization, body));
     }
 
     /** Only this signed server-to-server notification or a signed provider query can record payment. */

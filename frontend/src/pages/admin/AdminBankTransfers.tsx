@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { api } from '../../lib/api'
 import { getErrorMessage } from '../../lib/errors'
 
-type Transfer = { id: string; orderCode: number; amountVnd: number; status: string; transferContent: string; createdAt: string; buyerConfirmedAt: string | null; email: string; fullName: string }
+type Transfer = { id: string; orderCode: number; amountVnd: number; status: string; transferContent: string; createdAt: string; email: string; fullName: string }
 const money = (amount: number) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount)
 const dateTime = (value: string) => new Date(value).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })
 
@@ -48,7 +48,7 @@ export function AdminBankTransfers({ onChanged }: { onChanged: () => void }) {
 
   return <section className="rounded-xl border border-slate-200 bg-white p-5">
     <h2 className="text-lg font-bold">Chuyển khoản chờ xác nhận</h2>
-    <p className="mt-2 text-sm text-slate-600">Mở app ngân hàng, tìm giao dịch có đúng <strong>số tiền</strong> và <strong>nội dung</strong> như dưới đây. Thấy tiền rồi thì nhập mã giao dịch của ngân hàng và bấm Đã nhận tiền.</p>
+    <p className="mt-2 text-sm text-slate-600">Nếu đã kết nối SePay, tiền vào đúng số tiền và nội dung sẽ tự xác nhận và không hiện ở đây. Đơn còn ở đây thì mở app ngân hàng, tìm giao dịch có đúng <strong>số tiền</strong> và <strong>nội dung</strong>, nhập mã giao dịch rồi bấm Đã nhận tiền.</p>
     {error && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</p>}
     {notice && <p role="status" className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">{notice}</p>}
     {items === null ? <p className="mt-3 text-sm text-slate-600">Đang tải…</p>
@@ -60,7 +60,7 @@ export function AdminBankTransfers({ onChanged }: { onChanged: () => void }) {
             <p className="mt-1 text-slate-600 [overflow-wrap:anywhere]">{item.fullName} · {item.email}</p>
             <p className="mt-1 text-xs text-slate-500">
               Tạo lúc {dateTime(item.createdAt)}
-              {item.buyerConfirmedAt ? <> · <strong className="text-slate-700">khách báo đã chuyển lúc {dateTime(item.buyerConfirmedAt)}</strong></> : ' · khách chưa báo đã chuyển'}
+              {item.status === 'REVIEW' && <> · <strong className="text-rose-700">tiền vào không khớp số tiền, kiểm tra lại</strong></>}
               {item.status === 'EXPIRED' && ' · đơn đã quá hạn'}
             </p>
           </div>

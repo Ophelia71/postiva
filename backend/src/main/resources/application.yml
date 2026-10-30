@@ -82,6 +82,8 @@ postiva:
     bank-code: ${POSTIVA_BANK_CODE:TPB}
     bank-account-no: ${POSTIVA_BANK_ACCOUNT_NO:}
     bank-account-name: ${POSTIVA_BANK_ACCOUNT_NAME:}
+    # Optional: SePay reports incoming transfers so they confirm without the admin.
+    sepay-api-key: ${POSTIVA_SEPAY_API_KEY:}
   ai:
     cost:
       enabled: ${POSTIVA_AI_ENABLED:true}
