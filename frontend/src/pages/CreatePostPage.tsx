@@ -652,7 +652,7 @@ function CreatePostForm({ onNewPost }: { onNewPost: () => void }) {
   }
 
   return (
-    <section className="create-post-page -mx-4 min-h-[calc(100svh-8rem)] rounded-[8px] bg-gradient-to-br from-rose-50 via-violet-50 to-cyan-50 px-4 py-3 sm:-mx-6 sm:px-6 lg:mx-0 xl:flex xl:h-[calc(100svh-4rem)] xl:min-h-0 xl:flex-col">
+    <section className="create-post-page -mx-4 min-h-[calc(100svh-8rem)] rounded-[8px] bg-gradient-to-br from-rose-50 via-violet-50 to-cyan-50 px-4 py-3 sm:-mx-6 sm:px-6 lg:mx-0">
       <div className="mb-3 flex shrink-0 items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <button
@@ -735,9 +735,10 @@ function CreatePostForm({ onNewPost }: { onNewPost: () => void }) {
           })}
         </ol>
       </nav>
-      <div className="grid gap-4 xl:min-h-0 xl:flex-1 xl:grid-cols-2 xl:items-stretch xl:gap-8">
-        <div className="min-w-0 space-y-3 xl:flex xl:min-h-0 xl:flex-col xl:space-y-0 xl:gap-3">
-          <div className="space-y-3 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:pr-1">
+      {/* The page scrolls as a whole: the action bar stays in reach and the preview stays in view, whatever sits above. */}
+      <div className="grid gap-4 xl:grid-cols-2 xl:items-start xl:gap-8">
+        <div className="min-w-0 space-y-3">
+          <div className="space-y-3">
             {stepNotice && stepIssue(step) && (
               <p role="alert" className="rounded-[6px] border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-800">
                 {stepNotice}
@@ -951,7 +952,7 @@ function CreatePostForm({ onNewPost }: { onNewPost: () => void }) {
             )}
           </div>
 
-          <div className="sticky bottom-[88px] z-10 lg:bottom-4 flex items-center justify-end gap-2 rounded-[6px] border border-slate-200 bg-white px-4 py-2 shadow-lg shadow-slate-200/70 xl:static xl:shrink-0 xl:shadow-sm">
+          <div className="sticky bottom-[88px] z-10 flex items-center justify-end gap-1 rounded-[6px] border border-slate-200 bg-white px-3 py-2 shadow-lg shadow-slate-200/70 sm:gap-2 sm:px-4 lg:bottom-4 [&>*]:whitespace-nowrap">
             {step === 0 ? (
               <Link to="/app/schedule" className="mr-auto inline-flex min-h-11 items-center justify-center rounded-[6px] border border-slate-300 px-4 text-sm font-semibold hover:bg-slate-50">
                 {t('Hủy', 'Cancel')}
@@ -971,9 +972,9 @@ function CreatePostForm({ onNewPost }: { onNewPost: () => void }) {
                   <button
                     type="button"
                     onClick={() => goToStep(step + 1)}
-                    className="inline-flex min-h-11 items-center justify-center rounded-[6px] px-4 text-sm font-semibold text-slate-700 underline underline-offset-4 hover:text-slate-900"
+                    className="inline-flex min-h-11 items-center justify-center rounded-[6px] px-2 text-sm font-semibold text-slate-700 underline underline-offset-4 hover:text-slate-900 sm:px-4"
                   >
-                    Bỏ qua bước này
+                    Bỏ qua<span className="hidden sm:inline">&nbsp;bước này</span>
                   </button>
                 )}
                 <button
@@ -998,9 +999,10 @@ function CreatePostForm({ onNewPost }: { onNewPost: () => void }) {
           </div>
         </div>
 
-        {/* The preview keeps the platform's proportions and scrolls on its own instead of squeezing photos to fit the screen. */}
-        <div className="min-w-0 xl:min-h-0 xl:overflow-y-auto xl:pr-1">
-          <div className="mb-3 flex shrink-0 flex-wrap justify-center gap-2">
+        {/* The preview keeps the platform's proportions and stays beside the form, scrolling on its own when taller than the screen. */}
+        <div className="min-w-0 xl:sticky xl:top-4 xl:max-h-[calc(100svh-2rem)] xl:overflow-y-auto xl:pr-1">
+          {/* On the content step the editor's own tabs pick the platform; a second row here would only repeat them. */}
+          <div className={cn('mb-3 flex shrink-0 flex-wrap justify-center gap-2', step === 3 && 'hidden')}>
             {selectedPlatforms.map((platform) => (
               <button
                 key={platform}
@@ -1047,8 +1049,8 @@ function ComposerSection({
 }) {
   return (
     <section className="rounded-[6px] border border-slate-100 bg-white p-4 shadow-sm lg:p-3">
-      <div className="mb-3 flex items-center justify-between gap-3 lg:mb-2">
-        <h2 className="text-lg font-bold">{title}</h2>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 lg:mb-2">
+        <h2 className="whitespace-nowrap text-lg font-bold">{title}</h2>
         {headerAction}
       </div>
       {children}
@@ -1232,8 +1234,8 @@ function SocialFeedPreview({
         ) : previewMedia.length > 1 ? (
           // Several photos share a square frame like the platforms' collage; each shows whole, never cropped.
           <div className={cn(
-            'grid aspect-square w-full grid-cols-2 gap-0.5',
-            visiblePreviewMedia.length === 2 ? 'grid-rows-1' : 'grid-rows-2',
+            'grid w-full grid-cols-2 gap-0.5',
+            visiblePreviewMedia.length === 2 ? 'aspect-[4/3] grid-rows-1' : 'aspect-square grid-rows-2',
           )}>
             {visiblePreviewMedia.map((media, index) => (
               <div key={media.url + '-' + index} className={cn('relative min-h-0 overflow-hidden bg-slate-100', visiblePreviewMedia.length === 3 && index === 0 && 'col-span-2')}>
