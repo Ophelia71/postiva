@@ -110,6 +110,9 @@ export function ShopProfileForm({ initial, mode, onSaved, onSkip }: {
 
   return (
     <form onSubmit={(event) => { event.preventDefault(); void save() }} className="space-y-5" noValidate>
+      {/* The full profile page puts the optional details beside the essentials on wide screens. */}
+      <div className={mode === 'full' ? 'grid gap-x-10 gap-y-5 xl:grid-cols-2' : 'space-y-5'}>
+      <div className="space-y-5">
       <fieldset className="space-y-4">
         <legend className="text-base font-bold">Thông tin bắt buộc</legend>
         <label className="block text-sm font-bold">Tên shop *
@@ -160,6 +163,7 @@ export function ShopProfileForm({ initial, mode, onSaved, onSkip }: {
           {showMore ? 'Ẩn thông tin thêm' : 'Thêm mô tả, chữ ký cuối bài, hashtag... (tùy chọn)'}
         </button>
       )}
+      </div>
 
       {showMore && (
         <fieldset className="space-y-4">
@@ -198,10 +202,11 @@ export function ShopProfileForm({ initial, mode, onSaved, onSkip }: {
           </label>
         </fieldset>
       )}
+      </div>
 
       {error && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-800">{error}</p>}
 
-      <div className="flex flex-wrap items-center justify-end gap-3">
+      <div className={`flex flex-wrap items-center justify-end gap-3 ${mode === 'full' ? 'sticky bottom-[84px] z-10 -mx-2 rounded-2xl bg-[var(--panel-bg)]/95 px-2 py-2 backdrop-blur lg:static lg:mx-0 lg:bg-transparent lg:p-0 lg:backdrop-blur-none' : ''}`}>
         {onSkip && <button type="button" onClick={onSkip} className="mr-auto min-h-11 text-sm font-semibold underline underline-offset-4">Làm bước này sau</button>}
         <button type="submit" disabled={saving} className="min-h-11 rounded-full bg-[#505db8] px-5 text-sm font-bold text-white hover:bg-[#434fa0] disabled:bg-slate-400">
           {saving ? 'Đang lưu...' : mode === 'onboarding' ? 'Lưu hồ sơ shop' : 'Lưu thay đổi'}

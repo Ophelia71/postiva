@@ -1,8 +1,10 @@
-import { KeyRound } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
+import { PageHeader } from '../components/PageUi'
 import { api } from '../lib/api'
 import { getErrorMessage } from '../lib/errors'
 import { PasswordVisibilityField } from '../components/PasswordVisibilityField'
+
+const CARD = 'rounded-2xl border border-[var(--app-border)] bg-[var(--panel-bg)] p-5 shadow-sm sm:p-6'
 
 export function ChangePasswordPage({ onPasswordChanged }: { onPasswordChanged: (notice?: string) => void }) {
   const [currentPassword, setCurrentPassword] = useState('')
@@ -50,11 +52,14 @@ export function ChangePasswordPage({ onPasswordChanged }: { onPasswordChanged: (
   }
 
   return (
-    <section className="mx-auto max-w-2xl rounded-[24px] border border-[var(--app-border)] bg-[var(--panel-bg)] p-6 shadow-sm sm:p-8">
-      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#e8ebff] text-[#5369b8]"><KeyRound size={21} /></div>
-      <h1 className="mt-5 text-2xl font-bold tracking-tight">Bảo mật tài khoản</h1>
-      <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--muted-text)]">Sau khi đổi mật khẩu, bạn sẽ được đăng xuất trên mọi thiết bị và cần đăng nhập lại.</p>
-      <form onSubmit={(event) => void submit(event)} className="mt-7 max-w-lg space-y-4">
+    <section>
+      <PageHeader title="Bảo mật tài khoản" subtitle="Đổi mật khẩu, đăng xuất khỏi các thiết bị khác hoặc xóa tài khoản." />
+      {/* Changing the password on one side, the rarer account actions on the other once there is room. */}
+      <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
+      <div className={CARD}>
+      <h2 className="text-base font-bold">Đổi mật khẩu</h2>
+      <p className="mt-2 text-sm leading-6 text-[var(--muted-text)]">Sau khi đổi mật khẩu, bạn sẽ được đăng xuất trên mọi thiết bị và cần đăng nhập lại.</p>
+      <form onSubmit={(event) => void submit(event)} className="mt-5 space-y-4">
         <PasswordVisibilityField label="Mật khẩu hiện tại" value={currentPassword} onChange={setCurrentPassword} autoComplete="current-password" disabled={pending} />
         <PasswordVisibilityField label="Mật khẩu mới" value={newPassword} onChange={setNewPassword} autoComplete="new-password" minLength={8} disabled={pending} />
         <PasswordVisibilityField label="Nhập lại mật khẩu mới" value={confirmation} onChange={setConfirmation} autoComplete="new-password" minLength={8} disabled={pending} />
@@ -62,13 +67,17 @@ export function ChangePasswordPage({ onPasswordChanged }: { onPasswordChanged: (
         {error && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</p>}
         <button type="submit" disabled={pending} className="min-h-12 rounded-full bg-[#6672d8] px-6 text-sm font-bold text-white hover:bg-[#505db8] disabled:opacity-60">{pending ? 'Đang cập nhật...' : 'Đổi mật khẩu và đăng xuất'}</button>
       </form>
-      <div className="mt-8 max-w-lg border-t border-[var(--app-border)] pt-6">
+      </div>
+      <div className="space-y-6">
+      <div className={CARD}>
         <h2 className="text-base font-bold">Đăng xuất khỏi mọi thiết bị</h2>
         <p className="mt-2 text-sm leading-6 text-[var(--muted-text)]">Dùng khi bạn quên đăng xuất trên máy khác. Bạn cũng sẽ được đăng xuất tại đây và cần đăng nhập lại.</p>
         {sessionError && <p role="alert" className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{sessionError}</p>}
         <button type="button" onClick={() => void revokeSessions()} disabled={revoking} className="mt-4 min-h-11 rounded-full border border-rose-300 px-5 text-sm font-bold text-rose-700 hover:bg-rose-50 disabled:opacity-60">{revoking ? 'Đang đăng xuất...' : 'Đăng xuất khỏi tất cả thiết bị'}</button>
       </div>
       <DeleteAccountSection onDeleted={() => onPasswordChanged('Tài khoản và toàn bộ dữ liệu của bạn đã được xóa.')} />
+      </div>
+      </div>
     </section>
   )
 }
@@ -98,7 +107,7 @@ function DeleteAccountSection({ onDeleted }: { onDeleted: () => void }) {
   }
 
   return (
-    <div className="mt-8 max-w-lg border-t border-[var(--app-border)] pt-6">
+    <div className={CARD}>
       <h2 className="text-base font-bold">Xóa tài khoản</h2>
       <p className="mt-2 text-sm leading-6 text-[var(--muted-text)]">Xóa vĩnh viễn tài khoản và dữ liệu của bạn trên Postiva. Không thể khôi phục.</p>
       {!open ? (

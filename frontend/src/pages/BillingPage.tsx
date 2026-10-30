@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
+import { PageHeader } from '../components/PageUi'
 import { api } from '../lib/api'
 import { usePreferences } from '../lib/preferences'
+
+const CARD = 'rounded-2xl border border-[var(--app-border)] bg-[var(--panel-bg)] p-5 shadow-sm'
 
 type Offer = { available: boolean; amountVnd: number; aiLimit: number; periodDays: number; refundPolicyUrl: string | null }
 type Order = { id: string; orderCode: number; amountVnd: number; aiLimit: number; periodDays: number; status: string; grantStatus: string; checkoutUrl: string | null; expiresAt: string; createdAt: string; paidAt: string | null }
@@ -101,13 +104,16 @@ export function BillingPage() {
     finally { setBusy(false) }
   }
 
-  return <div className="mx-auto max-w-4xl space-y-6">
-    <header><h1 className="text-2xl font-bold">{t('Gói Pro và thanh toán', 'Pro plan and billing')}</h1>
-      <p className="mt-2 text-sm text-slate-600">Gói Free đã gồm lượt tạo nội dung bằng AI mỗi kỳ. Bạn chỉ cần Pro khi muốn thêm lượt.</p>
-      <p className="mt-1 text-sm text-slate-600">{t('Thanh toán từng kỳ; không tự động gia hạn hoặc lưu thẻ.', 'Pay per period; no automatic renewal or card storage.')}</p></header>
+  return <div className="space-y-6">
+    <PageHeader
+      title={t('Gói Pro và thanh toán', 'Pro plan and billing')}
+      subtitle={`Gói Free đã gồm lượt tạo nội dung bằng AI mỗi kỳ. Bạn chỉ cần Pro khi muốn thêm lượt. ${t('Thanh toán từng kỳ; không tự động gia hạn hoặc lưu thẻ.', 'Pay per period; no automatic renewal or card storage.')}`}
+    />
     {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</p>}
     {notice && <p role="status" className="rounded-lg bg-blue-50 p-3 text-sm text-blue-900">{notice}</p>}
-    <section className="rounded-xl border border-slate-200 bg-white p-5">
+    {/* Plan on one side, orders and their details on the other once there is room. */}
+    <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
+    <section className={CARD}>
       <h2 className="text-lg font-bold">Pro</h2>
       {offer ? <>
         <p className="mt-2 text-sm">{offer.aiLimit} {t('lượt tạo AI trong', 'AI generations over')} {offer.periodDays} {t('ngày', 'days')} · {offer.amountVnd > 0 ? money(offer.amountVnd) : t('Giá chưa công bố', 'Price not published')}</p>
@@ -117,7 +123,8 @@ export function BillingPage() {
         {!offer.available && <p className="mt-3 text-sm text-slate-600">{t('Gói Pro chưa mở bán. Bạn vẫn dùng Free bình thường.', 'Pro is not on sale yet. Free remains available.')}</p>}
       </> : <p className="mt-2 text-sm">{t('Đang tải giá gói…', 'Loading plan details…')}</p>}
     </section>
-    <section className="rounded-xl border border-slate-200 bg-white p-5">
+    <div className="space-y-6">
+    <section className={CARD}>
       <h2 className="text-lg font-bold">{t('Lịch sử đơn', 'Order history')}</h2>
       {orders.length === 0 ? <p className="mt-3 text-sm text-slate-600">{t('Chưa có đơn thanh toán.', 'No payment orders yet.')}</p> : <ul className="mt-3 space-y-2">{orders.map((order) => <li key={order.id}>
         <button type="button" onClick={() => setSelected(order)} className={`min-h-12 w-full rounded-lg border px-3 py-2 text-left text-sm ${selected?.id === order.id ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200'}`}>
@@ -126,7 +133,7 @@ export function BillingPage() {
         </button>
       </li>)}</ul>}
     </section>
-    {selected && <section className="rounded-xl border border-slate-200 bg-white p-5 text-sm">
+    {selected && <section className={`${CARD} text-sm`}>
       <h2 className="text-lg font-bold">{t('Chi tiết đơn', 'Order details')} #{selected.orderCode}</h2>
       <p className="mt-2">{money(selected.amountVnd)} · Pro {selected.aiLimit} {t('lượt AI /', 'AI generations /')} {selected.periodDays} {t('ngày', 'days')}</p>
       <p className="mt-1">{t('Thanh toán:', 'Payment:')} <strong>{label(ORDER_STATUS_LABELS, selected.status)}</strong> · {t('Cấp quyền:', 'Entitlement:')} <strong>{label(GRANT_STATUS_LABELS, selected.grantStatus)}</strong></p>
@@ -147,5 +154,7 @@ export function BillingPage() {
           <button type="button" disabled={busy || refundReason.trim().length < 10} onClick={() => void requestRefund()} className="mt-2 min-h-11 rounded-lg border border-slate-300 px-4 font-semibold disabled:opacity-50">{t('Gửi yêu cầu', 'Submit request')}</button></>}
       </div>}
     </section>}
+    </div>
+    </div>
   </div>
 }
