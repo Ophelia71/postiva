@@ -1,6 +1,6 @@
 import { Clock } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import type { UserRole } from '../lib/auth'
+import { AUTH_ENDING_EVENT, type UserRole } from '../lib/auth'
 import {
   WARNING_MS,
   announceIdleLogout,
@@ -59,6 +59,9 @@ export function IdleSessionGuard({ role, onIdleLogout }: { role: UserRole; onIdl
 
     ACTIVITY_EVENTS.forEach((name) => window.addEventListener(name, onActivity, { passive: true, capture: true }))
     window.addEventListener('storage', onStorage)
+    // Closing the tab mid-sentence keeps the last words too, not just what autosave wrote a moment ago.
+    window.addEventListener('pagehide', saveDrafts)
+    window.addEventListener(AUTH_ENDING_EVENT, saveDrafts)
     // Timers pause while a laptop sleeps; checking on return signs out at once if the limit passed meanwhile.
     document.addEventListener('visibilitychange', check)
     window.addEventListener('focus', check)
@@ -68,6 +71,8 @@ export function IdleSessionGuard({ role, onIdleLogout }: { role: UserRole; onIdl
       done = true
       ACTIVITY_EVENTS.forEach((name) => window.removeEventListener(name, onActivity, { capture: true }))
       window.removeEventListener('storage', onStorage)
+      window.removeEventListener('pagehide', saveDrafts)
+      window.removeEventListener(AUTH_ENDING_EVENT, saveDrafts)
       document.removeEventListener('visibilitychange', check)
       window.removeEventListener('focus', check)
       window.clearInterval(timer)

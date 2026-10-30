@@ -149,9 +149,6 @@ function CreatePostForm({ onNewPost }: { onNewPost: () => void }) {
   const didInitializeTargets = useRef(false)
   const [restored] = useState(() => readDraft<CreateDraft>(CREATE_DRAFT_KEY))
   const [showRestored, setShowRestored] = useState(restored !== null)
-  useEffect(() => {
-    if (restored) clearDraft(CREATE_DRAFT_KEY)
-  }, [restored])
 
   const [selectedAccountIds, setSelectedAccountIds] = useState<Partial<Record<Platform, string>>>({})
   const [productName, setProductName] = useState(restored?.productName ?? '')
@@ -698,9 +695,9 @@ function CreatePostForm({ onNewPost }: { onNewPost: () => void }) {
       )}
       {showRestored && (
         <div role="status" className="mb-3 flex shrink-0 flex-col gap-2 rounded-[8px] border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 sm:flex-row sm:items-center sm:justify-between">
-          <p>Đã mở lại bài bạn đang viết dở trước khi bị đăng xuất.</p>
+          <p>Đã mở lại bài bạn đang viết dở.</p>
           <div className="flex shrink-0 gap-2">
-            <button type="button" onClick={onNewPost} className="min-h-11 rounded-full px-4 text-sm font-semibold text-slate-700 underline underline-offset-4 hover:bg-slate-50">Bỏ bài này, viết bài mới</button>
+            <button type="button" onClick={() => { clearDraft(CREATE_DRAFT_KEY); onNewPost() }} className="min-h-11 rounded-full px-4 text-sm font-semibold text-slate-700 underline underline-offset-4 hover:bg-slate-50">Bỏ bài này, viết bài mới</button>
             <button type="button" onClick={() => setShowRestored(false)} className="min-h-11 rounded-full border border-slate-200 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">Viết tiếp</button>
           </div>
         </div>

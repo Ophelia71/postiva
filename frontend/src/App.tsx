@@ -23,7 +23,7 @@ import { DemoBanner } from './components/DemoBanner'
 import { identifyWebAnalyticsUser, WebAnalyticsTracker } from './lib/webAnalytics'
 import { AdminShell } from './components/AdminShell'
 import { IdleSessionGuard } from './components/IdleSessionGuard'
-import { readIdleNotice, startIdleClock, storedSessionIsIdle } from './lib/idleSession'
+import { readIdleNotice, saveDrafts, startIdleClock, storedSessionIsIdle } from './lib/idleSession'
 import {
   AUTH_EXPIRED_EVENT,
   AUTH_STORAGE_KEY,
@@ -199,6 +199,8 @@ function SessionApp() {
 
   function handleLogout() {
     exitDemo()
+    // A post being written survives signing out; it is offered back on that screen next time.
+    saveDrafts()
     clearAuthSession()
     setSession(null)
   }

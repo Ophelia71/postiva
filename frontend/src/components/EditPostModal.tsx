@@ -1,6 +1,6 @@
 import { X } from 'lucide-react'
-import type { FormEvent } from 'react'
-import { useSessionWork } from '../lib/idleSession'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { readDraft, useSessionWork } from '../lib/idleSession'
 
 type EditPostModalProps = {
   title: string
@@ -9,6 +9,8 @@ type EditPostModalProps = {
   saving: boolean
   saveLabel: string
   savingLabel: string
+  /** Where unsaved edits are kept on this device; the parent clears it when the edit is saved or dropped. */
+  draftKey?: string
   onChange: (message: string) => void
   onClose: () => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
@@ -21,12 +23,23 @@ export function EditPostModal({
   saving,
   saveLabel,
   savingLabel,
+  draftKey,
   onChange,
   onClose,
   onSubmit,
 }: EditPostModalProps) {
-  // An open editor means a post is being written; saving is Postiva working.
-  useSessionWork({ busy: saving, unsaved: true })
+  const [original] = useState(message)
+  const [restored] = useState(() => (draftKey ? readDraft<string>(draftKey) : null))
+  const [showRestored, setShowRestored] = useState(false)
+  // Edits left unsaved last time (signed out, tab closed) come back once, when the editor opens.
+  const appliedRestore = useRef(false)
+  useEffect(() => {
+    if (appliedRestore.current || restored === null || restored === original) return
+    appliedRestore.current = true
+    onChange(restored)
+    setShowRestored(true)
+  }, [restored, original, onChange])
+  useSessionWork({ busy: saving, unsaved: message !== original, draftKey, draft: () => message })
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 px-4">
       <form onSubmit={onSubmit} className="w-full max-w-2xl rounded-2xl bg-white p-5 shadow-xl">
@@ -36,6 +49,12 @@ export function EditPostModal({
             <X size={17} />
           </button>
         </div>
+        {showRestored && (
+          <div role="status" className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+            <span>Đã mở lại nội dung bạn sửa dở.</span>
+            <button type="button" onClick={() => { onChange(original); setShowRestored(false) }} className="min-h-11 text-sm font-semibold underline underline-offset-4">Dùng nội dung cũ</button>
+          </div>
+        )}
         <textarea
           value={message}
           onChange={(event) => onChange(event.target.value)}

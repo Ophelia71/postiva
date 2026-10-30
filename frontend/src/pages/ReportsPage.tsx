@@ -8,6 +8,7 @@ import { getPaginatedItems, PaginationControls } from '../components/PaginationC
 import { PostDetailModal, PostThumbnail } from '../components/PostDetails'
 import { RepostPostModal } from '../components/RepostPostModal'
 import { api } from '../lib/api'
+import { clearDraft } from '../lib/idleSession'
 import { normalizeAppOverview, type AppOverview, type AppPost, type PostMetrics, useAppDataResource } from '../lib/appDataApi'
 import { addDays, toDateKey } from '../lib/dates'
 import { getErrorMessage } from '../lib/errors'
@@ -312,6 +313,7 @@ export function ReportsPage() {
           saving={isSavingEdit}
           saveLabel={t('Lưu thay đổi', 'Save changes')}
           savingLabel={t('Đang lưu...', 'Saving...')}
+          draftKey={`edit:${editingPost.id}`}
           onChange={setEditingMessage}
           onClose={closeEditPost}
           onSubmit={(event) => void submitEditPost(event)}
@@ -367,6 +369,8 @@ export function ReportsPage() {
   }
 
   function closeEditPost() {
+    // Saved or dropped on purpose: the kept copy of unsaved edits is no longer needed.
+    if (editingPost) clearDraft(`edit:${editingPost.id}`)
     setEditingPost(null)
     setEditingMessage('')
     setEditError('')

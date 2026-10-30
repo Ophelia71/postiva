@@ -6,7 +6,8 @@ import { getAuthSession, type UserRole } from './auth'
  * - while Postiva itself is working (AI writing, uploads, publishing) the clock is held, never signing out;
  * - while a post is being written and not yet saved, the limit grows to two hours;
  * - otherwise 30 minutes for shops, 15 for admins.
- * Unsaved posts are kept on this device at sign-out and offered back after the same user signs in again.
+ * Unsaved posts are kept on this device as they are typed (and once more at sign-out or when the tab closes),
+ * and offered back when the same user opens that screen again, whatever ended the session.
  */
 export const IDLE_LIMIT_MS: Record<UserRole, number> = { USER: 30 * 60_000, ADMIN: 15 * 60_000 }
 export const UNSAVED_LIMIT_MS = 2 * 60 * 60_000
@@ -21,13 +22,15 @@ const DRAFT_PREFIX = 'postiva.draft.'
 const HEARTBEAT_MS = 20_000
 const DRAFT_MAX_AGE_MS = 7 * 24 * 60 * 60_000
 const NOTICE_MAX_AGE_MS = 10 * 60_000
+// Typing pauses this long before the draft is written, so storage is not touched on every key.
+const AUTOSAVE_DELAY_MS = 800
 
 export type SessionWork = {
   /** Postiva is doing something for the user right now; never sign out meanwhile. */
   busy?: boolean
   /** The user has written something not saved yet. */
   unsaved?: boolean
-  /** Kept on this device if the session ends while unsaved, and handed back by takeDraft(key). */
+  /** Kept on this device while unsaved (removed once saved or emptied), and handed back by readDraft(key). */
   draftKey?: string
   draft?: () => unknown
 }
@@ -44,6 +47,18 @@ export function useSessionWork(work: SessionWork) {
   useEffect(() => () => {
     works.delete(id)
   }, [id])
+
+  const { draftKey } = work
+  const snapshot = draftKey && work.unsaved && work.draft ? JSON.stringify(work.draft()) : null
+  useEffect(() => {
+    if (!draftKey) return
+    if (snapshot === null) {
+      clearDraft(draftKey)
+      return
+    }
+    const timer = window.setTimeout(() => writeDraft(draftKey, snapshot), AUTOSAVE_DELAY_MS)
+    return () => window.clearTimeout(timer)
+  }, [draftKey, snapshot])
 }
 
 export function currentWork() {
@@ -125,13 +140,18 @@ export function saveDrafts() {
   let kept = 0
   works.forEach((work) => {
     if (!work.unsaved || !work.draftKey || !work.draft) return
-    write(draftStorageKey(userId, work.draftKey), JSON.stringify({ savedAt: Date.now(), value: work.draft() }))
+    writeDraft(work.draftKey, JSON.stringify(work.draft()))
     kept++
   })
   return kept
 }
 
-/** A draft kept for this user when their last session ended; call clearDraft once it is back on screen. */
+function writeDraft(key: string, valueJson: string) {
+  const userId = getAuthSession()?.userId
+  if (userId) write(draftStorageKey(userId, key), `{"savedAt":${Date.now()},"value":${valueJson}}`)
+}
+
+/** The draft this user left on that screen, if any; autosave keeps it current from then on. */
 export function readDraft<T>(key: string): T | null {
   const userId = getAuthSession()?.userId
   if (!userId) return null

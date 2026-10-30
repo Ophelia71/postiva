@@ -23,7 +23,7 @@ import {
 import { installDailyMock } from '../lib/dailyMock'
 import { isDemoActive } from '../lib/demo'
 import { getErrorMessage } from '../lib/errors'
-import { clearDraft, readDraft, useSessionWork } from '../lib/idleSession'
+import { readDraft, useSessionWork } from '../lib/idleSession'
 import { isShopProfileComplete, type ShopProfile } from '../lib/shopProfile'
 
 if (DAILY_USE_MOCK) installDailyMock(api)
@@ -869,9 +869,6 @@ function DayDetail({ plan, item, onChanged, onNotice, onPrev, onNext }: {
     shownOriginal.current = original
     setContent(original)
   }, [original])
-  useEffect(() => {
-    if (restoredText !== null) clearDraft(draftKey)
-  }, [restoredText, draftKey])
   useSessionWork({ busy, unsaved: editable && content !== original, draftKey, draft: () => content })
 
   async function patch(change: { scheduledTime?: string; skipped?: boolean }, success: string) {

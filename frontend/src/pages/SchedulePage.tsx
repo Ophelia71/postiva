@@ -7,6 +7,7 @@ import { DeletePostConfirmModal } from '../components/DeletePostConfirmModal'
 import { getPaginatedItems, PaginationControls } from '../components/PaginationControls'
 import { PostDetailModal, PostSummary } from '../components/PostDetails'
 import { api } from '../lib/api'
+import { clearDraft } from '../lib/idleSession'
 import { type AppPost, useAppDataResource } from '../lib/appDataApi'
 import { addDays, toDateKey } from '../lib/dates'
 import { getErrorMessage } from '../lib/errors'
@@ -312,6 +313,7 @@ export function SchedulePage() {
           saving={isSavingEdit}
           saveLabel={t('Lưu thay đổi')}
           savingLabel={t('Đang lưu...')}
+          draftKey={`edit:${editingPost.id}`}
           onChange={setEditingMessage}
           onClose={closeEditPost}
           onSubmit={(event) => void submitEditPost(event)}
@@ -352,6 +354,8 @@ export function SchedulePage() {
   }
 
   function closeEditPost() {
+    // Saved or dropped on purpose: the kept copy of unsaved edits is no longer needed.
+    if (editingPost) clearDraft(`edit:${editingPost.id}`)
     setEditingPost(null)
     setEditingMessage('')
     setEditError('')
