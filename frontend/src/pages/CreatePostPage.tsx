@@ -1000,9 +1000,9 @@ function CreatePostForm({ onNewPost }: { onNewPost: () => void }) {
           </div>
         </div>
 
-        {/* The preview stays beside the form; its photos are capped to the screen height so the whole post fits in view. */}
-        <div className="min-w-0">
-        <div className="xl:sticky xl:top-4">
+        {/* The preview fills its column; photos stay at most about 45% of the screen tall and the frame around them absorbs the rest. */}
+        <div className="min-w-0 xl:flex xl:flex-col">
+        <div className="xl:flex xl:flex-1 xl:flex-col">
           {/* On the content step the editor's own tabs pick the platform; a second row here would only repeat them. */}
           <div className={cn('mb-3 flex shrink-0 flex-wrap justify-center gap-2', step === 3 && 'hidden')}>
             {selectedPlatforms.map((platform) => (
@@ -1198,7 +1198,7 @@ function SocialFeedPreview({
 
   return (
     <article
-      className={cn('mx-auto flex w-full flex-col overflow-hidden rounded-[6px] bg-white shadow-xl shadow-slate-200/80', compact ? 'max-w-[360px]' : 'max-w-none')}
+      className={cn('mx-auto flex w-full flex-col overflow-hidden rounded-[6px] bg-white shadow-xl shadow-slate-200/80 xl:flex-1', compact ? 'max-w-[360px]' : 'max-w-none')}
     >
       <div aria-hidden className="h-1 shrink-0" style={{ backgroundColor: getPlatformColor(platform) }} />
       <header className="flex shrink-0 items-center gap-3 px-5 py-3">
@@ -1221,7 +1221,8 @@ function SocialFeedPreview({
         </div>
       )}
 
-      <div className={cn('relative overflow-hidden bg-slate-100', previewMedia.length < 2 && 'min-h-[430px]')}>
+      {/* On wide screens the photo area takes whatever height the form beside it needs, so both columns end level. */}
+      <div className={cn('relative overflow-hidden bg-slate-100 xl:flex xl:flex-1 xl:flex-col xl:justify-center', previewMedia.length < 2 && 'min-h-[430px] xl:min-h-[280px]')}>
         {previewMedia.length === 1 ? (
           <div className="flex w-full items-center justify-center">
             {previewMedia[0].type.startsWith('video/') ? (
@@ -1261,7 +1262,7 @@ function SocialFeedPreview({
             ))}
           </div>
         ) : (
-          <div className="flex h-full min-h-[430px] items-center justify-center">
+          <div className="flex h-full min-h-[430px] items-center justify-center xl:min-h-0 xl:flex-1">
             <EmptyMediaPlaceholder />
           </div>
         )}
