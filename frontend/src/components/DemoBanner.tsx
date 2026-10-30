@@ -50,7 +50,7 @@ export function DemoBanner({ onSignUp, onExit }: { onSignUp: () => void; onExit:
               </button>
             </div>
             <p className="text-sm text-[var(--muted-text)]">
-              Bản dùng thử chỉ có dữ liệu mẫu. Tài khoản miễn phí có 30 lượt AI mỗi kỳ, kết nối được Facebook Page, Instagram và Threads, và tự đăng bài đúng giờ.
+              Bản dùng thử chỉ có dữ liệu mẫu. Tài khoản miễn phí có 30 lượt AI dùng thử, kết nối được Facebook Page, Instagram và Threads, và tự đăng bài đúng giờ.
             </p>
             <div className="flex flex-wrap justify-end gap-3">
               <button type="button" onClick={() => setAction(null)} className="min-h-11 rounded-full border border-[var(--app-border)] px-5 text-sm font-bold hover:bg-[var(--soft-bg)]">Tiếp tục dùng thử</button>

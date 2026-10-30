@@ -16,15 +16,15 @@ const money = (amount: number) => new Intl.NumberFormat('vi-VN', { style: 'curre
  * plus the same details as text for anyone paying from another device. It disappears by itself
  * once the order is paid: the page shows it only while the order waits for money.
  */
-export function BankTransferPanel({ bank, orderCode, amountVnd, autoConfirm, busy, onCancel }: {
-  bank: BankAccount; orderCode: number; amountVnd: number; autoConfirm: boolean; busy: boolean; onCancel: () => void
+export function BankTransferPanel({ bank, orderCode, amountVnd, autoConfirm }: {
+  bank: BankAccount; orderCode: number; amountVnd: number; autoConfirm: boolean
 }) {
   const content = transferContent(orderCode)
   const qr = `https://img.vietqr.io/image/${encodeURIComponent(bank.bankCode)}-${encodeURIComponent(bank.accountNo)}-compact2.png`
     + `?amount=${amountVnd}&addInfo=${encodeURIComponent(content)}&accountName=${encodeURIComponent(bank.accountName)}`
 
-  return <div className="mt-4 grid gap-5 sm:grid-cols-[200px_minmax(0,1fr)]">
-    <img src={qr} alt={`Mã QR chuyển ${money(amountVnd)} tới ${bank.accountName}`} width={200} height={240} className="mx-auto w-[200px] rounded-lg border border-slate-200 bg-white" />
+  return <div className="grid gap-6 md:grid-cols-[260px_minmax(0,1fr)] md:items-start">
+    <img src={qr} alt={`Mã QR chuyển ${money(amountVnd)} tới ${bank.accountName}`} width={260} height={312} className="mx-auto w-[260px] rounded-xl border border-slate-200 bg-white" />
     <div className="min-w-0 space-y-3 text-sm">
       <p>Quét mã bằng app ngân hàng, hoặc chuyển khoản theo thông tin dưới đây. <strong>Ghi đúng nội dung</strong> để Postiva nhận ra đơn của bạn.</p>
       <dl className="divide-y divide-slate-100 rounded-lg border border-slate-200">
@@ -40,7 +40,6 @@ export function BankTransferPanel({ bank, orderCode, amountVnd, autoConfirm, bus
           ? 'Đang chờ tiền vào. Chuyển xong, mã này tự biến mất và gói Pro bật trong khoảng 1 phút.'
           : 'Đang chờ tiền vào. Mã này tự biến mất và gói Pro bật khi Postiva thấy tiền, thường trong vài giờ (giờ hành chính).'}
       </p>
-      <button type="button" disabled={busy} onClick={onCancel} className="min-h-11 rounded-lg border border-slate-300 px-4 font-semibold disabled:opacity-50">Hủy đơn này</button>
     </div>
   </div>
 }

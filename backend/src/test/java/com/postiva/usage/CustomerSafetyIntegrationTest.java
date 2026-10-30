@@ -314,6 +314,16 @@ class CustomerSafetyIntegrationTest {
         assertEquals("FREE", usage.summary(user.getId()).plan());
     }
 
+    @Test void freeIsAOneTimeTrialThatANewPeriodDoesNotRefill() {
+        User user = user();
+        limits.setFreeAiLimit(30);
+        assertEquals(30, usage.summary(user.getId()).limit());
+        jdbc.update("UPDATE subscription_periods SET ai_used = 25, starts_at = clock_timestamp() - INTERVAL '60 days', ends_at = clock_timestamp() - INTERVAL '30 days' WHERE user_id = ?", user.getId());
+        assertEquals(5, usage.summary(user.getId()).remaining(), "only what is left of the trial carries over");
+        jdbc.update("UPDATE subscription_periods SET ai_used = ai_limit, starts_at = starts_at - INTERVAL '60 days', ends_at = ends_at - INTERVAL '60 days' WHERE user_id = ?", user.getId());
+        assertEquals(0, usage.summary(user.getId()).limit(), "a used-up trial stays used up");
+    }
+
     @Test void activeProUsesSnapshotAndExpiryFallsBackToFree() {
         User user = user();
         jdbc.update("INSERT INTO subscription_periods (id,user_id,plan_code,starts_at,ends_at,ai_limit,source_reference) VALUES (?,?,'PRO',clock_timestamp()-INTERVAL '1 day',clock_timestamp()+INTERVAL '29 days',17,?)",

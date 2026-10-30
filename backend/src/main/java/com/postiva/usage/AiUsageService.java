@@ -140,9 +140,14 @@ public class AiUsageService {
                 Timestamp.class, userId, Timestamp.from(now));
         if (nextStart != null && nextStart.toInstant().isBefore(end)) end = nextStart.toInstant();
         UUID id = UUID.randomUUID();
+        // Free is a one-time trial: each new Free period only carries what is left of it, never a fresh allowance.
+        Integer usedOnFree = jdbc.queryForObject("""
+                SELECT coalesce(sum(ai_used), 0) FROM subscription_periods WHERE user_id = ? AND plan_code = 'FREE'
+                """, Integer.class, userId);
+        int allowance = Math.max(0, properties.getFreeAiLimit() - (usedOnFree == null ? 0 : usedOnFree));
         jdbc.update("INSERT INTO subscription_periods (id, user_id, plan_code, starts_at, ends_at, ai_limit) VALUES (?, ?, 'FREE', ?, ?, ?)",
-                id, userId, Timestamp.from(start), Timestamp.from(end), properties.getFreeAiLimit());
-        return new Summary(id, "FREE", start, end, properties.getFreeAiLimit(), 0, 0, properties.getFreeAiLimit());
+                id, userId, Timestamp.from(start), Timestamp.from(end), allowance);
+        return new Summary(id, "FREE", start, end, allowance, 0, 0, allowance);
     }
 
     private void recoverExpired(UUID userId, Instant now) {

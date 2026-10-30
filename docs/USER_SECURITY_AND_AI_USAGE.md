@@ -31,10 +31,10 @@ Khi chạy sau Nginx, cấu hình đúng IP/CIDR của proxy được kiểm so�
 
 Role `USER/ADMIN` độc lập với `FREE/PRO`. `subscription_periods` lưu thời điểm bắt đầu/kết thúc UTC, quota của kỳ, số đã dùng và số đang giữ chỗ. Quota là bản chụp theo kỳ, không tự giảm khi thay cấu hình.
 
-- Mặc định hiện tại: Free dùng thử 30 lượt/30 ngày; Pro 50 lượt/30 ngày. Đây là quota AI, chưa phải giá bán. `VerifiedSubscriptionPlanService` là provisioning nội bộ chỉ dành cho sự kiện thanh toán đã xác minh; chưa có checkout/webhook hay API tự mua Pro. Migration V11 nâng quota các kỳ Free còn hiệu lực, giữ nguyên số lượt đã dùng.
+- Mặc định hiện tại (chốt 30/10/2026): Free là **30 lượt dùng thử một lần cho cả tài khoản**, dùng hết không cấp lại; Pro 300 lượt mỗi 30 ngày, giá 149.000đ. Mua Pro qua chuyển khoản VietQR (admin hoặc SePay xác nhận) hoặc payOS, xem `BILLING_PAYOS.md`; admin cũng có thể cấp Pro. Migration V11 nâng quota các kỳ Free còn hiệu lực, giữ nguyên số lượt đã dùng.
 - Tài khoản mới có kỳ Free khi xác thực thành công. Tài khoản cũ chưa có kỳ bắt đầu Free khi lần đầu truy cập phần sử dụng/tạo AI; migration không sửa user hoặc tự cấp Pro.
 - Có kỳ Pro hợp lệ thì dùng quota đã ghi cho kỳ đó. Hết Pro và không có kỳ tiếp theo thì về Free. Mua/gia hạn Pro vẫn thuộc bước tích hợp thanh toán.
-- Kỳ Free kéo dài đúng 30 ngày liên tiếp. Bỏ qua kỳ đã trôi qua khi lâu không dùng; không cộng dồn quota. Thời điểm hết hạn là `now >= ends_at`.
+- Kỳ Free vẫn được ghi theo từng 30 ngày để giữ lịch sử, nhưng mỗi kỳ Free mới chỉ mang phần còn lại của 30 lượt dùng thử (30 trừ tổng số lượt đã dùng ở mọi kỳ Free trước). Hết lượt dùng thử thì chỉ còn cách lên Pro. Thời điểm hết hạn là `now >= ends_at`.
 - Hết lượt AI vẫn được chỉnh sửa, đăng và lên lịch bài của mình. Tài khoản LOCKED vẫn bị chặn nghiệp vụ.
 
 ## Tạo nội dung AI và lịch sử
