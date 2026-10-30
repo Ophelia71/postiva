@@ -10,9 +10,10 @@ export const DEMO_SIGNUP_EVENT = 'postiva:demo-signup'
 export const DEMO_SESSION: AuthSession = {
   token: 'demo',
   userId: 'demo-user',
-  email: 'dung-thu@postiva.vn',
-  // Greetings use the last word of the name ("Chào Khách").
-  fullName: 'Khách',
+  // The owner of the demo's shop, Mây Coffee, so the account matches everything else the visitor sees.
+  email: 'ngocmay@maycoffee.vn',
+  // Greetings use the last word of the name ("Chào Mây").
+  fullName: 'Trần Ngọc Mây',
   role: 'USER',
 }
 
