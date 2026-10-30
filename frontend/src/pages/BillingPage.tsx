@@ -177,7 +177,8 @@ export function BillingPage() {
     finally { setBusy(false) }
   }
 
-  const openOrder = orders.find((order) => order.status === 'PENDING' && (order.checkoutUrl || order.provider === 'BANK_TRANSFER'))
+  // Only a payOS link needs a way back to its page; a transfer's QR code is already shown in the order panel.
+  const openCheckout = orders.find((order) => order.status === 'PENDING' && order.checkoutUrl)?.checkoutUrl
   const bankTransfer = offer?.method === 'BANK_TRANSFER'
 
   return <div className="space-y-6">
@@ -217,10 +218,8 @@ export function BillingPage() {
             : t('Pro bật ngay khi nhận được tiền.', 'Pro turns on as soon as the money arrives.')} {t('Gia hạn sớm sẽ nối thêm kỳ mới, không mất ngày nào.', 'Renewing early adds a new period; no days are lost.')}</li>
         </ul>
         <div className="mt-5 flex flex-wrap items-center gap-3">
-          {openOrder
-            ? openOrder.checkoutUrl
-              ? <a href={openOrder.checkoutUrl} className="inline-flex min-h-11 items-center rounded-lg bg-indigo-600 px-5 font-semibold text-white">{t('Tiếp tục thanh toán', 'Continue payment')}</a>
-              : <button type="button" onClick={() => { setSelected(openOrder); window.setTimeout(() => document.getElementById('order-details')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100) }} className="min-h-11 rounded-lg bg-indigo-600 px-5 font-semibold text-white">{t('Xem thông tin chuyển khoản', 'Show transfer details')}</button>
+          {openCheckout
+            ? <a href={openCheckout} className="inline-flex min-h-11 items-center rounded-lg bg-indigo-600 px-5 font-semibold text-white">{t('Tiếp tục thanh toán', 'Continue payment')}</a>
             : <button type="button" disabled={!offer.available || busy} onClick={() => void buy()} className="min-h-11 rounded-lg bg-indigo-600 px-5 font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400">{busy ? t('Đang tạo đơn…', 'Creating the order…') : usage?.plan === 'PRO' ? t('Gia hạn Pro', 'Renew Pro') : t('Nâng lên Pro', 'Upgrade to Pro')}</button>}
           <Link to="/refund-policy" className="text-sm font-semibold text-indigo-700 underline underline-offset-4">{t('Chính sách hoàn tiền', 'Refund policy')}</Link>
         </div>
