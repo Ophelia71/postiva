@@ -205,11 +205,12 @@ class AdminHttpIntegrationTest {
         String newSecret = newSetup.body().path("data").path("secret").asText();
         assertEquals(200, request("POST", "/api/admin/security/mfa/confirm", restricted,
                 Map.of("code", totp.code(newSecret, Instant.now().getEpochSecond() / 30))).status());
+        // The fifth wrong code pauses sign-in, and says so (429) rather than blaming the password.
         for (int i = 0; i < 5; i++) {
-            assertEquals(401, request("POST", "/api/auth/login", null,
+            assertEquals(i < 4 ? 401 : 429, request("POST", "/api/auth/login", null,
                     Map.of("email", "admin-http@example.test", "password", ROTATED_PASSWORD, "mfaCode", "invalid-code")).status());
         }
-        assertEquals(401, request("POST", "/api/auth/login", null,
+        assertEquals(429, request("POST", "/api/auth/login", null,
                 Map.of("email", "admin-http@example.test", "password", ROTATED_PASSWORD, "mfaCode", "123456")).status());
         try (var connection = DriverManager.getConnection(URL, USERNAME, PASSWORD);
              var statement = connection.createStatement();
@@ -229,10 +230,10 @@ class AdminHttpIntegrationTest {
         admin.setRole(User.Role.ADMIN); admin.setPasswordHash(passwords.encode(FIXTURE_PASSWORD));
         users.save(admin);
         for (int attempt = 0; attempt < 5; attempt++) {
-            assertEquals(401,
+            assertEquals(attempt < 4 ? 401 : 429,
                     loginAttempt(admin.getEmail(), "not-the-password", "").status());
         }
-        assertEquals(401, loginAttempt(admin.getEmail(), FIXTURE_PASSWORD, "").status());
+        assertEquals(429, loginAttempt(admin.getEmail(), FIXTURE_PASSWORD, "").status());
     }
 
     @Test

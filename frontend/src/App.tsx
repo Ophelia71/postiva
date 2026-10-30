@@ -52,6 +52,7 @@ import { AppIndexRedirect, StartPage } from './pages/StartPage'
 import { type AppOverview, normalizeAppOverview, refreshChannelsOnOpen, useAppDataResource } from './lib/appDataApi'
 import { getOnboardingState } from './lib/onboarding'
 import { isShopProfileComplete, type ShopProfile } from './lib/shopProfile'
+import { readSidebarCollapsed, writeSidebarCollapsed } from './lib/sidebarState'
 
 const navItems = [
   { to: '/app/create', label: 'Tạo bài', icon: PenLine },
@@ -406,25 +407,6 @@ function AccountMenuPanel({ session, itemClass, demo, onLogout, onNavigate, logo
       </div>
     </>
   )
-}
-
-// Remembered per browser: a convenience only, so a blocked storage just means the menu starts open.
-const SIDEBAR_COLLAPSED_KEY = 'postiva.sidebar.collapsed'
-
-function readSidebarCollapsed() {
-  try {
-    return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1'
-  } catch {
-    return false
-  }
-}
-
-function writeSidebarCollapsed(collapsed: boolean) {
-  try {
-    window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? '1' : '0')
-  } catch {
-    // Ignored, see above.
-  }
 }
 
 function AppShell({ session, onLogout, onPasswordChanged, demo }: ShellProps) {

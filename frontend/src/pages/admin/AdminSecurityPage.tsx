@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { api } from '../../lib/api'
 import { getErrorMessage } from '../../lib/errors'
 import { Button } from '../../components/UiPrimitives'
@@ -41,16 +41,35 @@ export function AdminSecurityPage({ onPasswordChanged }: { onPasswordChanged: ()
     }
   }
 
-  return <section className="max-w-xl space-y-6">
-    <div><p className="text-xs font-bold uppercase tracking-[.18em] text-[var(--accent-strong)]">Tài khoản quản trị</p><h1 className="mt-2 text-3xl font-bold tracking-tight">Bảo mật tài khoản</h1><p className="mt-2 text-sm leading-6 text-[var(--muted-text)]">Đổi mật khẩu sẽ đăng xuất tất cả phiên hiện tại, kể cả trên thiết bị khác.</p></div>
-    <AdminMfaPanel onFinished={onPasswordChanged} />
-    <form onSubmit={(event) => void submit(event)} className="space-y-5 rounded-2xl border border-[var(--app-border)] bg-[var(--panel-bg)] p-5 sm:p-7" aria-busy={pending}>
-      <PasswordVisibilityField label="Mật khẩu hiện tại" value={currentPassword} onChange={setCurrentPassword} autoComplete="current-password" disabled={pending} />
-      <PasswordVisibilityField label="Mật khẩu mới" value={newPassword} onChange={setNewPassword} autoComplete="new-password" minLength={12} disabled={pending} />
-      <PasswordVisibilityField label="Nhập lại mật khẩu mới" value={confirmation} onChange={setConfirmation} autoComplete="new-password" minLength={12} disabled={pending} />
-      <p className="text-xs leading-5 text-[var(--muted-text)]">Dùng ít nhất 12 ký tự, tối đa 72 byte UTF-8 và khác mật khẩu hiện tại.</p>
-      {error && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{error}</p>}
-      <Button type="submit" disabled={pending}>{pending ? 'Đang đổi mật khẩu…' : 'Đổi mật khẩu'}</Button>
-    </form>
+  return <section>
+    <div className="mb-6"><h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Bảo mật tài khoản</h1><p className="mt-2 text-sm leading-6 text-[var(--muted-text)]">Xác thực hai bước và mật khẩu của tài khoản quản trị.</p></div>
+    {/* Same setting-row layout as the user's security page: no half-empty columns on a wide screen. */}
+    <div className="divide-y divide-[var(--app-border)] rounded-xl border border-[var(--app-border)] bg-[var(--panel-bg)] px-5 sm:px-8">
+      <SettingRow title="Xác thực hai bước" description="Mỗi lần đăng nhập cần thêm mã 6 số từ ứng dụng xác thực trên điện thoại. Giữ mã khôi phục ở nơi an toàn để dùng khi mất điện thoại.">
+        <AdminMfaPanel onFinished={onPasswordChanged} />
+      </SettingRow>
+      <SettingRow title="Đổi mật khẩu" description="Sau khi đổi, mọi phiên đăng nhập sẽ bị đăng xuất, kể cả trên thiết bị khác.">
+        <form onSubmit={(event) => void submit(event)} className="space-y-4" aria-busy={pending}>
+          <PasswordVisibilityField label="Mật khẩu hiện tại" value={currentPassword} onChange={setCurrentPassword} autoComplete="current-password" disabled={pending} />
+          <PasswordVisibilityField label="Mật khẩu mới" value={newPassword} onChange={setNewPassword} autoComplete="new-password" minLength={12} disabled={pending} />
+          <PasswordVisibilityField label="Nhập lại mật khẩu mới" value={confirmation} onChange={setConfirmation} autoComplete="new-password" minLength={12} disabled={pending} />
+          <p className="text-xs leading-5 text-[var(--muted-text)]">Ít nhất 12 ký tự và khác mật khẩu hiện tại.</p>
+          {error && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{error}</p>}
+          <Button type="submit" disabled={pending}>{pending ? 'Đang đổi mật khẩu…' : 'Đổi mật khẩu'}</Button>
+        </form>
+      </SettingRow>
+    </div>
   </section>
+}
+
+function SettingRow({ title, description, children }: { title: string; description: string; children: ReactNode }) {
+  return (
+    <div className="grid gap-4 py-6 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)] lg:gap-12">
+      <div>
+        <h2 className="text-base font-bold">{title}</h2>
+        <p className="mt-1 text-sm leading-6 text-[var(--muted-text)]">{description}</p>
+      </div>
+      <div className="max-w-xl">{children}</div>
+    </div>
+  )
 }

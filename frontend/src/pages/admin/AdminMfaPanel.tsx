@@ -77,8 +77,8 @@ export function AdminMfaPanel({ onFinished }: { onFinished: () => void }) {
     URL.revokeObjectURL(url)
   }
 
-  return <section className="space-y-4 rounded-2xl border border-[var(--app-border)] bg-[var(--panel-bg)] p-5 sm:p-7" aria-busy={pending}>
-    <h2 className="text-xl font-bold">Xác thực hai bước (MFA)</h2>
+  // The security page's setting row supplies the title and the frame.
+  return <div className="space-y-4" aria-busy={pending}>
     {error && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{error}</p>}
     {codes.length > 0 ? <dialog ref={recoveryDialog} aria-labelledby="mfa-recovery-title" onCancel={(event) => event.preventDefault()} className="m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-lg space-y-4 overflow-y-auto rounded-2xl border border-[var(--app-border)] bg-[var(--panel-bg)] p-6 text-[var(--app-text)] shadow-xl">
       <h3 id="mfa-recovery-title" className="text-xl font-bold">Lưu mã khôi phục</h3>
@@ -91,7 +91,7 @@ export function AdminMfaPanel({ onFinished }: { onFinished: () => void }) {
     </dialog> : status.loading ? <p role="status">Đang tải trạng thái MFA…</p>
       : status.error ? <><p role="alert" className="text-sm text-rose-800">{status.error}</p><Button variant="secondary" type="button" onClick={status.reload}>Thử lại</Button></>
       : status.data && <>
-        <p className="text-sm leading-6">{status.data.enabled ? `MFA đang bật. Còn ${status.data.recoveryCodesRemaining} mã khôi phục.` : 'Admin cần bật MFA trước khi quản lý người dùng. Quét mã QR bằng ứng dụng xác thực, rồi nhập mã để hoàn tất.'}</p>
+        <p className="text-sm leading-6">{status.data.enabled ? `Đang bật. Còn ${status.data.recoveryCodesRemaining} mã khôi phục.` : 'Bạn cần bật xác thực hai bước trước khi dùng các trang quản trị khác.'}</p>
         {!status.data.configured && <p role="alert" className="text-sm text-rose-800">Máy chủ chưa có khóa mã hóa MFA. Liên hệ người vận hành để cấu hình.</p>}
         {setup ? <form onSubmit={(event) => submit(event, 'confirm')} className="space-y-4">
           <p className="text-sm leading-6">Trong ứng dụng Authenticator, chọn thêm tài khoản bằng cách quét mã QR. Mã này chứa khóa bí mật, không chia sẻ hoặc chụp ảnh.</p>
@@ -110,7 +110,7 @@ export function AdminMfaPanel({ onFinished }: { onFinished: () => void }) {
           </div>}
         </form>}
       </>}
-  </section>
+  </div>
 }
 
 function MfaQrCode({ uri }: { uri: string }) {

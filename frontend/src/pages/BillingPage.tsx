@@ -7,6 +7,7 @@ const CARD = 'rounded-2xl border border-[var(--app-border)] bg-[var(--panel-bg)]
 
 type Offer = { available: boolean; amountVnd: number; aiLimit: number; periodDays: number; refundPolicyUrl: string | null }
 type Order = { id: string; orderCode: number; amountVnd: number; aiLimit: number; periodDays: number; status: string; grantStatus: string; checkoutUrl: string | null; expiresAt: string; createdAt: string; paidAt: string | null }
+type Usage = { plan: 'FREE' | 'PRO'; endsAt: string; limit: number; remaining: number }
 type Refund = { id: string; orderId: string; amountVnd: number; status: string; reason: string; createdAt: string; providerRef: string | null }
 
 const money = (amount: number) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount)
@@ -28,6 +29,7 @@ const label = (labels: Record<string, string>, value: string) => labels[value] ?
 export function BillingPage() {
   const { t } = usePreferences()
   const [offer, setOffer] = useState<Offer | null>(null)
+  const [usage, setUsage] = useState<Usage | null>(null)
   const [orders, setOrders] = useState<Order[]>([])
   const [selected, setSelected] = useState<Order | null>(null)
   const [refunds, setRefunds] = useState<Refund[]>([])
@@ -45,6 +47,8 @@ export function BillingPage() {
     ])
     setOffer(offerResponse.data)
     setOrders(ordersResponse.data)
+    // The plan line is a convenience; the page still works if it fails to load.
+    void api.get<Usage>('/usage').then((response) => setUsage(response.data)).catch(() => undefined)
     const returnedCode = new URLSearchParams(window.location.search).get('orderCode')
     setSelected((current) => ordersResponse.data.find((item) => item.id === current?.id)
       ?? ordersResponse.data.find((item) => String(item.orderCode) === returnedCode)
@@ -115,6 +119,9 @@ export function BillingPage() {
     <div className="grid gap-6 lg:grid-cols-2">
     <section className={CARD}>
       <h2 className="text-lg font-bold">Pro</h2>
+      {usage && <p className="mt-2 text-sm">{usage.plan === 'PRO'
+        ? <>{t('Bạn đang dùng', 'You are on')} <strong>Pro</strong> {t('đến', 'until')} {dateTime(usage.endsAt)} · {t('còn', '')} {usage.remaining}/{usage.limit} {t('lượt AI', 'AI generations left')}</>
+        : <>{t('Bạn đang dùng', 'You are on')} <strong>Free</strong> · {t('còn', '')} {usage.remaining}/{usage.limit} {t('lượt AI kỳ này', 'AI generations left this period')}</>}</p>}
       {offer ? <>
         <p className="mt-2 text-sm">{offer.aiLimit} {t('lượt tạo AI trong', 'AI generations over')} {offer.periodDays} {t('ngày', 'days')} · {offer.amountVnd > 0 ? money(offer.amountVnd) : t('Giá chưa công bố', 'Price not published')}</p>
         <p className="mt-2 text-sm text-slate-600">{t('Gia hạn khi kỳ Pro còn hiệu lực sẽ nối thêm kỳ mới; lượt của kỳ hiện tại không được đặt lại sớm.', 'Renewing an active Pro plan adds a future period; the current quota is not reset early.')}</p>

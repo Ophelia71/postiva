@@ -4,6 +4,8 @@ import com.postiva.admin.dto.AdminAuditResponse;
 import com.postiva.admin.dto.AdminPageResponse;
 import com.postiva.admin.dto.AdminUserResponse;
 import com.postiva.admin.dto.ChangeUserStatusRequest;
+import com.postiva.admin.dto.GrantProRequest;
+import com.postiva.admin.service.AdminPlanService;
 import com.postiva.admin.service.AdminUserService;
 import com.postiva.common.ApiResponse;
 import com.postiva.user.entity.User;
@@ -25,10 +27,12 @@ import java.util.UUID;
 public class AdminUserController {
     private final AdminUserService users;
     private final UserAccountStatusService statuses;
+    private final AdminPlanService plans;
 
-    public AdminUserController(AdminUserService users, UserAccountStatusService statuses) {
+    public AdminUserController(AdminUserService users, UserAccountStatusService statuses, AdminPlanService plans) {
         this.users = users;
         this.statuses = statuses;
+        this.plans = plans;
     }
 
     @GetMapping
@@ -62,5 +66,22 @@ public class AdminUserController {
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
         return ApiResponse.ok(users.audit(userId, page, size));
+    }
+
+    @GetMapping("/{userId}/plan")
+    public ApiResponse<AdminPlanService.Plan> plan(@PathVariable UUID userId) {
+        return ApiResponse.ok(plans.plan(userId));
+    }
+
+    @PostMapping("/{userId}/pro-grants")
+    public ApiResponse<AdminPlanService.Plan> grantPro(@PathVariable UUID userId,
+                                                       @Valid @RequestBody GrantProRequest request) {
+        return ApiResponse.ok(plans.grantPro(userId, request.days(), request.reason()));
+    }
+
+    @PostMapping("/{userId}/pro-revocations")
+    public ApiResponse<AdminPlanService.Plan> revokePro(@PathVariable UUID userId,
+                                                        @Valid @RequestBody ChangeUserStatusRequest request) {
+        return ApiResponse.ok(plans.revokePro(userId, request.reason()));
     }
 }

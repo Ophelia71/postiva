@@ -86,8 +86,9 @@ export function AdminBillingPage() {
     <section className="rounded-xl border border-slate-200 bg-white p-5">
       <h2 className="text-lg font-bold">Yêu cầu hoàn tiền</h2>
       <p className="mt-2 text-sm text-slate-600">Phê duyệt → xử lý ở ngân hàng/cổng → kiểm tra tiền đã hoàn → nhập mã chứng từ để xác nhận. Không dùng nút xác nhận trước khi tiền đã hoàn.</p>
-      <div className="mt-4 grid gap-3 sm:grid-cols-2"><label className="text-sm">Lý do / ghi chú vận hành<textarea value={reason} onChange={(event) => setReason(event.target.value)} maxLength={1000} rows={2} className="mt-1 w-full rounded-lg border border-slate-300 p-2" /></label>
-        <label className="text-sm">Mã chứng từ hoàn tiền<input value={providerReference} onChange={(event) => setProviderReference(event.target.value)} maxLength={160} className="mt-1 min-h-11 w-full rounded-lg border border-slate-300 px-2" /></label></div>
+      {/* Both boxes take the row's height, so the two fields line up. */}
+      <div className="mt-4 grid gap-3 sm:grid-cols-2"><label className="flex flex-col text-sm">Lý do / ghi chú vận hành<textarea value={reason} onChange={(event) => setReason(event.target.value)} maxLength={1000} rows={2} className="mt-1 w-full flex-1 resize-none rounded-lg border border-slate-300 p-2" /></label>
+        <label className="flex flex-col text-sm">Mã chứng từ hoàn tiền<input value={providerReference} onChange={(event) => setProviderReference(event.target.value)} maxLength={160} className="mt-1 min-h-11 w-full flex-1 rounded-lg border border-slate-300 px-2" /></label></div>
       {refunds.length === 0 ? <p className="mt-3 text-sm">Chưa có yêu cầu.</p> : <ul className="mt-4 space-y-3">{refunds.map((refund) => <li key={refund.id} className="rounded-lg border border-slate-200 p-3 text-sm">
         <p className="font-semibold">{money(refund.amountVnd)} · {refund.status} · đơn {orders.find((order) => order.id === refund.orderId)?.orderCode ?? refund.orderId}</p>
         <p className="mt-1">{refund.reason}</p>

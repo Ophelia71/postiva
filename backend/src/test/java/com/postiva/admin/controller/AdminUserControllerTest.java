@@ -36,6 +36,7 @@ class AdminUserControllerTest {
     @Autowired private MockMvc mvc;
     @MockBean private AdminUserService users;
     @MockBean private UserAccountStatusService statuses;
+    @MockBean private com.postiva.admin.service.AdminPlanService plans;
     @MockBean private JwtService tokens;
     @MockBean private CustomUserDetailsService details;
 

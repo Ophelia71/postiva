@@ -7,6 +7,7 @@ import { useAdminResource } from '../../hooks/useAdminResource'
 import { adminDate, adminPageNumber, type AdminAudit, type AdminPage, type AdminUser } from '../../lib/adminApi'
 import { api } from '../../lib/api'
 import { getErrorMessage } from '../../lib/errors'
+import { AdminUserPlanSection } from './AdminUserPlanSection'
 
 export function AdminUserDetailsPage() {
   const { userId } = useParams()
@@ -49,7 +50,8 @@ export function AdminUserDetailsPage() {
         </Button>
         </div>
       </header>
-      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.3fr)]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.3fr)]">
+        <div className="min-w-0 space-y-6">
         <section className="min-w-0 rounded-2xl border border-[var(--app-border)] bg-[var(--panel-bg)] p-5 sm:p-6">
           <h2 className="mb-6 font-semibold">Thông tin tài khoản</h2>
           <dl className="space-y-5 text-sm">
@@ -66,6 +68,8 @@ export function AdminUserDetailsPage() {
             <p className="text-xs [overflow-wrap:anywhere]">Mã quản trị viên: {user.lockedBy}</p>
           </div>}
         </section>
+        <AdminUserPlanSection userId={user.id} locked={user.status === 'LOCKED'} />
+        </div>
         <section className="min-w-0 overflow-hidden rounded-2xl border border-[var(--app-border)] bg-[var(--panel-bg)]">
           <h2 className="flex items-center gap-2 border-b border-[var(--app-border)] p-5 font-semibold"><History size={18} aria-hidden="true" />Nhật ký quản trị</h2>
           {audit.loading ? <AdminLoading /> : audit.error ? <div className="p-5"><AdminError message={audit.error} onRetry={audit.reload} /></div> : audit.data && <>
