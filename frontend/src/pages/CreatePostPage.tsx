@@ -999,8 +999,8 @@ function CreatePostForm({ onNewPost }: { onNewPost: () => void }) {
           </div>
         </div>
 
-        {/* The preview keeps the platform's proportions and stays beside the form, scrolling on its own when taller than the screen. */}
-        <div className="min-w-0 xl:sticky xl:top-4 xl:max-h-[calc(100svh-2rem)] xl:overflow-y-auto xl:pr-1">
+        {/* The preview stays beside the form; its photos are capped to the screen height so the whole post fits in view. */}
+        <div className="min-w-0 xl:sticky xl:top-4">
           {/* On the content step the editor's own tabs pick the platform; a second row here would only repeat them. */}
           <div className={cn('mb-3 flex shrink-0 flex-wrap justify-center gap-2', step === 3 && 'hidden')}>
             {selectedPlatforms.map((platform) => (
@@ -1195,7 +1195,7 @@ function SocialFeedPreview({
 
   return (
     <article
-      className={cn('mx-auto flex w-full flex-col overflow-hidden rounded-[6px] bg-white shadow-xl shadow-slate-200/80', compact ? 'max-w-[360px]' : 'max-w-[620px]')}
+      className={cn('mx-auto flex w-full flex-col overflow-hidden rounded-[6px] bg-white shadow-xl shadow-slate-200/80', compact ? 'max-w-[360px]' : 'max-w-none')}
     >
       <div aria-hidden className="h-1 shrink-0" style={{ backgroundColor: getPlatformColor(platform) }} />
       <header className="flex shrink-0 items-center gap-3 px-5 py-3">
@@ -1222,20 +1222,21 @@ function SocialFeedPreview({
         {previewMedia.length === 1 ? (
           <div className="flex w-full items-center justify-center">
             {previewMedia[0].type.startsWith('video/') ? (
-              <ProtectedMediaVideo src={previewMedia[0].url} controls className="max-h-[560px] w-full bg-slate-950 object-contain" />
+              <ProtectedMediaVideo src={previewMedia[0].url} controls className="max-h-[55svh] w-full bg-slate-950 object-contain" />
             ) : (
               <ProtectedMediaImage
                 src={previewMedia[0].url}
                 alt={`${PLATFORM_LABELS[platform]} post media preview 1`}
-                className="h-auto max-h-[560px] w-full object-contain"
+                className="h-auto max-h-[55svh] w-full object-contain"
               />
             )}
           </div>
         ) : previewMedia.length > 1 ? (
           // Several photos share a square frame like the platforms' collage; each shows whole, never cropped.
           <div className={cn(
-            'grid w-full grid-cols-2 gap-0.5',
-            visiblePreviewMedia.length === 2 ? 'aspect-[4/3] grid-rows-1' : 'aspect-square grid-rows-2',
+            // Keeps its shape and shrinks to fit the screen height (55svh tall at most), centred in the post.
+            'mx-auto grid w-full grid-cols-2 gap-0.5',
+            visiblePreviewMedia.length === 2 ? 'aspect-[4/3] max-w-[73svh] grid-rows-1' : 'aspect-square max-w-[55svh] grid-rows-2',
           )}>
             {visiblePreviewMedia.map((media, index) => (
               <div key={media.url + '-' + index} className={cn('relative min-h-0 overflow-hidden bg-slate-100', visiblePreviewMedia.length === 3 && index === 0 && 'col-span-2')}>

@@ -529,7 +529,8 @@ function AppShell({ session, onLogout, onPasswordChanged, demo }: ShellProps) {
       </header>
 
       <main className={`pb-24 transition-[padding] duration-200 lg:pb-0 ${collapsed ? 'lg:pl-[76px]' : 'lg:pl-[272px]'}`}>
-        <div className="mx-auto min-h-svh max-w-[1320px] px-4 py-5 sm:px-6 lg:px-10 lg:py-8">
+        {/* Wide enough to use the room freed by collapsing the sidebar, capped only on very large screens. */}
+        <div className="mx-auto min-h-svh max-w-[1920px] px-4 py-5 sm:px-6 lg:px-10 lg:py-8">
           {demo && <DemoBanner onSignUp={demo.onSignUp} onExit={demo.onExit} />}
           {!isOnboardingPage && <ShopProfileReminder />}
           <Routes>
