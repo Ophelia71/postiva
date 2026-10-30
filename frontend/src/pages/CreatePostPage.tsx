@@ -32,6 +32,7 @@ import { formatFileSize } from '../lib/format'
 import { resolveMediaUrl } from '../lib/media'
 import { usePreferences } from '../lib/preferences'
 import { clearDraft, readDraft, useSessionWork } from '../lib/idleSession'
+import { isDemoActive } from '../lib/demo'
 import axios from 'axios'
 import { UsagePanel } from '../components/UsagePanel'
 
@@ -167,6 +168,11 @@ function CreatePostForm({ onNewPost }: { onNewPost: () => void }) {
     if (profile.targetCustomer) setTargetAudience((current) => current || profile.targetCustomer || '')
     if (profile.highlights) setHighlights((current) => current || profile.highlights || '')
     if (profile.priceRange) setPrice((current) => current || profile.priceRange || '')
+    // The demo starts with a real-looking product, so "Tự gen bài" works on the first click.
+    if (isDemoActive()) {
+      setProductName((current) => current || 'Cà phê muối')
+      setProductDescription((current) => current || 'Cà phê phin đậm vị, phủ lớp kem muối béo mặn đánh mới mỗi sáng. Ly 500ml, có ít đá hoặc không đá.')
+    }
   }, [shopProfile.data])
   const [selectedPlatforms, setSelectedPlatforms] = useState<Platform[]>([])
   const [sourceContent, setSourceContent] = useState(restored?.sourceContent ?? '')

@@ -10,6 +10,34 @@ import type { CreateWeeklyPlanRequest, PerformanceSummary, WeeklyPlan, WeeklyPla
  */
 
 const PLATFORM_BY_BADGE: Record<string, string> = { Facebook: 'FACEBOOK', Instagram: 'INSTAGRAM', Threads: 'THREADS' }
+// What each kind of post says, in a shop owner's own words; {p} is the product, {h} what makes it good.
+const DRAFTS: Record<string, string> = {
+  'Giới thiệu sản phẩm': '{P} ở shop có gì khác? {H}. Ghé thử một lần, hoặc nhắn tin để được giao tận nơi nhé!',
+  'Hướng dẫn': 'Mẹo nhỏ để thưởng thức {p} trọn vị nhất: dùng ngay khi vừa nhận và đừng ngại hỏi shop cách bảo quản. Lưu bài này lại để lần sau khỏi quên nhé!',
+  Feedback: '"Thử một lần là ưng ngay" — cảm ơn bạn khách đã gửi lời khen cho {p}. Điều khách thích nhất: {h}.',
+  'Hậu trường': 'Một ngày ở shop bắt đầu từ sáng sớm: chuẩn bị {p} thật kỹ và kiểm tra từng đơn trước khi giao. Bạn muốn xem khâu nào kỹ hơn? Bình luận cho shop biết nhé!',
+  'Ưu đãi': 'Cuối tuần này: mua 2 phần {p} tặng 1 phần quà nhỏ. Số lượng có hạn, nhắn shop ngay để giữ phần nhé!',
+  'Hỏi đáp': 'Hỏi nhanh – đáp gọn về {p}. Giao bao lâu? Trong ngày. Có gì đặc biệt? {H}. Còn thắc mắc, bình luận để shop trả lời nha!',
+  'Kêu gọi mua': '{P} tuần này sắp hết. Ai còn đang phân vân thì nhắn shop ngay hôm nay để giữ hàng nhé!',
+}
+
+function draftFor(postType: string | null | undefined, productName: string, highlights: string) {
+  // A shop's product list ("Cà phê muối, bạc xỉu, …") reads best as its first item.
+  const product = (productName.split(/[,;\n]/)[0] || 'sản phẩm').trim()
+  const good = (highlights.split(/[\n]/)[0] || 'chất lượng ổn định, giao nhanh').trim().replace(/[.!]+$/, '')
+  const lowerFirst = (text: string) => text.charAt(0).toLowerCase() + text.slice(1)
+  const upperFirst = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
+  return (DRAFTS[postType ?? ''] ?? DRAFTS['Giới thiệu sản phẩm'])
+    .replace('{P}', upperFirst(product)).replace('{p}', lowerFirst(product))
+    .replace('{H}', upperFirst(good)).replace('{h}', lowerFirst(good))
+}
+
+function hashtagFor(productName: string) {
+  const first = (productName.split(/[,;\n]/)[0] || '').trim()
+  const tag = first.split(/\s+/).filter(Boolean).map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join('')
+  return tag ? [`#${tag}`] : []
+}
+
 const IDEAS = [
   { postType: 'Giới thiệu sản phẩm', topic: 'Câu chuyện đằng sau sản phẩm', reason: 'Mở đầu tuần bằng câu chuyện giúp khách nhớ đến shop.' },
   { postType: 'Hướng dẫn', topic: 'Mẹo dùng sản phẩm hiệu quả', reason: 'Bài hữu ích hay được lưu và chia sẻ, tăng độ phủ tự nhiên.' },
@@ -29,8 +57,8 @@ function sampleInsights(): PerformanceSummary {
     warning: null,
     averageEngagement: 24.5,
     topPosts: [
-      { excerpt: 'Video pha chế ly cà phê muối đầu tiên của ngày #caphe', publishedAt: null, mediaType: 'VIDEO', engagement: 86, likes: 52, comments: 9, shares: 5, views: null },
-      { excerpt: 'Khách quen review: "uống một lần là ghiền" #feedback', publishedAt: null, mediaType: 'IMAGE', engagement: 61, likes: 40, comments: 6, shares: 3, views: null },
+      { excerpt: 'Video pha ly cà phê muối đầu tiên của ngày ở Mây #CaPheMuoi', publishedAt: null, mediaType: 'VIDEO', engagement: 86, likes: 52, comments: 9, shares: 5, views: null },
+      { excerpt: 'Chị Mai review: "uống một lần là ghiền" #MayCoffee', publishedAt: null, mediaType: 'IMAGE', engagement: 61, likes: 40, comments: 6, shares: 3, views: null },
     ],
     weakPosts: [],
     bestWeekdays: [5, 6, 3],
@@ -38,7 +66,7 @@ function sampleInsights(): PerformanceSummary {
     engagementByMediaType: { VIDEO: 52.3, IMAGE: 28.1, TEXT: 9.4 },
     topPostAverageLength: 320,
     otherPostAverageLength: 140,
-    topHashtags: ['#caphe', '#feedback'],
+    topHashtags: ['#CaPheMuoi', '#MayCoffee'],
     postsPerWeek: 2.5,
     insights: [
       'Bài video đạt tương tác gấp 5.6 lần bài chỉ có chữ.',
@@ -105,12 +133,12 @@ function simulateDrafting(planId: string, request: CreateWeeklyPlanRequest) {
               [current.platform ?? 'FACEBOOK']: {
                 title: entry.topic ?? '',
                 [current.platform === 'INSTAGRAM' ? 'caption' : 'content']:
-                  `${entry.topic}: ${request.productName} — ${request.highlights}. Nhắn shop để đặt ngay nhé!`,
+                  draftFor(entry.postType, request.productName ?? '', request.highlights ?? ''),
               },
             },
-            hashtags: ['#postiva', '#daily'],
+            hashtags: hashtagFor(request.productName ?? ''),
             cta: 'Nhắn shop để đặt ngay',
-            imageSuggestion: 'Ảnh sản phẩm dưới ánh sáng tự nhiên',
+            imageSuggestion: 'Ảnh sản phẩm chụp gần, ánh sáng tự nhiên',
             imageUrl: null,
           },
         }),

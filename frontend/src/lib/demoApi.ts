@@ -10,19 +10,22 @@ import { getAuthSession } from './auth'
  * an account, upload or pay asks the visitor to sign up instead. Nothing here reaches the backend.
  */
 
+// One believable shop runs through the whole demo: its channels, posts, profile and AI drafts.
+const SHOP = 'Mây Coffee'
+
 const CHANNELS: AppChannel[] = [
-  { id: 'demo-facebook', accountId: 'demo-page', name: 'Tiệm Cà Phê Muối (mẫu)', type: 'Facebook Page', badge: 'Facebook', color: '#1877F2', active: true },
-  { id: 'demo-instagram', accountId: 'demo-ig', name: '@caphemuoi.mau', type: 'Instagram Business', badge: 'Instagram', color: '#E1306C', active: true },
+  { id: 'demo-facebook', accountId: 'demo-page', name: SHOP, type: 'Facebook Page', badge: 'Facebook', color: '#1877F2', active: true },
+  { id: 'demo-instagram', accountId: 'demo-ig', name: '@maycoffee.saigon', type: 'Instagram Business', badge: 'Instagram', color: '#E1306C', active: true },
 ]
 
 const SAMPLE_POSTS: Array<{ days: number; hour: number; platform: string; status: string; content: string }> = [
-  { days: -9, hour: 20, platform: 'Facebook', status: 'Published', content: 'Ly cà phê muối đầu tiên của ngày. Lớp kem mặn béo hòa cùng cà phê phin đậm vị. Ghé tiệm hoặc nhắn tin để được giao trong 30 phút nhé!' },
-  { days: -7, hour: 9, platform: 'Facebook', status: 'Published', content: 'Tiệm mở cửa từ 7h sáng. Hôm nay có thêm bánh quy bơ mới ra lò' },
-  { days: -5, hour: 20, platform: 'Instagram', status: 'Published', content: 'Behind the scenes: 5 bước pha một ly cà phê muối chuẩn vị. Bạn đoán bước nào khó nhất? #caphemuoi #hauruong' },
-  { days: -3, hour: 19, platform: 'Facebook', status: 'Published', content: '“Uống một lần là ghiền” — cảm ơn chị Mai đã review cho tiệm! Mua 2 ly tặng 1 bánh quy đến hết Chủ nhật!' },
-  { days: -2, hour: 12, platform: 'Facebook', status: 'Failed', content: 'Combo trưa văn phòng: cà phê muối + bánh mì chỉ 49.000đ. (Bài này lỗi vì kết nối kênh đã hết hạn, bấm Thử lại sau khi kết nối lại kênh.)' },
-  { days: 1, hour: 20, platform: 'Facebook', status: 'Scheduled', content: 'Tối nay tiệm mở đến 22h. Ghé chill với ly cà phê muối nhé' },
-  { days: 3, hour: 19, platform: 'Instagram', status: 'Scheduled', content: 'Cuối tuần này: mua 2 tặng 1 bánh quy. Lưu bài để không quên nha! #caphemuoi' },
+  { days: -9, hour: 20, platform: 'Facebook', status: 'Published', content: 'Ly cà phê muối đầu tiên của ngày ở Mây: lớp kem muối béo mặn phủ trên cà phê phin đậm vị. Ghé quán hoặc nhắn tin, Mây giao trong 30 phút nhé! #MayCoffee #CaPheMuoi' },
+  { days: -7, hour: 9, platform: 'Facebook', status: 'Published', content: 'Mây mở cửa từ 7h sáng nay. Mẻ bánh quy bơ đầu tiên vừa ra lò, ăn kèm bạc xỉu là hết ý. Hẹn bạn ở góc quen nha!' },
+  { days: -5, hour: 20, platform: 'Instagram', status: 'Published', content: 'Hậu trường: 5 bước để có một ly cà phê muối chuẩn vị Mây. Bạn đoán bước nào khó nhất? #MayCoffee #CaPheMuoi' },
+  { days: -3, hour: 19, platform: 'Facebook', status: 'Published', content: '"Uống một lần là ghiền" — cảm ơn chị Mai đã ghé và để lại lời khen cho Mây. Từ nay đến hết Chủ nhật: mua 2 ly tặng 1 bánh quy bơ!' },
+  { days: -2, hour: 12, platform: 'Facebook', status: 'Failed', content: 'Combo trưa văn phòng: cà phê muối + bánh mì chảo chỉ 49.000đ, giao tận nơi quanh Quận 3. Nhắn Mây trước 11h để kịp giờ nghỉ trưa nhé!' },
+  { days: 1, hour: 20, platform: 'Facebook', status: 'Scheduled', content: 'Tối nay Mây mở đến 22h. Ghé ngồi chill với ly cà phê muối và nghe nhạc acoustic cùng quán nhé!' },
+  { days: 3, hour: 19, platform: 'Instagram', status: 'Scheduled', content: 'Cuối tuần này ở Mây: mua 2 ly tặng 1 bánh quy bơ. Lưu bài lại để không quên nha! #MayCoffee #CaPheMuoi' },
 ]
 
 function at(days: number, hour: number) {
@@ -74,15 +77,18 @@ function overview() {
 }
 
 let shopProfile: Record<string, unknown> = {
-  businessName: 'Tiệm Cà Phê Muối (mẫu)',
+  businessName: SHOP,
   industryCode: 'cafe',
-  mainProducts: 'Cà phê muối pha phin, bánh quy bơ làm tại tiệm',
-  targetCustomer: 'Dân văn phòng 22–35 tuổi',
+  industryName: 'Café / Đồ uống',
+  mainProducts: 'Cà phê muối, bạc xỉu, bánh quy bơ nướng tại quán',
+  targetCustomer: 'Dân văn phòng và sinh viên quanh Quận 3',
   defaultTone: 'Thân thiện, gần gũi',
-  phone: '0900 000 000',
   address: 'Quận 3, TP.HCM',
-  signature: 'Địa chỉ: Quận 3, TP.HCM | Hotline: 0900 000 000',
-  brandHashtags: '#CaPheMuoiMau',
+  highlights: 'Kem muối đánh mới mỗi sáng, giao trong 30 phút',
+  priceRange: '29.000đ – 49.000đ',
+  openingHours: '7h – 22h hằng ngày',
+  signature: 'Mây Coffee · Quận 3, TP.HCM · Mở cửa 7h – 22h',
+  brandHashtags: '#MayCoffee #CaPheMuoi',
   complete: true,
 }
 
@@ -99,15 +105,16 @@ function usage() {
 
 /** A canned draft per requested platform, shaped like POST /posts/generate. */
 function generatedDraft(body: { productName?: string; highlights?: string; platforms?: string[] }) {
-  const product = body.productName?.trim() || 'sản phẩm của bạn'
-  const highlights = body.highlights?.trim() || 'chất lượng và giao nhanh'
+  const product = body.productName?.trim() || 'Cà phê muối'
+  const highlights = (body.highlights?.trim() || 'kem muối béo mặn đánh mới mỗi sáng, cà phê phin đậm vị').replace(/[.!]+$/, '')
+  const lower = product.charAt(0).toLowerCase() + product.slice(1)
   const contents: Record<string, Record<string, string>> = {}
   for (const platform of body.platforms ?? ['FACEBOOK']) {
     const text = platform === 'THREADS'
-      ? `Ai đã thử ${product} chưa? ${highlights}. Kể shop nghe cảm nhận của bạn nhé`
+      ? `Có ai mê ${lower} như Mây không? Bí quyết của tụi mình: ${highlights}. Kể Mây nghe bạn thích uống kiểu nào nhé.`
       : platform === 'INSTAGRAM'
-        ? `${product}: ${highlights}. Lưu bài này để lần sau ghé shop nha!`
-        : `Giới thiệu ${product}: ${highlights}. Nhắn tin cho shop để được tư vấn và đặt hàng ngay hôm nay!`
+        ? `${product} ở Mây: ${highlights}. Một ly cho buổi chiều thêm dịu. Lưu bài lại để lần sau ghé quán nha!`
+        : `${product} của Mây có gì đặc biệt? ${highlights.charAt(0).toUpperCase() + highlights.slice(1)}. Ghé Mây ở Quận 3 hoặc nhắn tin để Mây giao tận nơi nhé!`
     contents[platform] = { title: product, [platform === 'INSTAGRAM' ? 'caption' : 'content']: text }
   }
   return {
@@ -115,11 +122,29 @@ function generatedDraft(body: { productName?: string; highlights?: string; platf
     briefId: 'demo-brief',
     title: product,
     platformContents: contents,
-    hashtags: ['#postiva', '#shopnho'],
-    cta: 'Nhắn tin cho shop ngay',
-    imageSuggestion: `Ảnh ${product} chụp gần, ánh sáng tự nhiên`,
+    hashtags: ['#MayCoffee', '#CaPheMuoi'],
+    cta: 'Nhắn Mây để đặt ly đầu tiên',
+    imageSuggestion: `Ảnh ${lower} chụp gần trên bàn gỗ, ánh sáng tự nhiên buổi sáng`,
     imageUrl: null,
     status: 'DRAFT',
+  }
+}
+
+/** The real plans, shown but not sold: buying asks the visitor to sign up. */
+function demoOffer() {
+  const features = [
+    { icon: 'channels', text: 'Đăng lên Facebook, Instagram, Threads' },
+    { icon: 'daily', text: 'Daily: kế hoạch đăng cả tuần' },
+    { icon: 'schedule', text: 'Tự đăng đúng giờ đã hẹn' },
+    { icon: 'reports', text: 'Báo cáo lượt thích, bình luận, lượt xem' },
+  ]
+  return {
+    // Shown as on sale: pressing "Nâng lên Pro" invites the visitor to create an account.
+    available: true, amountVnd: 149000, periodDays: 30, refundPolicyUrl: null, method: 'BANK_TRANSFER', bank: null, autoConfirm: true,
+    plans: [
+      { code: 'FREE', name: 'Free', headline: 'Dùng thử miễn phí', description: 'Đủ để thử tạo và đăng bài cho shop, không cần thanh toán.', priceVnd: 0, aiLimit: 30, periodDays: 0, features, purchasable: false },
+      { code: 'PRO', name: 'Pro', headline: 'Đăng bài đều mỗi ngày', description: 'Lượt AI mới mỗi tháng cho shop bán hàng thường xuyên.', priceVnd: 149000, aiLimit: 300, periodDays: 30, features, purchasable: true },
+    ],
   }
 }
 
@@ -150,7 +175,7 @@ async function handle(api: AxiosInstance, method: string, url: string, body: unk
     if (path === '/app-data/posts') return posts()
     if (path === '/usage') return usage()
     if (path === '/usage/requests') return { items: [], page: 0, size: 10, total: 0 }
-    if (path === '/billing/offer') return { available: false, amountVnd: 0, aiLimit: 50, periodDays: 30, refundPolicyUrl: null }
+    if (path === '/billing/offer') return demoOffer()
     if (path === '/billing/orders') return []
     if (path === '/shop-profile') return shopProfile
     if (path === '/templates') return INDUSTRIES

@@ -116,7 +116,7 @@ export function ShopProfileForm({ initial, mode, onSaved, onSkip }: {
       <fieldset className="space-y-4">
         <legend className="text-base font-bold">Thông tin bắt buộc</legend>
         <label className="block text-sm font-bold">Tên shop *
-          <input value={form.businessName} maxLength={255} onChange={(event) => set('businessName', event.target.value)} className={INPUT} placeholder="Ví dụ: Tiệm Cà Phê Muối" />
+          <input value={form.businessName} maxLength={255} onChange={(event) => set('businessName', event.target.value)} className={INPUT} placeholder="Ví dụ: Mây Coffee" />
         </label>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block text-sm font-bold">Ngành hàng *
@@ -133,7 +133,7 @@ export function ShopProfileForm({ initial, mode, onSaved, onSkip }: {
           )}
         </div>
         <label className="block text-sm font-bold">Sản phẩm / dịch vụ chính *
-          <textarea value={form.mainProducts} maxLength={1000} rows={2} onChange={(event) => set('mainProducts', event.target.value)} className={TEXTAREA} placeholder="Ví dụ: Cà phê muối pha phin, bánh quy bơ làm tại tiệm" />
+          <textarea value={form.mainProducts} maxLength={1000} rows={2} onChange={(event) => set('mainProducts', event.target.value)} className={TEXTAREA} placeholder="Ví dụ: Cà phê muối, bạc xỉu, bánh quy bơ nướng tại quán" />
         </label>
       </fieldset>
 
@@ -148,7 +148,7 @@ export function ShopProfileForm({ initial, mode, onSaved, onSkip }: {
             <input value={form.address} maxLength={500} onChange={(event) => set('address', event.target.value)} className={INPUT} placeholder="Bỏ trống nếu chỉ bán online" />
           </label>
           <label className="block text-sm font-bold">Khách hàng mục tiêu
-            <input value={form.targetCustomer} maxLength={1000} onChange={(event) => set('targetCustomer', event.target.value)} className={INPUT} placeholder="Ví dụ: Dân văn phòng 22–35 tuổi" />
+            <input value={form.targetCustomer} maxLength={1000} onChange={(event) => set('targetCustomer', event.target.value)} className={INPUT} placeholder="Ví dụ: Dân văn phòng và sinh viên quanh Quận 3" />
           </label>
           <label className="block text-sm font-bold">Giọng văn
             <select value={form.defaultTone} onChange={(event) => set('defaultTone', event.target.value)} className={INPUT}>
@@ -173,10 +173,10 @@ export function ShopProfileForm({ initial, mode, onSaved, onSkip }: {
           </label>
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block text-sm font-bold">Điểm nổi bật
-              <input value={form.highlights} maxLength={2000} onChange={(event) => set('highlights', event.target.value)} className={INPUT} placeholder="Ví dụ: Giao trong 30 phút" />
+              <input value={form.highlights} maxLength={2000} onChange={(event) => set('highlights', event.target.value)} className={INPUT} placeholder="Ví dụ: Kem muối đánh mới mỗi sáng, giao trong 30 phút" />
             </label>
             <label className="block text-sm font-bold">Khoảng giá
-              <input value={form.priceRange} maxLength={200} onChange={(event) => set('priceRange', event.target.value)} className={INPUT} placeholder="Ví dụ: 25.000đ – 45.000đ" />
+              <input value={form.priceRange} maxLength={200} onChange={(event) => set('priceRange', event.target.value)} className={INPUT} placeholder="Ví dụ: 29.000đ – 49.000đ" />
             </label>
             <label className="block text-sm font-bold">Giờ mở cửa
               <input value={form.openingHours} maxLength={200} onChange={(event) => set('openingHours', event.target.value)} className={INPUT} placeholder="7h – 22h hằng ngày" />
@@ -189,7 +189,7 @@ export function ShopProfileForm({ initial, mode, onSaved, onSkip }: {
             <textarea value={form.policies} maxLength={2000} rows={2} onChange={(event) => set('policies', event.target.value)} className={TEXTAREA} />
           </label>
           <label className="block text-sm font-bold">Chữ ký cuối bài
-            <textarea value={form.signature} maxLength={500} rows={2} onChange={(event) => set('signature', event.target.value)} className={TEXTAREA} placeholder="Địa chỉ: ... | Hotline: ..." />
+            <textarea value={form.signature} maxLength={500} rows={2} onChange={(event) => set('signature', event.target.value)} className={TEXTAREA} placeholder="Ví dụ: Mây Coffee · Quận 3, TP.HCM · Mở cửa 7h – 22h" />
             <span className="mt-1 block text-xs font-normal text-[var(--muted-text)]">Tự thêm vào cuối mỗi bài AI soạn; bạn vẫn sửa hoặc xóa được trước khi đăng. Threads chỉ thêm khi bài còn dưới 500 ký tự.</span>
           </label>
           {!form.signature.trim() && suggestion && (
@@ -198,7 +198,7 @@ export function ShopProfileForm({ initial, mode, onSaved, onSkip }: {
             </button>
           )}
           <label className="block text-sm font-bold">Hashtag thương hiệu
-            <input value={form.brandHashtags} maxLength={300} onChange={(event) => set('brandHashtags', event.target.value)} className={INPUT} placeholder="#TiemCaPheMuoi #CaPheMuoi" />
+            <input value={form.brandHashtags} maxLength={300} onChange={(event) => set('brandHashtags', event.target.value)} className={INPUT} placeholder="Ví dụ: #MayCoffee #CaPheMuoi" />
           </label>
         </fieldset>
       )}
