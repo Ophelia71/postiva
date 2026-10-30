@@ -34,6 +34,25 @@ public class AdminBillingController {
         return noStore(store.adminOrders(status));
     }
 
+    @GetMapping("/bank-transfers")
+    public ResponseEntity<ApiResponse<List<BillingStore.BankTransfer>>> bankTransfers() {
+        current.requireCurrentUser();
+        return noStore(store.bankTransferQueue());
+    }
+
+    @PostMapping("/orders/{id}/confirm-transfer")
+    public ResponseEntity<ApiResponse<BillingStore.Order>> confirmTransfer(@PathVariable UUID id, @RequestBody TransferConfirmation input) {
+        return noStore(billing.confirmBankTransfer(current.requireCurrentUserId(), id, input.bankReference()));
+    }
+
+    @PostMapping("/orders/{id}/reject-transfer")
+    public ResponseEntity<ApiResponse<BillingStore.Order>> rejectTransfer(@PathVariable UUID id,
+                                                                         @RequestBody BillingController.ReasonRequest input) {
+        return noStore(billing.rejectBankTransfer(current.requireCurrentUserId(), id, input.reason()));
+    }
+
+    public record TransferConfirmation(String bankReference) { }
+
     @PostMapping("/orders/{id}/reconcile")
     public ResponseEntity<ApiResponse<BillingStore.Order>> reconcile(@PathVariable UUID id) {
         UUID actor = current.requireCurrentUserId();

@@ -78,6 +78,10 @@ postiva:
     return-url: ${POSTIVA_BILLING_RETURN_URL:${postiva.frontend-origin}/app/billing}
     cancel-url: ${POSTIVA_BILLING_CANCEL_URL:${postiva.frontend-origin}/app/billing}
     refund-policy-url: ${POSTIVA_BILLING_REFUND_POLICY_URL:${postiva.frontend-origin}/refund-policy}
+    # Manual VietQR bank transfer, confirmed by an admin. Empty account = off.
+    bank-code: ${POSTIVA_BANK_CODE:TPB}
+    bank-account-no: ${POSTIVA_BANK_ACCOUNT_NO:}
+    bank-account-name: ${POSTIVA_BANK_ACCOUNT_NAME:}
   ai:
     cost:
       enabled: ${POSTIVA_AI_ENABLED:true}

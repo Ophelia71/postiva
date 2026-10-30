@@ -47,6 +47,11 @@ public class BillingController {
         return noStore(billing.order(current.requireCurrentUserId(), id));
     }
 
+    @PostMapping("/orders/{id}/transferred")
+    public ResponseEntity<ApiResponse<BillingStore.Order>> transferred(@PathVariable UUID id) {
+        return noStore(billing.transferred(current.requireCurrentUserId(), id));
+    }
+
     @PostMapping("/orders/{id}/refresh")
     public ResponseEntity<ApiResponse<BillingStore.Order>> refresh(@PathVariable UUID id) {
         return noStore(billing.refresh(current.requireCurrentUserId(), id));

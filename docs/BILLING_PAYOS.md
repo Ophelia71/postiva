@@ -4,7 +4,19 @@ Cập nhật 17/10/2026. Mã nguồn có tích hợp **payOS cho giao dịch VND
 
 Theo [hướng dẫn payOS](https://payos.vn/docs/api/) và [xác thực tổ chức](https://payos.vn/docs/huong-dan-su-dung/xac-thuc-to-chuc/), cá nhân, hộ kinh doanh hoặc doanh nghiệp cần có tài khoản đã xác thực, tài khoản ngân hàng nhận tiền và kênh thanh toán trước khi lấy Client ID, API Key, Checksum Key. Chủ dự án cần xác nhận pháp nhân/chủ tài khoản và điều kiện hóa đơn, thuế, phí theo thỏa thuận của mình. Không dùng tài khoản của lập trình viên làm merchant thực tế.
 
-## Luồng đã cài đặt
+## Cách đơn giản: chuyển khoản VietQR, admin xác nhận
+
+Khi payOS chưa cấu hình, Postiva bán Pro bằng chuyển khoản thẳng vào tài khoản của shop. Chỉ cần ba biến:
+
+```text
+POSTIVA_BANK_CODE=TPB
+POSTIVA_BANK_ACCOUNT_NO=<số tài khoản>
+POSTIVA_BANK_ACCOUNT_NAME=<TÊN CHỦ TÀI KHOẢN, KHÔNG DẤU>
+```
+
+Người mua bấm Nâng lên Pro, nhận mã VietQR (img.vietqr.io) đã điền số tiền và nội dung `POSTIVA<mã đơn>`, chuyển khoản rồi bấm "Tôi đã chuyển khoản". Đơn mở 3 ngày. Admin vào **Thanh toán → Chuyển khoản chờ xác nhận**, tìm trong app ngân hàng giao dịch đúng số tiền và nội dung, nhập mã giao dịch ngân hàng và bấm **Đã nhận tiền**: đơn thành `PAID` (tham chiếu `BANK:<mã>`, không dùng lại được cho đơn khác) và Pro bật ngay, kỳ Pro có nguồn `BANK:<mã đơn>`. **Không thấy tiền** đóng đơn kèm lý do; tiền đến muộn vẫn xác nhận được. Mọi thao tác ghi vào `payment_admin_audit`. Đơn chuyển khoản không bao giờ gọi payOS; khi payOS đã sẵn sàng thì payOS được dùng cho đơn mới.
+
+## Luồng đã cài đặt (payOS)
 
 1. Backend trả giá, quota AI và thời hạn từ cấu hình; người dùng không gửi số tiền. Mỗi đơn chụp giá, quota và kỳ Pro vào PostgreSQL. Một người dùng chỉ có một đơn `CREATING`/`PENDING` còn mở; `Idempotency-Key` ngăn gửi lặp.
 2. Backend tạo [payment link](https://payos.vn/docs/api/) với mã đơn duy nhất, chữ ký HMAC-SHA256 và hạn 15 phút. Checkout chỉ nhận URL HTTPS đúng host `pay.payos.vn`. Nếu phản hồi tạo link bị mất, tác vụ nền thử lại cùng mã đơn và tra cứu link tại payOS.

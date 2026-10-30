@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../../lib/api'
+import { AdminBankTransfers } from './AdminBankTransfers'
 
-type Order = { id: string; orderCode: number; userId: string; amountVnd: number; status: string; grantStatus: string; providerReference: string | null; reviewReason: string | null; paidAt: string | null; createdAt: string }
+type Order = { id: string; orderCode: number; userId: string; amountVnd: number; status: string; provider: string; grantStatus: string; providerReference: string | null; reviewReason: string | null; paidAt: string | null; createdAt: string }
 type Refund = { id: string; orderId: string; amountVnd: number; status: string; reason: string; providerRef: string | null; createdAt: string }
 type Event = { event_kind: string; provider_reference: string | null; amount_vnd: number | null; decision: string; created_at: string }
 type Audit = { actor_user_id: string; action: string; reason: string; created_at: string }
@@ -64,16 +65,17 @@ export function AdminBillingPage() {
 
   return <div className="space-y-6">
     <header><h1 className="text-2xl font-bold">Thanh toán và hoàn tiền</h1>
-      <p className="mt-2 text-sm text-slate-600">Đối soát trạng thái với payOS; chỉ xác nhận hoàn sau khi đã kiểm tra chứng từ ngân hàng/cổng bên ngoài.</p></header>
+      <p className="mt-2 text-sm text-slate-600">Xác nhận chuyển khoản, xem đơn và xử lý hoàn tiền. Chỉ xác nhận khi đã thấy tiền trong tài khoản ngân hàng.</p></header>
     {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-red-800">{error}</p>}
     {notice && <p role="status" className="rounded-lg bg-blue-50 p-3 text-blue-900">{notice}</p>}
+    <AdminBankTransfers onChanged={() => void refresh().catch(() => undefined)} />
     <section className="rounded-xl border border-slate-200 bg-white p-5">
       <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-bold">Đơn hàng gần đây</h2>
         <label className="text-sm">Trạng thái <select value={status} onChange={(event) => setStatus(event.target.value)} className="ml-2 min-h-11 rounded-lg border border-slate-300 px-2">
           <option value="">Tất cả</option>{['CREATING', 'PENDING', 'PAID', 'CANCELLED', 'EXPIRED', 'REVIEW'].map((value) => <option key={value} value={value}>{value}</option>)}
         </select></label></div>
-      {orders.length === 0 ? <p className="mt-3 text-sm text-slate-600">Không có đơn phù hợp.</p> : <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[700px] text-left text-sm"><thead><tr className="border-b"><th className="p-2">Đơn</th><th className="p-2">Người dùng</th><th className="p-2">Số tiền</th><th className="p-2">Trạng thái</th><th className="p-2">Thời gian</th><th className="p-2">Thao tác</th></tr></thead><tbody>
-        {orders.map((order) => <tr key={order.id} className="border-b border-slate-100"><td className="p-2"><button type="button" className="font-semibold text-indigo-700 underline" onClick={() => setSelected(order)}>#{order.orderCode}</button></td><td className="p-2 font-mono text-xs">{order.userId}</td><td className="p-2">{money(order.amountVnd)}</td><td className="p-2">{order.status} / {order.grantStatus}</td><td className="p-2">{new Date(order.createdAt).toLocaleString()}</td><td className="p-2"><button type="button" disabled={busy} onClick={() => void reconcile(order)} className="min-h-11 rounded-lg border px-3 font-semibold disabled:opacity-50">Đối soát</button></td></tr>)}
+      {orders.length === 0 ? <p className="mt-3 text-sm text-slate-600">Không có đơn phù hợp.</p> : <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[700px] text-left text-sm"><thead><tr className="border-b"><th className="p-2">Đơn</th><th className="p-2">Người dùng</th><th className="p-2">Số tiền</th><th className="p-2">Cách trả</th><th className="p-2">Trạng thái</th><th className="p-2">Thời gian</th><th className="p-2">Thao tác</th></tr></thead><tbody>
+        {orders.map((order) => <tr key={order.id} className="border-b border-slate-100"><td className="p-2"><button type="button" className="font-semibold text-indigo-700 underline" onClick={() => setSelected(order)}>#{order.orderCode}</button></td><td className="p-2 font-mono text-xs">{order.userId}</td><td className="p-2">{money(order.amountVnd)}</td><td className="p-2">{order.provider === 'BANK_TRANSFER' ? 'Chuyển khoản' : 'payOS'}</td><td className="p-2">{order.status} / {order.grantStatus}</td><td className="p-2">{new Date(order.createdAt).toLocaleString()}</td><td className="p-2">{order.provider !== 'BANK_TRANSFER' && <button type="button" disabled={busy} onClick={() => void reconcile(order)} className="min-h-11 rounded-lg border px-3 font-semibold disabled:opacity-50">Đối soát</button>}</td></tr>)}
       </tbody></table></div>}
     </section>
     {selected && <section className="rounded-xl border border-slate-200 bg-white p-5 text-sm">

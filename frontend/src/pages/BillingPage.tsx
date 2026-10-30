@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { BankTransferPanel, type BankAccount } from '../components/BankTransferPanel'
 import { PageHeader } from '../components/PageUi'
 import { api } from '../lib/api'
 import { usePreferences } from '../lib/preferences'
 
 const CARD = 'rounded-2xl border border-[var(--app-border)] bg-[var(--panel-bg)] p-5 shadow-sm'
 
-type Offer = { available: boolean; amountVnd: number; aiLimit: number; freeAiLimit: number; periodDays: number; refundPolicyUrl: string | null }
-type Order = { id: string; orderCode: number; amountVnd: number; aiLimit: number; periodDays: number; status: string; grantStatus: string; checkoutUrl: string | null; expiresAt: string; createdAt: string; paidAt: string | null }
+type Offer = { available: boolean; amountVnd: number; aiLimit: number; freeAiLimit: number; periodDays: number; refundPolicyUrl: string | null; method: 'PAYOS' | 'BANK_TRANSFER' | null; bank: BankAccount | null }
+type Order = { id: string; orderCode: number; amountVnd: number; aiLimit: number; periodDays: number; status: string; grantStatus: string; checkoutUrl: string | null; expiresAt: string; createdAt: string; paidAt: string | null; provider: 'PAYOS' | 'BANK_TRANSFER'; buyerConfirmedAt: string | null }
 type Usage = { plan: 'FREE' | 'PRO'; endsAt: string; limit: number; remaining: number }
 type Refund = { id: string; orderId: string; amountVnd: number; status: string; reason: string; createdAt: string; providerRef: string | null }
 
@@ -20,6 +21,9 @@ function orderLabel(order: Order, t: (vi: string, en: string) => string) {
     if (order.grantStatus === 'GRANTED') return t('Đã thanh toán · Pro đã bật', 'Paid · Pro active')
     if (order.grantStatus === 'NOT_APPLICABLE') return t('Đã hoàn tiền', 'Refunded')
     return t('Đã thanh toán · đang bật Pro', 'Paid · turning Pro on')
+  }
+  if (order.provider === 'BANK_TRANSFER' && order.status === 'PENDING') {
+    return order.buyerConfirmedAt ? t('Đang chờ Postiva xác nhận tiền', 'Waiting for Postiva to confirm') : t('Chờ chuyển khoản', 'Waiting for transfer')
   }
   if (order.status === 'PENDING' || order.status === 'CREATING') return t('Chờ thanh toán', 'Waiting for payment')
   if (order.status === 'REVIEW') return t('Đang kiểm tra', 'Being checked')
@@ -50,6 +54,7 @@ export function BillingPage() {
   const selectedId = selected?.id
   const selectedStatus = selected?.status
   const selectedGrantStatus = selected?.grantStatus
+  const selectedProvider = selected?.provider
 
   const loadUsage = useCallback(() => {
     // The plan line is a convenience; the page still works if it fails to load.
@@ -107,9 +112,9 @@ export function BillingPage() {
       || selectedGrantStatus === 'GRANTED') return
     const timer = window.setInterval(() => {
       void api.get<Order>(`/billing/orders/${selectedId}`).then((response) => showOrder(response.data)).catch(() => undefined)
-    }, 4000)
+    }, selectedProvider === 'BANK_TRANSFER' ? 30000 : 4000)
     return () => window.clearInterval(timer)
-  }, [selectedId, selectedStatus, selectedGrantStatus, showOrder])
+  }, [selectedId, selectedStatus, selectedGrantStatus, selectedProvider, showOrder])
 
   useEffect(() => {
     if (!selected) return
@@ -135,8 +140,14 @@ export function BillingPage() {
         window.location.assign(order.checkoutUrl)
         return
       }
-      redirectFor.current = order.id
       showOrder(order)
+      if (order.provider === 'BANK_TRANSFER') {
+        setNotice(t(`Chuyển khoản theo thông tin của đơn #${order.orderCode}, rồi bấm "Tôi đã chuyển khoản".`, `Transfer using the details of order #${order.orderCode}, then press "I have transferred".`))
+        window.setTimeout(() => document.getElementById('order-details')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
+        setBusy(false)
+        return
+      }
+      redirectFor.current = order.id
       if (order.status === 'CREATING') setNotice(t('Đang chuẩn bị mã thanh toán…', 'Preparing the payment code…'))
       setBusy(false)
     } catch {
@@ -156,6 +167,17 @@ export function BillingPage() {
     finally { setBusy(false) }
   }
 
+  async function markTransferred() {
+    if (!selected) return
+    setBusy(true); setError('')
+    try {
+      const response = await api.post<Order>(`/billing/orders/${selected.id}/transferred`)
+      showOrder(response.data)
+      setNotice(t('Cảm ơn bạn. Gói Pro sẽ bật ngay khi Postiva thấy tiền vào tài khoản.', 'Thank you. Pro turns on as soon as Postiva sees the money arrive.'))
+    } catch { setError(t('Chưa gửi được. Vui lòng thử lại.', 'Could not send. Please retry.')) }
+    finally { setBusy(false) }
+  }
+
   async function requestRefund() {
     if (!selected) return
     setBusy(true); setError('')
@@ -168,7 +190,8 @@ export function BillingPage() {
     finally { setBusy(false) }
   }
 
-  const openOrder = orders.find((order) => order.status === 'PENDING' && order.checkoutUrl)
+  const openOrder = orders.find((order) => order.status === 'PENDING' && (order.checkoutUrl || order.provider === 'BANK_TRANSFER'))
+  const bankTransfer = offer?.method === 'BANK_TRANSFER'
 
   return <div className="space-y-6">
     <PageHeader
@@ -202,12 +225,16 @@ export function BillingPage() {
         <ul className="mt-4 space-y-1.5 text-sm text-slate-700">
           <li>{t('Mọi tính năng khác (Daily, đăng 3 kênh, báo cáo) dùng được ở cả hai gói.', 'Everything else (Daily, three channels, reports) works on both plans.')}</li>
           <li>{t('Thanh toán bằng chuyển khoản: quét mã QR trong app ngân hàng.', 'Pay by bank transfer: scan the QR code in your banking app.')}</li>
-          <li>{t('Pro bật ngay khi nhận được tiền. Gia hạn sớm sẽ nối thêm kỳ mới, không mất ngày nào.', 'Pro turns on as soon as the money arrives. Renewing early adds a new period; no days are lost.')}</li>
+          <li>{bankTransfer
+            ? t('Pro được bật khi Postiva thấy tiền vào tài khoản, thường trong vài giờ (giờ hành chính).', 'Pro turns on once Postiva sees the money arrive, usually within a few business hours.')
+            : t('Pro bật ngay khi nhận được tiền.', 'Pro turns on as soon as the money arrives.')} {t('Gia hạn sớm sẽ nối thêm kỳ mới, không mất ngày nào.', 'Renewing early adds a new period; no days are lost.')}</li>
         </ul>
         <div className="mt-5 flex flex-wrap items-center gap-3">
           {openOrder
-            ? <a href={openOrder.checkoutUrl!} className="inline-flex min-h-11 items-center rounded-lg bg-indigo-600 px-5 font-semibold text-white">{t('Tiếp tục thanh toán', 'Continue payment')}</a>
-            : <button type="button" disabled={!offer.available || busy} onClick={() => void buy()} className="min-h-11 rounded-lg bg-indigo-600 px-5 font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400">{busy ? t('Đang mở trang thanh toán…', 'Opening payment…') : usage?.plan === 'PRO' ? t('Gia hạn Pro', 'Renew Pro') : t('Nâng lên Pro', 'Upgrade to Pro')}</button>}
+            ? openOrder.checkoutUrl
+              ? <a href={openOrder.checkoutUrl} className="inline-flex min-h-11 items-center rounded-lg bg-indigo-600 px-5 font-semibold text-white">{t('Tiếp tục thanh toán', 'Continue payment')}</a>
+              : <button type="button" onClick={() => { setSelected(openOrder); window.setTimeout(() => document.getElementById('order-details')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100) }} className="min-h-11 rounded-lg bg-indigo-600 px-5 font-semibold text-white">{t('Xem thông tin chuyển khoản', 'Show transfer details')}</button>
+            : <button type="button" disabled={!offer.available || busy} onClick={() => void buy()} className="min-h-11 rounded-lg bg-indigo-600 px-5 font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400">{busy ? t('Đang tạo đơn…', 'Creating the order…') : usage?.plan === 'PRO' ? t('Gia hạn Pro', 'Renew Pro') : t('Nâng lên Pro', 'Upgrade to Pro')}</button>}
           <Link to="/refund-policy" className="text-sm font-semibold text-indigo-700 underline underline-offset-4">{t('Chính sách hoàn tiền', 'Refund policy')}</Link>
         </div>
         {!offer.available && <p className="mt-3 text-sm text-slate-600">{t('Thanh toán trực tuyến đang tạm đóng. Bạn vẫn dùng Free bình thường; cần Pro ngay thì liên hệ postiva84@gmail.com.', 'Online payment is paused. Free keeps working; for Pro now, contact postiva84@gmail.com.')}</p>}
@@ -223,13 +250,16 @@ export function BillingPage() {
         </button>
       </li>)}</ul>}
     </section>
-    {selected && <section className={`${CARD} text-sm`}>
+    {selected && <section id="order-details" className={`${CARD} scroll-mt-20 text-sm`}>
       <h2 className="text-lg font-bold">{t('Đơn', 'Order')} #{selected.orderCode}</h2>
       <p className="mt-2">{money(selected.amountVnd)} · Pro {selected.periodDays} {t('ngày', 'days')}, {selected.aiLimit} {t('lượt AI', 'AI generations')}</p>
       <p className="mt-1 font-semibold">{orderLabel(selected, t)}</p>
       {selected.status === 'PAID' && ['PENDING', 'FAILED'].includes(selected.grantStatus) && <p className="mt-2 text-slate-700">{t('Postiva đã nhận tiền và đang bật Pro cho bạn. Không cần thanh toán lại.', 'Payment received; Pro is being turned on. Do not pay again.')}</p>}
       {selected.status === 'REVIEW' && <p className="mt-2 text-slate-700">{t('Khoản thanh toán cần kiểm tra thêm. Postiva sẽ liên hệ nếu cần; không cần thanh toán lại.', 'This payment needs a check. Postiva will contact you if needed; do not pay again.')}</p>}
-      {selected.status === 'PENDING' && <div className="mt-4 flex flex-wrap gap-3">
+      {selected.status === 'PENDING' && selected.provider === 'BANK_TRANSFER' && offer?.bank && <BankTransferPanel
+        bank={offer.bank} orderCode={selected.orderCode} amountVnd={selected.amountVnd} buyerConfirmed={Boolean(selected.buyerConfirmedAt)}
+        busy={busy} onTransferred={() => void markTransferred()} onCancel={() => void cancel()} />}
+      {selected.status === 'PENDING' && selected.provider !== 'BANK_TRANSFER' && <div className="mt-4 flex flex-wrap gap-3">
         {selected.checkoutUrl && <a href={selected.checkoutUrl} className="inline-flex min-h-11 items-center rounded-lg bg-indigo-600 px-4 font-semibold text-white">{t('Tiếp tục thanh toán', 'Continue payment')}</a>}
         <button type="button" disabled={busy} onClick={() => void cancel()} className="min-h-11 rounded-lg border border-slate-300 px-4 font-semibold disabled:opacity-50">{t('Hủy đơn này', 'Cancel this order')}</button>
       </div>}

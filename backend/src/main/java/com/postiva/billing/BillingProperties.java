@@ -16,10 +16,20 @@ public class BillingProperties {
     private String returnUrl = "";
     private String cancelUrl = "";
     private String refundPolicyUrl = "";
+    // Plain bank transfer to the shop's own account, confirmed by an admin (no payment provider needed).
+    private String bankCode = "TPB";
+    private String bankAccountNo = "";
+    private String bankAccountName = "";
 
     public boolean ready() {
         return enabled && proPriceVnd >= 2_000 && proPriceVnd <= 100_000_000
                 && providerConfigured() && https(refundPolicyUrl);
+    }
+
+    /** Bank transfer sells whenever an account is set; payOS, when also ready, takes precedence. */
+    public boolean bankTransferReady() {
+        return bankAccountNo.matches("[0-9]{6,20}") && !bankAccountName.isBlank() && bankCode.matches("[A-Za-z0-9]{2,15}")
+                && proPriceVnd >= 2_000 && proPriceVnd <= 100_000_000 && https(refundPolicyUrl);
     }
 
     /** Existing paid orders must still be serviced when sales are paused or the published price changes. */
@@ -56,4 +66,10 @@ public class BillingProperties {
     public void setCancelUrl(String cancelUrl) { this.cancelUrl = cancelUrl == null ? "" : cancelUrl; }
     public String getRefundPolicyUrl() { return refundPolicyUrl; }
     public void setRefundPolicyUrl(String refundPolicyUrl) { this.refundPolicyUrl = refundPolicyUrl == null ? "" : refundPolicyUrl; }
+    public String getBankCode() { return bankCode; }
+    public void setBankCode(String bankCode) { this.bankCode = bankCode == null ? "" : bankCode.trim(); }
+    public String getBankAccountNo() { return bankAccountNo; }
+    public void setBankAccountNo(String bankAccountNo) { this.bankAccountNo = bankAccountNo == null ? "" : bankAccountNo.replace(" ", ""); }
+    public String getBankAccountName() { return bankAccountName; }
+    public void setBankAccountName(String bankAccountName) { this.bankAccountName = bankAccountName == null ? "" : bankAccountName.trim(); }
 }

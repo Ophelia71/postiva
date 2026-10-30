@@ -6,6 +6,8 @@ import com.postiva.scheduler.PublishingScheduler;
 import com.postiva.usage.AiUsageService;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -173,6 +175,67 @@ class BillingIntegrationTest {
         assertEquals("PAID", after.status());
         assertEquals("GRANTED", after.grantStatus());
         assertEquals("PRO", usage.summary(user).plan());
+    }
+
+    @Test void bankTransferSellsWithoutPayOsAndAnAdminTurnsProOn() {
+        openBankTransfer();
+        assertEquals("BANK_TRANSFER", billing.offer().method());
+        assertEquals("12345678901", billing.offer().bank().accountNo());
+        UUID user = user();
+        UUID admin = admin();
+        BillingStore.Order order = billing.create(user, UUID.randomUUID());
+        assertEquals("BANK_TRANSFER", order.provider());
+        assertEquals("PENDING", order.status());
+        assertTrue(order.expiresAt().isAfter(java.time.Instant.now().plus(java.time.Duration.ofDays(2))));
+        assertEquals(order.id(), billing.create(user, UUID.randomUUID()).id(), "one open transfer per buyer");
+        // Never talks to payOS, not even in the background reconciliation.
+        assertTrue(store.reconcileCandidates().stream().noneMatch(candidate -> candidate.id().equals(order.id())));
+        assertEquals(HttpStatus.CONFLICT, assertThrows(ResponseStatusException.class, () -> billing.adminReconcile(order.id())).getStatusCode());
+
+        assertNotNull(billing.transferred(user, order.id()).buyerConfirmedAt());
+        assertEquals(order.id(), store.bankTransferQueue().getFirst().id());
+        assertEquals("POSTIVA" + order.orderCode(), store.bankTransferQueue().getFirst().transferContent());
+
+        BillingStore.Order paid = billing.confirmBankTransfer(admin, order.id(), "FT26303123456");
+        assertEquals("PAID", paid.status());
+        assertEquals("GRANTED", paid.grantStatus());
+        assertEquals("PRO", usage.summary(user).plan());
+        assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM subscription_periods WHERE source_reference = ?",
+                Integer.class, "BANK:" + order.orderCode()));
+        assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM payment_admin_audit WHERE order_id = ? AND action = 'CONFIRM_BANK_TRANSFER'",
+                Integer.class, order.id()));
+        // Confirming twice with the same bank reference changes nothing; reusing it for another order is refused.
+        assertEquals("PAID", billing.confirmBankTransfer(admin, order.id(), "FT26303123456").status());
+        BillingStore.Order other = billing.create(user(), UUID.randomUUID());
+        assertEquals(HttpStatus.CONFLICT, assertThrows(ResponseStatusException.class,
+                () -> billing.confirmBankTransfer(admin, other.id(), "FT26303123456")).getStatusCode());
+        org.mockito.Mockito.verifyNoInteractions(payos);
+    }
+
+    @Test void bankTransferCanBeCancelledByTheBuyerOrRejectedByTheAdmin() {
+        openBankTransfer();
+        UUID user = user();
+        UUID admin = admin();
+        BillingStore.Order first = billing.create(user, UUID.randomUUID());
+        assertEquals("CANCELLED", billing.cancel(user, first.id()).status());
+        BillingStore.Order second = billing.create(user, UUID.randomUUID());
+        assertNotEquals(first.id(), second.id());
+        assertEquals(HttpStatus.BAD_REQUEST, assertThrows(ResponseStatusException.class,
+                () -> billing.rejectBankTransfer(admin, second.id(), "")).getStatusCode());
+        assertEquals("CANCELLED", billing.rejectBankTransfer(admin, second.id(), "Không thấy tiền sau 3 ngày").status());
+        // Money that arrives after all is still honoured.
+        assertEquals("GRANTED", billing.confirmBankTransfer(admin, second.id(), "FT-LATE-0001").grantStatus());
+        assertEquals("PRO", usage.summary(user).plan());
+    }
+
+    private void openBankTransfer() {
+        properties.setEnabled(false);
+        properties.setProPriceVnd(149_000);
+        properties.setRefundPolicyUrl("http://localhost:5173/refund-policy");
+        properties.setBankCode("TPB");
+        properties.setBankAccountNo("12345678901");
+        properties.setBankAccountName("NGUYEN VAN A");
+        org.mockito.Mockito.reset(payos);
     }
 
     private void openSales() {

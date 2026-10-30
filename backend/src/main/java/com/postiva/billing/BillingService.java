@@ -27,14 +27,25 @@ public class BillingService {
     }
 
     public Offer offer() {
-        return new Offer(properties.ready(), properties.getProPriceVnd(), usage.getProAiLimit(), usage.getFreeAiLimit(),
-                usage.getPeriodDays(), properties.ready() ? properties.getRefundPolicyUrl() : null);
+        String method = method();
+        BankAccount bank = BillingStore.BANK_TRANSFER.equals(method)
+                ? new BankAccount(properties.getBankCode(), properties.getBankAccountNo(), properties.getBankAccountName()) : null;
+        return new Offer(method != null, properties.getProPriceVnd(), usage.getProAiLimit(), usage.getFreeAiLimit(),
+                usage.getPeriodDays(), method != null ? properties.getRefundPolicyUrl() : null, method, bank);
+    }
+
+    /** payOS when its keys are set (automatic); otherwise a plain transfer to the shop's account, if one is set. */
+    private String method() {
+        if (properties.ready()) return BillingStore.PAYOS;
+        return properties.bankTransferReady() ? BillingStore.BANK_TRANSFER : null;
     }
 
     public BillingStore.Order create(UUID userId, UUID key) {
-        if (!properties.ready()) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+        String method = method();
+        if (method == null) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                 "Gói Pro chưa mở bán; vui lòng liên hệ hỗ trợ");
-        BillingStore.Order order = store.draft(userId, key);
+        if (BillingStore.BANK_TRANSFER.equals(method)) return store.draft(userId, key, method);
+        BillingStore.Order order = store.draft(userId, key, method);
         if ("PENDING".equals(order.status())) {
             // An earlier unpaid order is reused only while payOS still waits on it; a link the buyer
             // cancelled on the payOS page must not be handed back as the "new" one.
@@ -52,6 +63,8 @@ public class BillingService {
     }
 
     private BillingStore.Order refreshed(BillingStore.Order order, UUID userId) {
+        // A bank transfer has no provider to ask; only an admin moves it on.
+        if (BillingStore.BANK_TRANSFER.equals(order.provider())) return order;
         try {
             if ("CREATING".equals(order.status()) && order.expiresAt().isAfter(java.time.Instant.now())) ensureLink(order);
             else if ("PENDING".equals(order.status())) reconcileOne(order);
@@ -83,6 +96,7 @@ public class BillingService {
         if ("PAID".equals(order.status())) throw new ResponseStatusException(HttpStatus.CONFLICT,
                 "Đơn đã thanh toán; hãy dùng quy trình yêu cầu hoàn tiền");
         if (!"PENDING".equals(order.status())) return order;
+        if (BillingStore.BANK_TRANSFER.equals(order.provider())) return store.cancelBankTransfer(orderId, userId);
         // Cancelling on the payOS page already closed the link; payOS refuses a second cancel.
         PayOsGateway.Status current = payos.lookup(order.orderCode());
         reconcileReceipt(store.applyProviderStatus("PENDING".equals(current.status()) ? payos.cancel(order.orderCode()) : current));
@@ -114,8 +128,23 @@ public class BillingService {
         }
     }
 
+    public BillingStore.Order transferred(UUID userId, UUID orderId) { return store.markTransferred(orderId, userId); }
+
+    /** Admin saw the money in the bank: record it, then turn Pro on like any paid order. */
+    public BillingStore.Order confirmBankTransfer(UUID actorId, UUID orderId, String bankReference) {
+        BillingStore.Order order = store.confirmBankTransfer(actorId, orderId, bankReference);
+        reconcileReceipt(new BillingStore.Receipt(order.id(), "PAID"));
+        return store.adminOrder(orderId);
+    }
+
+    public BillingStore.Order rejectBankTransfer(UUID actorId, UUID orderId, String reason) {
+        return store.rejectBankTransfer(actorId, orderId, reason);
+    }
+
     public BillingStore.Order adminReconcile(UUID id) {
         BillingStore.Order order = store.adminOrder(id);
+        if (BillingStore.BANK_TRANSFER.equals(order.provider())) throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Đơn chuyển khoản được xác nhận tay, không đối soát với payOS");
         if (!properties.providerConfigured()) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Cổng thanh toán chưa được cấu hình");
         reconcileOne(order);
         return store.adminOrder(id);
@@ -135,5 +164,7 @@ public class BillingService {
         }
     }
 
-    public record Offer(boolean available, long amountVnd, int aiLimit, int freeAiLimit, int periodDays, String refundPolicyUrl) { }
+    public record Offer(boolean available, long amountVnd, int aiLimit, int freeAiLimit, int periodDays, String refundPolicyUrl,
+                        String method, BankAccount bank) { }
+    public record BankAccount(String bankCode, String accountNo, String accountName) { }
 }
