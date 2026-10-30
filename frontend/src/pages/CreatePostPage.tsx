@@ -998,7 +998,8 @@ function CreatePostForm({ onNewPost }: { onNewPost: () => void }) {
           </div>
         </div>
 
-        <div className="min-w-0 xl:flex xl:min-h-0 xl:flex-col">
+        {/* The preview keeps the platform's proportions and scrolls on its own instead of squeezing photos to fit the screen. */}
+        <div className="min-w-0 xl:min-h-0 xl:overflow-y-auto xl:pr-1">
           <div className="mb-3 flex shrink-0 flex-wrap justify-center gap-2">
             {selectedPlatforms.map((platform) => (
               <button
@@ -1192,7 +1193,7 @@ function SocialFeedPreview({
 
   return (
     <article
-      className={cn('mx-auto flex w-full flex-col overflow-hidden rounded-[6px] bg-white shadow-xl shadow-slate-200/80 xl:min-h-0 xl:flex-1', compact ? 'max-w-[360px]' : 'max-w-[620px]')}
+      className={cn('mx-auto flex w-full flex-col overflow-hidden rounded-[6px] bg-white shadow-xl shadow-slate-200/80', compact ? 'max-w-[360px]' : 'max-w-[620px]')}
     >
       <div aria-hidden className="h-1 shrink-0" style={{ backgroundColor: getPlatformColor(platform) }} />
       <header className="flex shrink-0 items-center gap-3 px-5 py-3">
@@ -1207,7 +1208,7 @@ function SocialFeedPreview({
       </header>
 
       {caption.trim() ? (
-        <p className="shrink-0 whitespace-pre-wrap px-5 pb-3 text-sm leading-6 text-slate-900 xl:max-h-28 xl:overflow-y-auto">{caption}</p>
+        <p className="shrink-0 whitespace-pre-wrap px-5 pb-3 text-sm leading-6 text-slate-900">{caption}</p>
       ) : (
         <div className="shrink-0 space-y-3 px-5 pb-4">
           <div className="h-3 w-full rounded-full bg-slate-100" />
@@ -1215,34 +1216,34 @@ function SocialFeedPreview({
         </div>
       )}
 
-      <div className={cn('relative overflow-hidden bg-slate-100 xl:min-h-0 xl:flex-1', previewMedia.length < 2 && 'min-h-[430px]')}>
+      <div className={cn('relative overflow-hidden bg-slate-100', previewMedia.length < 2 && 'min-h-[430px]')}>
         {previewMedia.length === 1 ? (
-          <div className="flex w-full items-center justify-center xl:absolute xl:inset-0">
+          <div className="flex w-full items-center justify-center">
             {previewMedia[0].type.startsWith('video/') ? (
-              <ProtectedMediaVideo src={previewMedia[0].url} controls className="max-h-[430px] w-full bg-slate-950 object-contain xl:h-full xl:max-h-none" />
+              <ProtectedMediaVideo src={previewMedia[0].url} controls className="max-h-[560px] w-full bg-slate-950 object-contain" />
             ) : (
               <ProtectedMediaImage
                 src={previewMedia[0].url}
                 alt={`${PLATFORM_LABELS[platform]} post media preview 1`}
-                className="h-auto max-h-[430px] w-full object-contain xl:h-full xl:max-h-none"
+                className="h-auto max-h-[560px] w-full object-contain"
               />
             )}
           </div>
         ) : previewMedia.length > 1 ? (
-          // Several photos fill the frame as a collage, like the platforms show them, instead of spilling over the text.
+          // Several photos share a square frame like the platforms' collage; each shows whole, never cropped.
           <div className={cn(
-            'grid aspect-square w-full grid-cols-2 gap-0.5 xl:absolute xl:inset-0 xl:aspect-auto xl:h-full',
+            'grid aspect-square w-full grid-cols-2 gap-0.5',
             visiblePreviewMedia.length === 2 ? 'grid-rows-1' : 'grid-rows-2',
           )}>
             {visiblePreviewMedia.map((media, index) => (
-              <div key={media.url + '-' + index} className={cn('relative min-h-0 overflow-hidden bg-slate-200', visiblePreviewMedia.length === 3 && index === 0 && 'col-span-2')}>
+              <div key={media.url + '-' + index} className={cn('relative min-h-0 overflow-hidden bg-slate-100', visiblePreviewMedia.length === 3 && index === 0 && 'col-span-2')}>
                 {media.type.startsWith('video/') ? (
-                  <ProtectedMediaVideo src={media.url} controls={false} className="absolute inset-0 h-full w-full bg-slate-950 object-cover" />
+                  <ProtectedMediaVideo src={media.url} controls={false} className="absolute inset-0 h-full w-full bg-slate-950 object-contain" />
                 ) : (
                   <ProtectedMediaImage
                     src={media.url}
                     alt={`${PLATFORM_LABELS[platform]} post media preview ${index + 1}`}
-                    className="absolute inset-0 h-full w-full object-cover"
+                    className="absolute inset-0 h-full w-full object-contain"
                   />
                 )}
                 {index === visiblePreviewMedia.length - 1 && hiddenImageCount > 0 && (
@@ -1254,7 +1255,7 @@ function SocialFeedPreview({
             ))}
           </div>
         ) : (
-          <div className="flex h-full min-h-[430px] items-center justify-center xl:absolute xl:inset-0 xl:min-h-0">
+          <div className="flex h-full min-h-[430px] items-center justify-center">
             <EmptyMediaPlaceholder />
           </div>
         )}
