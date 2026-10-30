@@ -74,9 +74,10 @@ postiva:
     client-id: ${PAYOS_CLIENT_ID:}
     api-key: ${PAYOS_API_KEY:}
     checksum-key: ${PAYOS_CHECKSUM_KEY:}
-    return-url: ${POSTIVA_BILLING_RETURN_URL:}
-    cancel-url: ${POSTIVA_BILLING_CANCEL_URL:}
-    refund-policy-url: ${POSTIVA_BILLING_REFUND_POLICY_URL:}
+    # payOS sends the buyer back to the billing page; the refund policy is a public page of the frontend.
+    return-url: ${POSTIVA_BILLING_RETURN_URL:${postiva.frontend-origin}/app/billing}
+    cancel-url: ${POSTIVA_BILLING_CANCEL_URL:${postiva.frontend-origin}/app/billing}
+    refund-policy-url: ${POSTIVA_BILLING_REFUND_POLICY_URL:${postiva.frontend-origin}/refund-policy}
   ai:
     cost:
       enabled: ${POSTIVA_AI_ENABLED:true}

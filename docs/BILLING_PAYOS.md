@@ -13,7 +13,7 @@ Theo [hướng dẫn payOS](https://payos.vn/docs/api/) và [xác thực tổ ch
 5. Tác vụ nền mỗi 2 phút tra cứu payOS cho các đơn chờ, hết hạn, có bất thường và thử cấp quyền lại cho đơn đã trả. Phản hồi provider phải có chữ ký hợp lệ; chỉ `PAID` với tổng tiền đúng và một tham chiếu giao dịch xác định mới được cấp Pro. Đơn đã hết hạn tại Postiva vẫn có thể ghi nhận tiền đến muộn và cấp kỳ đã mua.
 6. Người dùng yêu cầu hoàn toàn bộ tiền một đơn; admin đã qua MFA duyệt, đánh dấu xử lý bên ngoài, rồi **chỉ xác nhận thành công sau khi kiểm tra chứng từ ngân hàng/cổng** và nhập mã hoàn độc nhất. Kỳ Pro của đơn đó được vô hiệu hóa, lịch sử thu tiền và lượt AI cũ vẫn giữ. payOS [API payment link hiện công bố](https://payos.vn/docs/api/) không có thao tác refund cho payment link, nên chuyển tiền hoàn và đối chiếu tiền về tài khoản khách là việc vận hành bên ngoài Postiva. Trạng thái `SUCCEEDED` ở Postiva là xác nhận thủ công của admin, không phải webhook hoàn tiền của payOS.
 
-Các API: `GET /api/billing/offer`, `POST /api/billing/orders` (header `Idempotency-Key: UUID`), `GET /api/billing/orders`, `GET /api/billing/orders/{id}`, `POST /api/billing/orders/{id}/cancel`, `POST/GET /api/billing/orders/{id}/refund-requests`; admin xem đơn/sự kiện/nhật ký, đối soát thủ công và xử lý hoàn dưới `/api/admin/billing/**`. Mọi API admin cần ADMIN hoạt động và MFA đã xác minh. Lịch sử khách hàng chỉ trả đơn của chính họ.
+Các API: `GET /api/billing/offer`, `POST /api/billing/orders` (header `Idempotency-Key: UUID`), `GET /api/billing/orders`, `GET /api/billing/orders/{id}`, `POST /api/billing/orders/{id}/cancel`, `POST /api/billing/orders/{id}/refresh`, `POST/GET /api/billing/orders/{id}/refund-requests`; admin xem đơn/sự kiện/nhật ký, đối soát thủ công và xử lý hoàn dưới `/api/admin/billing/**`. Mọi API admin cần ADMIN hoạt động và MFA đã xác minh. Lịch sử khách hàng chỉ trả đơn của chính họ.
 
 ## Cấu hình trước khi mở bán
 
@@ -25,10 +25,11 @@ POSTIVA_PRO_PRICE_VND=0
 PAYOS_CLIENT_ID=
 PAYOS_API_KEY=
 PAYOS_CHECKSUM_KEY=
-POSTIVA_BILLING_RETURN_URL=https://TEN-MIEN/app/billing
-POSTIVA_BILLING_CANCEL_URL=https://TEN-MIEN/app/billing
-POSTIVA_BILLING_REFUND_POLICY_URL=https://TEN-MIEN/chinh-sach-hoan-tien
 ```
+
+Return/cancel URL mặc định là `POSTIVA_FRONTEND_ORIGIN` + `/app/billing`, chính sách hoàn tiền mặc định là trang công khai `/refund-policy` của frontend. Chỉ đặt `POSTIVA_BILLING_RETURN_URL`, `POSTIVA_BILLING_CANCEL_URL`, `POSTIVA_BILLING_REFUND_POLICY_URL` khi muốn trỏ nơi khác. Khi chạy trên máy (không có profile staging/prod) chấp nhận `http://localhost`/`127.0.0.1`; staging/prod vẫn bắt buộc HTTPS. Webhook local đi qua ngrok: `https://<ngrok>/api/billing/payos/webhook`.
+
+Khi người mua bấm thanh toán, trang Gói Pro chuyển thẳng sang trang mã QR của payOS. Lúc quay về, trang gọi `POST /api/billing/orders/{id}/refresh` để hỏi payOS ngay (không phải chờ webhook hay đợt đối soát 2 phút); nếu người mua đã hủy trên trang payOS, đơn được ghi nhận là đã hủy và lần mua sau tạo đơn mới thay vì trả lại link đã đóng.
 
 `POSTIVA_PRO_PRICE_VND` phải là giá cuối cùng người mua sẽ trả (gồm các khoản cần công bố theo mô hình kinh doanh), đã được duyệt và khớp trang bán hàng; mã nguồn không coi mức 99.000 VND nêu trong tài liệu MVP cũ là giá đã duyệt. Cần chốt quota, kỳ 30 ngày, điều kiện hoàn tiền, hóa đơn/chứng từ và người hỗ trợ trước khi bật `POSTIVA_BILLING_ENABLED=true`. URL phải là HTTPS công khai; webhook phải đăng ký trên kênh payOS và kiểm tra bằng tính năng xác nhận webhook của nhà cung cấp.
 

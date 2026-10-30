@@ -35,7 +35,30 @@ public class BillingService {
         if (!properties.ready()) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                 "Gói Pro chưa mở bán; vui lòng liên hệ hỗ trợ");
         BillingStore.Order order = store.draft(userId, key);
+        if ("PENDING".equals(order.status())) {
+            // An earlier unpaid order is reused only while payOS still waits on it; a link the buyer
+            // cancelled on the payOS page must not be handed back as the "new" one.
+            BillingStore.Order current = refreshed(order, userId);
+            if (!List.of("PENDING", "PAID", "REVIEW").contains(current.status())) order = store.draft(userId, key);
+            else return current;
+        }
         ensureLink(order);
+        return store.require(order.id(), userId);
+    }
+
+    /** Asks payOS right away instead of waiting for the webhook or the two-minute reconciliation. */
+    public BillingStore.Order refresh(UUID userId, UUID orderId) {
+        return refreshed(store.require(orderId, userId), userId);
+    }
+
+    private BillingStore.Order refreshed(BillingStore.Order order, UUID userId) {
+        try {
+            if ("CREATING".equals(order.status()) && order.expiresAt().isAfter(java.time.Instant.now())) ensureLink(order);
+            else if ("PENDING".equals(order.status())) reconcileOne(order);
+            else if ("PAID".equals(order.status()) && !"GRANTED".equals(order.grantStatus())) grants.grant(order.id());
+        } catch (Exception exception) {
+            log.warn("On-demand payOS check deferred for order {} ({})", order.id(), exception.getClass().getSimpleName());
+        }
         return store.require(order.id(), userId);
     }
 
@@ -60,7 +83,9 @@ public class BillingService {
         if ("PAID".equals(order.status())) throw new ResponseStatusException(HttpStatus.CONFLICT,
                 "Đơn đã thanh toán; hãy dùng quy trình yêu cầu hoàn tiền");
         if (!"PENDING".equals(order.status())) return order;
-        reconcileReceipt(store.applyProviderStatus(payos.cancel(order.orderCode())));
+        // Cancelling on the payOS page already closed the link; payOS refuses a second cancel.
+        PayOsGateway.Status current = payos.lookup(order.orderCode());
+        reconcileReceipt(store.applyProviderStatus("PENDING".equals(current.status()) ? payos.cancel(order.orderCode()) : current));
         return store.require(orderId, userId);
     }
 

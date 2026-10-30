@@ -47,6 +47,8 @@ class BillingIntegrationTest {
     @MockBean EmailService email;
     @MockBean PublishingScheduler scheduler;
     @MockBean PayOsGateway payos;
+    @Autowired BillingService billing;
+    @Autowired BillingProperties properties;
 
     @DynamicPropertySource static void database(DynamicPropertyRegistry registry) {
         if (URL == null || !URL.matches("jdbc:postgresql://(localhost|127\\.0\\.0\\.1):[0-9]+/postiva_migration_test(\\?.*)?"))
@@ -127,6 +129,64 @@ class BillingIntegrationTest {
         assertEquals("NOT_APPLICABLE", store.require(first.id(), user).grantStatus());
         assertEquals("GRANTED", store.require(second.id(), user).grantStatus());
         assertEquals("FREE", usage.summary(user).plan());
+    }
+
+    @Test void buyingAgainAfterCancellingOnThePayOsPageStartsAFreshOrder() {
+        openSales();
+        UUID user = user();
+        BillingStore.Order first = draft(user);
+        org.mockito.Mockito.when(payos.lookup(first.orderCode())).thenReturn(status(first, "CANCELLED", 0, ""));
+        org.mockito.Mockito.when(payos.create(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyLong())).thenAnswer(call -> {
+            long code = call.getArgument(0);
+            return new PayOsGateway.Link(code, call.getArgument(1), "link" + code, "https://pay.payos.vn/web/link" + code, "12345678");
+        });
+        BillingStore.Order second = billing.create(user, UUID.randomUUID());
+        assertNotEquals(first.id(), second.id());
+        assertEquals("PENDING", second.status());
+        assertEquals("CANCELLED", store.require(first.id(), user).status());
+    }
+
+    @Test void anOrderStillWaitingOnPayOsIsReusedNotDuplicated() {
+        openSales();
+        UUID user = user();
+        BillingStore.Order first = draft(user);
+        org.mockito.Mockito.when(payos.lookup(first.orderCode())).thenReturn(status(first, "PENDING", 0, ""));
+        assertEquals(first.id(), billing.create(user, UUID.randomUUID()).id());
+        org.mockito.Mockito.verify(payos, org.mockito.Mockito.never()).create(org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyLong());
+    }
+
+    @Test void cancellingALinkPayOsAlreadyClosedOnlyRecordsIt() {
+        UUID user = user();
+        BillingStore.Order order = draft(user);
+        org.mockito.Mockito.when(payos.lookup(order.orderCode())).thenReturn(status(order, "CANCELLED", 0, ""));
+        assertEquals("CANCELLED", billing.cancel(user, order.id()).status());
+        org.mockito.Mockito.verify(payos, org.mockito.Mockito.never()).cancel(order.orderCode());
+    }
+
+    @Test void checkingOnReturnTurnsProOnWithoutWaitingForTheWebhook() {
+        UUID user = user();
+        BillingStore.Order order = draft(user);
+        org.mockito.Mockito.when(payos.lookup(order.orderCode())).thenReturn(status(order, "PAID", order.amountVnd(), "FT-RETURN-1"));
+        BillingStore.Order after = billing.refresh(user, order.id());
+        assertEquals("PAID", after.status());
+        assertEquals("GRANTED", after.grantStatus());
+        assertEquals("PRO", usage.summary(user).plan());
+    }
+
+    private void openSales() {
+        properties.setEnabled(true);
+        properties.setProPriceVnd(2_000);
+        properties.setClientId("client"); properties.setApiKey("api");
+        properties.setChecksumKey("12345678901234567890123456789012");
+        properties.setReturnUrl("http://localhost:5173/app/billing");
+        properties.setCancelUrl("http://localhost:5173/app/billing");
+        properties.setRefundPolicyUrl("http://localhost:5173/refund-policy");
+    }
+
+    private PayOsGateway.Status status(BillingStore.Order order, String state, long paid, String reference) {
+        return new PayOsGateway.Status(order.orderCode(), order.amountVnd(), paid, state, order.linkId(), "12345678", reference);
     }
 
     private BillingStore.Order draft(UUID user) {

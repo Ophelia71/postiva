@@ -41,6 +41,7 @@ import { HomePage } from './pages/HomePage'
 import { ReportsPage } from './pages/ReportsPage'
 import { SchedulePage } from './pages/SchedulePage'
 import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage'
+import { RefundPolicyPage } from './pages/RefundPolicyPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { ChangePasswordPage } from './pages/ChangePasswordPage'
@@ -89,6 +90,7 @@ function App() {
     <WebAnalyticsTracker />
     <Routes>
       <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+      <Route path="/refund-policy" element={<RefundPolicyPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="*" element={<SessionApp />} />

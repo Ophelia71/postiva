@@ -28,8 +28,15 @@ public class BillingProperties {
                 && https(returnUrl) && https(cancelUrl);
     }
 
+    /** https everywhere; plain http only for this machine, so payOS can be tried against a local frontend. */
     private boolean https(String value) {
-        try { URI uri = URI.create(value); return "https".equalsIgnoreCase(uri.getScheme()) && uri.getHost() != null; }
+        try {
+            URI uri = URI.create(value);
+            if (uri.getHost() == null) return false;
+            if ("https".equalsIgnoreCase(uri.getScheme())) return true;
+            return "http".equalsIgnoreCase(uri.getScheme())
+                    && ("localhost".equalsIgnoreCase(uri.getHost()) || "127.0.0.1".equals(uri.getHost()));
+        }
         catch (Exception ignored) { return false; }
     }
 
