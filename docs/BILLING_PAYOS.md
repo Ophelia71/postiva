@@ -21,7 +21,7 @@ Các API: `GET /api/billing/offer`, `POST /api/billing/orders` (header `Idempote
 
 ```text
 POSTIVA_BILLING_ENABLED=false
-POSTIVA_PRO_PRICE_VND=0
+POSTIVA_PRO_PRICE_VND=149000
 PAYOS_CLIENT_ID=
 PAYOS_API_KEY=
 PAYOS_CHECKSUM_KEY=
@@ -31,7 +31,7 @@ Return/cancel URL mặc định là `POSTIVA_FRONTEND_ORIGIN` + `/app/billing`, 
 
 Khi người mua bấm thanh toán, trang Gói Pro chuyển thẳng sang trang mã QR của payOS. Lúc quay về, trang gọi `POST /api/billing/orders/{id}/refresh` để hỏi payOS ngay (không phải chờ webhook hay đợt đối soát 2 phút); nếu người mua đã hủy trên trang payOS, đơn được ghi nhận là đã hủy và lần mua sau tạo đơn mới thay vì trả lại link đã đóng.
 
-`POSTIVA_PRO_PRICE_VND` phải là giá cuối cùng người mua sẽ trả (gồm các khoản cần công bố theo mô hình kinh doanh), đã được duyệt và khớp trang bán hàng; mã nguồn không coi mức 99.000 VND nêu trong tài liệu MVP cũ là giá đã duyệt. Cần chốt quota, kỳ 30 ngày, điều kiện hoàn tiền, hóa đơn/chứng từ và người hỗ trợ trước khi bật `POSTIVA_BILLING_ENABLED=true`. URL phải là HTTPS công khai; webhook phải đăng ký trên kênh payOS và kiểm tra bằng tính năng xác nhận webhook của nhà cung cấp.
+`POSTIVA_PRO_PRICE_VND` phải là giá cuối cùng người mua sẽ trả (gồm các khoản cần công bố theo mô hình kinh doanh), đã được duyệt và khớp trang bán hàng; giá đã được chủ dự án chốt ngày 30/10/2026: 149.000 VND cho 30 ngày, 300 lượt AI (Free giữ 30 lượt). Cần chốt quota, kỳ 30 ngày, điều kiện hoàn tiền, hóa đơn/chứng từ và người hỗ trợ trước khi bật `POSTIVA_BILLING_ENABLED=true`. URL phải là HTTPS công khai; webhook phải đăng ký trên kênh payOS và kiểm tra bằng tính năng xác nhận webhook của nhà cung cấp.
 
 Khi tạm dừng bán bằng `POSTIVA_BILLING_ENABLED=false`, **giữ khóa payOS và webhook hoạt động** cho các đơn đã tạo: backend vẫn nhận tiền đến muộn, đối soát và cấp quyền còn nợ. Không xóa khóa hoặc tắt endpoint trong lúc còn đơn chưa kết thúc.
 

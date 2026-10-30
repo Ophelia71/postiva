@@ -27,8 +27,8 @@ public class BillingService {
     }
 
     public Offer offer() {
-        return new Offer(properties.ready(), properties.getProPriceVnd(), usage.getProAiLimit(), usage.getPeriodDays(),
-                properties.ready() ? properties.getRefundPolicyUrl() : null);
+        return new Offer(properties.ready(), properties.getProPriceVnd(), usage.getProAiLimit(), usage.getFreeAiLimit(),
+                usage.getPeriodDays(), properties.ready() ? properties.getRefundPolicyUrl() : null);
     }
 
     public BillingStore.Order create(UUID userId, UUID key) {
@@ -135,5 +135,5 @@ public class BillingService {
         }
     }
 
-    public record Offer(boolean available, long amountVnd, int aiLimit, int periodDays, String refundPolicyUrl) { }
+    public record Offer(boolean available, long amountVnd, int aiLimit, int freeAiLimit, int periodDays, String refundPolicyUrl) { }
 }

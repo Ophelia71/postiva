@@ -6,7 +6,7 @@ import { usePreferences } from '../lib/preferences'
 
 const CARD = 'rounded-2xl border border-[var(--app-border)] bg-[var(--panel-bg)] p-5 shadow-sm'
 
-type Offer = { available: boolean; amountVnd: number; aiLimit: number; periodDays: number; refundPolicyUrl: string | null }
+type Offer = { available: boolean; amountVnd: number; aiLimit: number; freeAiLimit: number; periodDays: number; refundPolicyUrl: string | null }
 type Order = { id: string; orderCode: number; amountVnd: number; aiLimit: number; periodDays: number; status: string; grantStatus: string; checkoutUrl: string | null; expiresAt: string; createdAt: string; paidAt: string | null }
 type Usage = { plan: 'FREE' | 'PRO'; endsAt: string; limit: number; remaining: number }
 type Refund = { id: string; orderId: string; amountVnd: number; status: string; reason: string; createdAt: string; providerRef: string | null }
@@ -185,10 +185,23 @@ export function BillingPage() {
         ? <>{t('Bạn đang dùng', 'You are on')} <strong>Pro</strong> {t('đến', 'until')} {dateTime(usage.endsAt)} · {t('còn', '')} {usage.remaining}/{usage.limit} {t('lượt AI', 'AI generations left')}</>
         : <>{t('Bạn đang dùng', 'You are on')} <strong>Free</strong> · {t('còn', '')} {usage.remaining}/{usage.limit} {t('lượt AI kỳ này', 'AI generations left this period')}</>}</p>}
       {offer ? <>
-        <p className="mt-5 text-3xl font-bold tracking-tight">{offer.amountVnd > 0 ? money(offer.amountVnd) : t('Chưa có giá', 'No price yet')}<span className="ml-2 text-sm font-medium text-[var(--muted-text)]">/ {offer.periodDays} {t('ngày', 'days')}</span></p>
+        <p className="mt-5 text-3xl font-bold tracking-tight">{money(offer.amountVnd)}<span className="ml-2 text-sm font-medium text-[var(--muted-text)]">/ {offer.periodDays} {t('ngày', 'days')}</span></p>
+        {/* Free stays for trying Postiva out; Pro is the same app with ten times the AI. */}
+        <div className="mt-4 grid grid-cols-2 overflow-hidden rounded-lg border border-[var(--app-border)] text-sm">
+          <div className="p-3">
+            <p className="font-semibold">Free</p>
+            <p className="mt-1 text-2xl font-bold">{offer.freeAiLimit}</p>
+            <p className="text-[var(--muted-text)]">{t('lượt AI mỗi kỳ', 'AI uses per period')}</p>
+          </div>
+          <div className="border-l border-[var(--app-border)] bg-indigo-50 p-3">
+            <p className="font-semibold text-indigo-800">Pro</p>
+            <p className="mt-1 text-2xl font-bold text-indigo-800">{offer.aiLimit}</p>
+            <p className="text-[var(--muted-text)]">{t('lượt AI mỗi kỳ', 'AI uses per period')}</p>
+          </div>
+        </div>
         <ul className="mt-4 space-y-1.5 text-sm text-slate-700">
-          <li>{offer.aiLimit} {t('lượt tạo bài bằng AI mỗi kỳ', 'AI generations per period')}</li>
-          <li>{t('Thanh toán bằng chuyển khoản ngân hàng: quét mã QR trong app ngân hàng', 'Pay by bank transfer: scan the QR code in your banking app')}</li>
+          <li>{t('Mọi tính năng khác (Daily, đăng 3 kênh, báo cáo) dùng được ở cả hai gói.', 'Everything else (Daily, three channels, reports) works on both plans.')}</li>
+          <li>{t('Thanh toán bằng chuyển khoản: quét mã QR trong app ngân hàng.', 'Pay by bank transfer: scan the QR code in your banking app.')}</li>
           <li>{t('Pro bật ngay khi nhận được tiền. Gia hạn sớm sẽ nối thêm kỳ mới, không mất ngày nào.', 'Pro turns on as soon as the money arrives. Renewing early adds a new period; no days are lost.')}</li>
         </ul>
         <div className="mt-5 flex flex-wrap items-center gap-3">
@@ -197,7 +210,7 @@ export function BillingPage() {
             : <button type="button" disabled={!offer.available || busy} onClick={() => void buy()} className="min-h-11 rounded-lg bg-indigo-600 px-5 font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400">{busy ? t('Đang mở trang thanh toán…', 'Opening payment…') : usage?.plan === 'PRO' ? t('Gia hạn Pro', 'Renew Pro') : t('Nâng lên Pro', 'Upgrade to Pro')}</button>}
           <Link to="/refund-policy" className="text-sm font-semibold text-indigo-700 underline underline-offset-4">{t('Chính sách hoàn tiền', 'Refund policy')}</Link>
         </div>
-        {!offer.available && <p className="mt-3 text-sm text-slate-600">{t('Gói Pro chưa mở bán. Bạn vẫn dùng Free bình thường.', 'Pro is not on sale yet. Free remains available.')}</p>}
+        {!offer.available && <p className="mt-3 text-sm text-slate-600">{t('Thanh toán trực tuyến đang tạm đóng. Bạn vẫn dùng Free bình thường; cần Pro ngay thì liên hệ postiva84@gmail.com.', 'Online payment is paused. Free keeps working; for Pro now, contact postiva84@gmail.com.')}</p>}
       </> : <p className="mt-2 text-sm">{t('Đang tải…', 'Loading…')}</p>}
     </section>
     <div className="flex flex-col gap-6">

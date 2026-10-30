@@ -73,7 +73,7 @@ Trang tạo bài hiển thị quota, ngày hết kỳ và lịch sử có phân 
 | Biến | Mặc định | Ghi chú |
 | --- | --- | --- |
 | POSTIVA_FREE_AI_LIMIT | 5 | Áp dụng khi tạo kỳ Free mới |
-| POSTIVA_PRO_AI_LIMIT | 50 | Chuẩn bị cho bước cấp kỳ Pro qua thanh toán; chưa có endpoint mở bán |
+| POSTIVA_PRO_AI_LIMIT | 300 | Lượt AI mỗi kỳ 30 ngày của gói Pro (mua qua payOS hoặc admin cấp) |
 | POSTIVA_AI_USER_DAILY_ATTEMPTS | 20 | Trần số lần yêu cầu mỗi ngày UTC |
 | POSTIVA_AI_GLOBAL_DAILY_ATTEMPTS | 100 | Đặt 0 để tạm dừng yêu cầu AI mới |
 | POSTIVA_LOGIN_ATTEMPTS_PER_15_MINUTES | 10 | Tổng số lần gửi login theo email trong cửa sổ |

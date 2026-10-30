@@ -70,7 +70,7 @@ spring:
 postiva:
   billing:
     enabled: ${POSTIVA_BILLING_ENABLED:false}
-    pro-price-vnd: ${POSTIVA_PRO_PRICE_VND:0}
+    pro-price-vnd: ${POSTIVA_PRO_PRICE_VND:149000}
     client-id: ${PAYOS_CLIENT_ID:}
     api-key: ${PAYOS_API_KEY:}
     checksum-key: ${PAYOS_CHECKSUM_KEY:}
@@ -95,7 +95,7 @@ postiva:
       warning-percent: ${POSTIVA_AI_BUDGET_WARNING_PERCENT:80}
   usage:
     free-ai-limit: ${POSTIVA_FREE_AI_LIMIT:30}
-    pro-ai-limit: ${POSTIVA_PRO_AI_LIMIT:50}
+    pro-ai-limit: ${POSTIVA_PRO_AI_LIMIT:300}
     period-days: 30
     global-daily-attempts: ${POSTIVA_AI_GLOBAL_DAILY_ATTEMPTS:100}
     user-daily-attempts: ${POSTIVA_AI_USER_DAILY_ATTEMPTS:20}

@@ -28,7 +28,7 @@ export function UsagePanel({ refreshVersion }: { refreshVersion: number }) {
           </button>
           <HelpTip label={t('Chi tiết gói và lượt AI', 'Plan and AI usage details')}>
             <p>{t('Kỳ hiện tại kết thúc', 'Current period ends')} {new Date(data.endsAt).toLocaleString('vi-VN')}.</p>
-            <p className="mt-2 text-xs leading-5 text-slate-600">{t('Dùng thử Free: 30 lượt tạo bài AI mỗi kỳ 30 ngày. Pro có 50 lượt mỗi kỳ; chỉ bài được lưu thành công mới trừ lượt.', 'Free trial: 30 AI generations per 30-day period. Pro includes 50 per period; only saved posts use a generation.')}</p>
+            <p className="mt-2 text-xs leading-5 text-slate-600">{t('Dùng thử Free: 30 lượt tạo bài AI mỗi kỳ 30 ngày. Pro có 300 lượt mỗi kỳ; chỉ bài được lưu thành công mới trừ lượt.', 'Free trial: 30 AI generations per 30-day period. Pro includes 300 per period; only saved posts use a generation.')}</p>
             {data.remaining === 0 && <p className="mt-2 font-medium">{t('Đã hết lượt AI khả dụng. Bạn vẫn có thể chỉnh sửa, đăng và lên lịch bài viết.', 'No AI generations available. You can still edit, publish and schedule posts.')}</p>}
           </HelpTip>
         </div>
