@@ -1215,18 +1215,34 @@ function SocialFeedPreview({
         </div>
       )}
 
-      <div className="relative min-h-[430px] overflow-hidden bg-slate-100 xl:min-h-0 xl:flex-1">
-        {previewMedia.length > 0 ? (
-          <div className={cn('grid w-full xl:absolute xl:inset-0 xl:place-content-center', visiblePreviewMedia.length > 1 ? 'grid-cols-2 gap-0.5' : 'grid-cols-1')}>
+      <div className={cn('relative overflow-hidden bg-slate-100 xl:min-h-0 xl:flex-1', previewMedia.length < 2 && 'min-h-[430px]')}>
+        {previewMedia.length === 1 ? (
+          <div className="flex w-full items-center justify-center xl:absolute xl:inset-0">
+            {previewMedia[0].type.startsWith('video/') ? (
+              <ProtectedMediaVideo src={previewMedia[0].url} controls className="max-h-[430px] w-full bg-slate-950 object-contain xl:h-full xl:max-h-none" />
+            ) : (
+              <ProtectedMediaImage
+                src={previewMedia[0].url}
+                alt={`${PLATFORM_LABELS[platform]} post media preview 1`}
+                className="h-auto max-h-[430px] w-full object-contain xl:h-full xl:max-h-none"
+              />
+            )}
+          </div>
+        ) : previewMedia.length > 1 ? (
+          // Several photos fill the frame as a collage, like the platforms show them, instead of spilling over the text.
+          <div className={cn(
+            'grid aspect-square w-full grid-cols-2 gap-0.5 xl:absolute xl:inset-0 xl:aspect-auto xl:h-full',
+            visiblePreviewMedia.length === 2 ? 'grid-rows-1' : 'grid-rows-2',
+          )}>
             {visiblePreviewMedia.map((media, index) => (
-              <div key={media.url + '-' + index} className="relative">
+              <div key={media.url + '-' + index} className={cn('relative min-h-0 overflow-hidden bg-slate-200', visiblePreviewMedia.length === 3 && index === 0 && 'col-span-2')}>
                 {media.type.startsWith('video/') ? (
-                  <ProtectedMediaVideo src={media.url} controls className="mx-auto max-h-[430px] w-full bg-slate-950 object-contain xl:max-h-[26vh]" />
+                  <ProtectedMediaVideo src={media.url} controls={false} className="absolute inset-0 h-full w-full bg-slate-950 object-cover" />
                 ) : (
                   <ProtectedMediaImage
                     src={media.url}
                     alt={`${PLATFORM_LABELS[platform]} post media preview ${index + 1}`}
-                    className="mx-auto h-auto max-h-[430px] w-full object-contain xl:max-h-[26vh]"
+                    className="absolute inset-0 h-full w-full object-cover"
                   />
                 )}
                 {index === visiblePreviewMedia.length - 1 && hiddenImageCount > 0 && (
