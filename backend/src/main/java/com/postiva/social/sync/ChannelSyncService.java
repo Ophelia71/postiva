@@ -1,5 +1,6 @@
 package com.postiva.social.sync;
 
+import com.postiva.auth.service.CurrentUserService;
 import com.postiva.common.Platform;
 import com.postiva.common.PostStatus;
 import com.postiva.post.entity.GeneratedPost;
@@ -19,6 +20,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -32,6 +34,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.stream.Collectors;
@@ -39,7 +42,9 @@ import java.util.stream.Collectors;
 /**
  * Reads a channel's posts back from Facebook, Instagram or Threads: imports posts Postiva does not know yet,
  * refreshes likes/comments/shares/views of every known post, and drops local copies of posts deleted on the
- * platform. Used after connecting a channel and from the "Cập nhật" button.
+ * platform. Runs after connecting a channel, whenever the shop opens Postiva (at most every
+ * {@link #REFRESH_ON_OPEN}), on a timer for channels nobody looked at for {@link #REFRESH_IN_BACKGROUND},
+ * and from the "Cập nhật" button.
  */
 @Service
 public class ChannelSyncService {
@@ -49,6 +54,11 @@ public class ChannelSyncService {
     static final int THREADS_MEASURED = 25;
     /** A post published moments ago may not be listed by the platform yet; never treat it as deleted. */
     static final Duration REMOVAL_GRACE = Duration.ofMinutes(15);
+    /** Opening Postiva again within this time shows the numbers read last time; Meta's rate limits stay far away. */
+    static final Duration REFRESH_ON_OPEN = Duration.ofMinutes(30);
+    static final Duration REFRESH_IN_BACKGROUND = Duration.ofHours(6);
+    /** Channels refreshed per timer run, so a growing user base never floods Meta or the sync threads. */
+    static final int BACKGROUND_BATCH = 20;
 
     private static final Logger log = LoggerFactory.getLogger(ChannelSyncService.class);
 
@@ -61,11 +71,14 @@ public class ChannelSyncService {
     private final JdbcTemplate jdbc;
     private final TransactionTemplate transactions;
     private final Executor executor;
+    private final CurrentUserService currentUser;
+    /** Channels being synced right now; a second request for the same channel is dropped, not queued. */
+    private final Set<UUID> running = ConcurrentHashMap.newKeySet();
 
     public ChannelSyncService(SocialAccountService accounts, PostInsightsService insights, ProductBriefRepository briefs,
                               GeneratedPostRepository posts, ScheduledPostRepository schedules, PublishLogRepository logs,
                               JdbcTemplate jdbc, PlatformTransactionManager transactionManager,
-                              @Qualifier("channelSyncExecutor") Executor executor) {
+                              @Qualifier("channelSyncExecutor") Executor executor, CurrentUserService currentUser) {
         this.accounts = accounts;
         this.insights = insights;
         this.briefs = briefs;
@@ -75,6 +88,7 @@ public class ChannelSyncService {
         this.jdbc = jdbc;
         this.transactions = new TransactionTemplate(transactionManager);
         this.executor = executor;
+        this.currentUser = currentUser;
     }
 
     /** Sync one of the signed-in user's channels. */
@@ -84,6 +98,7 @@ public class ChannelSyncService {
 
     /** Best effort, right after connecting: a failure only means the shop presses "Cập nhật" later. */
     public void syncInBackground(UUID accountId) {
+        if (!running.add(accountId)) return;
         try {
             executor.execute(() -> {
                 try {
@@ -91,14 +106,57 @@ public class ChannelSyncService {
                     log.info("Synced social account {}: {} imported, {} updated", accountId, result.imported(), result.updated());
                 } catch (RuntimeException exception) {
                     log.warn("Background sync of social account {} failed: {}", accountId, exception.getMessage());
+                } finally {
+                    running.remove(accountId);
                 }
             });
         } catch (RejectedExecutionException exception) {
+            running.remove(accountId);
             log.warn("Background sync of social account {} skipped: executor busy", accountId);
         }
     }
 
+    /**
+     * Called when the shop opens Postiva: refreshes their channels not read in the last {@link #REFRESH_ON_OPEN}.
+     * Returns how many started, so the page knows whether newer numbers are on the way.
+     */
+    public int refreshCurrentUserChannelsOnOpen() {
+        List<UUID> due = claimDue(REFRESH_ON_OPEN, currentUser.requireCurrentUserId(), Integer.MAX_VALUE);
+        due.forEach(this::syncInBackground);
+        return due.size();
+    }
+
+    /** Keeps numbers fresh for shops that have not opened Postiva for a while. */
+    @Scheduled(fixedDelay = 1_800_000, initialDelay = 600_000)
+    public void refreshQuietChannels() {
+        claimDue(REFRESH_IN_BACKGROUND, null, BACKGROUND_BATCH).forEach(this::syncInBackground);
+    }
+
+    /**
+     * Marks channels due for a refresh as refreshed now and returns them. Doing both in one statement means two
+     * tabs, the timer and the open-page call never start the same channel twice.
+     */
+    private List<UUID> claimDue(Duration olderThan, UUID userId, int limit) {
+        Object[] args = userId == null
+                ? new Object[]{olderThan.toSeconds(), limit}
+                : new Object[]{olderThan.toSeconds(), userId, limit};
+        String sql = """
+                UPDATE social_accounts SET last_synced_at = now()
+                WHERE id IN (
+                    SELECT a.id FROM social_accounts a JOIN users u ON u.id = a.user_id
+                    WHERE a.disconnected_at IS NULL AND a.access_token_encrypted IS NOT NULL
+                      AND u.status = 'ACTIVE'
+                      AND (a.last_synced_at IS NULL OR a.last_synced_at < now() - make_interval(secs => ?))
+                      %s
+                    ORDER BY a.last_synced_at NULLS FIRST
+                    LIMIT ?
+                    FOR UPDATE OF a SKIP LOCKED)
+                RETURNING id""".formatted(userId == null ? "" : "AND a.user_id = ?");
+        return jdbc.queryForList(sql, UUID.class, args);
+    }
+
     public SyncResult sync(UUID accountId) {
+        jdbc.update("UPDATE social_accounts SET last_synced_at = now() WHERE id = ?", accountId);
         // Token refresh and Meta calls happen outside any database transaction.
         SocialAccount account = accounts.prepareForPublishing(accountId);
         int limit = account.getProvider() == Platform.FACEBOOK ? FACEBOOK_LIMIT : OTHER_LIMIT;

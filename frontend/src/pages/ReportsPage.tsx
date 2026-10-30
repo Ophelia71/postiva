@@ -107,8 +107,8 @@ export function ReportsPage() {
       <PageHeader
         title={t('Báo cáo trạng thái đăng', 'Publishing status report')}
         subtitle={t(
-          'Kết quả đăng và lượt tương tác của các bài. Số liệu được lấy từ nền tảng khi kết nối kênh và khi bạn bấm Cập nhật ở trang Kết nối.',
-          'Publishing results and engagement. Numbers are read from each platform when a channel is connected and when you press Update on the Connections page.',
+          'Kết quả đăng và lượt tương tác của các bài. Số liệu tự cập nhật mỗi khi bạn mở Postiva.',
+          'Publishing results and engagement. Numbers refresh every time you open Postiva.',
         )}
       />
 
@@ -118,7 +118,7 @@ export function ReportsPage() {
           <span className="text-xs text-[var(--muted-text)]">
             {engagement.fetchedAt
               ? `${t('Cập nhật', 'Updated')} ${formatPostDateTime(engagement.fetchedAt)} · ${engagement.measured}/${publishedPosts.length} ${t('bài có số liệu', 'posts measured')}`
-              : t('Chưa có số liệu. Bấm Cập nhật ở trang Kết nối để lấy.', 'No numbers yet. Press Update on the Connections page.')}
+              : t('Chưa có số liệu. Postiva đang lấy từ các kênh, vài phút nữa sẽ hiện.', 'No numbers yet. Postiva is reading your channels; they appear in a few minutes.')}
           </span>
         </div>
         <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">

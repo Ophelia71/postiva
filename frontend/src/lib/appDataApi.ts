@@ -72,6 +72,31 @@ type ResourceState<T> = {
   error: string | null
 }
 
+/** Fired once channels finished pulling new posts and numbers from the platforms; open pages re-read their data. */
+export const CHANNELS_REFRESHED_EVENT = 'postiva:channels-refreshed'
+// Reading a channel takes from a few seconds (Facebook) to about a minute (Threads, one call per post).
+const REFRESH_CHECKS_MS = [15_000, 45_000, 90_000]
+
+/**
+ * Asks the server to read the shop's channels again (it skips any read in the last half hour), then has open
+ * pages pick up the new numbers. Called whenever the app opens, so nobody has to press "Cập nhật".
+ */
+export function refreshChannelsOnOpen() {
+  // React may mount the shell twice in a row; one request per opening is enough.
+  if (Date.now() - lastRefreshRequest < 5_000) return
+  lastRefreshRequest = Date.now()
+  api.post<{ started: number }>('/social/meta/accounts/refresh-on-open')
+    .then((response) => {
+      if (!response.data.started) return
+      REFRESH_CHECKS_MS.forEach((delay) => window.setTimeout(
+        () => window.dispatchEvent(new Event(CHANNELS_REFRESHED_EVENT)), delay))
+    })
+    .catch(() => {
+      // Best effort: the numbers from the last read stay on screen.
+    })
+}
+let lastRefreshRequest = 0
+
 export function useAppDataResource<T>(path: string) {
   const [state, setState] = useState<ResourceState<T>>({
     data: null,
@@ -83,6 +108,11 @@ export function useAppDataResource<T>(path: string) {
   const reload = useCallback(() => {
     setReloadIndex((value) => value + 1)
   }, [])
+
+  useEffect(() => {
+    window.addEventListener(CHANNELS_REFRESHED_EVENT, reload)
+    return () => window.removeEventListener(CHANNELS_REFRESHED_EVENT, reload)
+  }, [reload])
 
   const updateData = useCallback((updater: (data: T) => T) => {
     setState((current) => current.data === null

@@ -26,6 +26,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -89,6 +90,12 @@ public class MetaController {
     @PostMapping("/accounts/{accountId}/refresh")
     public ApiResponse<SocialAccountResponse> refreshAccount(@PathVariable UUID accountId) {
         return ApiResponse.ok(accountService.refreshCurrentAccount(accountId));
+    }
+
+    /** Called each time the shop opens Postiva; returns how many channels started refreshing in the background. */
+    @PostMapping("/accounts/refresh-on-open")
+    public ApiResponse<Map<String, Integer>> refreshOnOpen() {
+        return ApiResponse.ok(Map.of("started", channelSync.refreshCurrentUserChannelsOnOpen()));
     }
 
     @PostMapping("/accounts/{accountId}/sync")

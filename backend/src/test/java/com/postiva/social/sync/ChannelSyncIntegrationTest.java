@@ -183,6 +183,34 @@ class ChannelSyncIntegrationTest {
         assertEquals(2, metrics.get("shares"));
     }
 
+    @Test void openingPostivaRefreshesChannelsAtMostEveryHalfHour() throws InterruptedException {
+        User user = user();
+        String token = jwt.generateToken(user);
+        SocialAccount ig = account(user, Platform.INSTAGRAM, "ig-" + UUID.randomUUID());
+        when(instagram.getRecentMediaMetrics(eq(ig.getPageId()), anyString(), any(), anyInt()))
+                .thenReturn(List.of(igPost("open-1", Instant.now().minus(1, ChronoUnit.DAYS), 4)));
+
+        Result first = call("POST", "/api/social/meta/accounts/refresh-on-open", token, Map.of());
+        assertEquals(200, first.status(), first.body().toString());
+        assertEquals(1, first.body().path("data").path("started").asInt());
+        // A second tab, or a reload a minute later, does not read the channel again.
+        assertEquals(0, call("POST", "/api/social/meta/accounts/refresh-on-open", token, Map.of())
+                .body().path("data").path("started").asInt());
+
+        Integer imported = 0;
+        for (int attempt = 0; attempt < 100 && imported == 0; attempt++) {
+            imported = jdbc.queryForObject("SELECT count(*) FROM scheduled_posts WHERE social_account_id = ?",
+                    Integer.class, ig.getId());
+            if (imported == 0) Thread.sleep(100);
+        }
+        assertEquals(1, imported);
+
+        // Half an hour later it is due again.
+        jdbc.update("UPDATE social_accounts SET last_synced_at = now() - interval '31 minutes' WHERE id = ?", ig.getId());
+        assertEquals(1, call("POST", "/api/social/meta/accounts/refresh-on-open", token, Map.of())
+                .body().path("data").path("started").asInt());
+    }
+
     @Test void deletingAChannelRemovesItsHistoryButKeepsSharedPostsAndAiUsage() {
         User user = user();
         String token = jwt.generateToken(user);

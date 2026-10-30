@@ -49,7 +49,7 @@ import { DailyPage } from './pages/DailyPage'
 import { ShopProfilePage } from './pages/ShopProfilePage'
 import { ShopProfileReminder } from './components/ShopProfileReminder'
 import { AppIndexRedirect, StartPage } from './pages/StartPage'
-import { type AppOverview, normalizeAppOverview, useAppDataResource } from './lib/appDataApi'
+import { type AppOverview, normalizeAppOverview, refreshChannelsOnOpen, useAppDataResource } from './lib/appDataApi'
 import { getOnboardingState } from './lib/onboarding'
 import { isShopProfileComplete, type ShopProfile } from './lib/shopProfile'
 
@@ -428,6 +428,11 @@ function AppShell({ session, onLogout, onPasswordChanged, demo }: ShellProps) {
   // The checklist and the profile page already ask for the profile themselves.
   const isOnboardingPage = pathname.startsWith('/app/start') || pathname.startsWith('/app/shop-profile')
   const [collapsed, setCollapsed] = useState(readSidebarCollapsed)
+  // Each visit brings in new posts, likes and views from the connected channels; the demo has none to read.
+  const inDemo = Boolean(demo)
+  useEffect(() => {
+    if (!inDemo) refreshChannelsOnOpen()
+  }, [inDemo])
   const toggleSidebar = () => {
     setCollapsed((value) => {
       writeSidebarCollapsed(!value)
