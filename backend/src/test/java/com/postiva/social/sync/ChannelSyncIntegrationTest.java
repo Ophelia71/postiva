@@ -52,6 +52,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -276,6 +277,31 @@ class ChannelSyncIntegrationTest {
         call("GET", "/api/app-data/posts", token, null).body().path("data").forEach(post -> contents.add(post.path("content").asText()));
         assertEquals(List.of("Bài của kênh đang nối"), contents);
         assertEquals(1, call("GET", "/api/app-data/overview", token, null).body().path("data").path("totalPosts").asInt());
+    }
+
+    @Test void deletingOnePlatformKeepsTheSamePostOnTheOthers() {
+        User user = user();
+        String token = jwt.generateToken(user);
+        SocialAccount page = account(user, Platform.FACEBOOK, "page-" + UUID.randomUUID());
+        SocialAccount instagram = account(user, Platform.INSTAGRAM, "ig-" + UUID.randomUUID());
+        SocialAccount threads = account(user, Platform.THREADS, "th-" + UUID.randomUUID());
+        GeneratedPost post = post(user, "Bài đăng ba nền tảng");
+        ScheduledPost onFacebook = schedule(post, page, ScheduledPostStatus.SCHEDULED);
+        ScheduledPost onInstagram = schedule(post, instagram, ScheduledPostStatus.SCHEDULED);
+        ScheduledPost onThreads = schedule(post, threads, ScheduledPostStatus.SCHEDULED);
+
+        Result first = call("DELETE", "/api/app-data/posts/" + post.getId() + "?scheduleId=" + onInstagram.getId(), token, null);
+        assertTrue(first.body().path("data").path("deleted").asBoolean(), first.body().toString());
+        assertFalse(schedules.existsById(onInstagram.getId()));
+        assertTrue(schedules.existsById(onFacebook.getId()));
+        assertTrue(schedules.existsById(onThreads.getId()));
+        assertTrue(posts.existsById(post.getId()));
+
+        // Someone else's schedule id is refused; the last platform takes the post with it.
+        assertEquals(404, call("DELETE", "/api/app-data/posts/" + post.getId() + "?scheduleId=" + UUID.randomUUID(), token, null).status());
+        call("DELETE", "/api/app-data/posts/" + post.getId() + "?scheduleId=" + onThreads.getId(), token, null);
+        call("DELETE", "/api/app-data/posts/" + post.getId() + "?scheduleId=" + onFacebook.getId(), token, null);
+        assertFalse(posts.existsById(post.getId()));
     }
 
     @Test void deletingTheAccountRemovesItsDataAndKeepsOnlyAnonymousUsage() throws Exception {

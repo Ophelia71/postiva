@@ -150,7 +150,7 @@ postiva:
 
   scheduler:
     publish-delay-ms: ${POSTIVA_PUBLISH_DELAY_MS:10000}
-    batch-size: ${POSTIVA_SCHEDULER_BATCH_SIZE:1}
+    batch-size: ${POSTIVA_SCHEDULER_BATCH_SIZE:6}
     max-attempts: ${POSTIVA_SCHEDULER_MAX_ATTEMPTS:4}
     lease-seconds: ${POSTIVA_SCHEDULER_LEASE_SECONDS:1800}
     backoff-base-seconds: ${POSTIVA_SCHEDULER_BACKOFF_BASE_SECONDS:60}

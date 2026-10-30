@@ -25,11 +25,13 @@ export function DeletePostConfirmModal({
     return () => document.removeEventListener('keydown', onKey)
   }, [deleting, onCancel])
 
+  // Only this platform's copy goes; the same post scheduled on other platforms stays.
+  const platform = post.platform || 'nền tảng này'
   const description = post.status === 'Published' && post.platform.toLowerCase() === 'facebook'
-    ? 'Bài sẽ bị xóa khỏi Facebook và lịch sử Postiva.'
+    ? 'Bài sẽ bị xóa khỏi Facebook và lịch sử Postiva. Bài trên các nền tảng khác vẫn giữ nguyên.'
     : post.status === 'Scheduled'
-      ? 'Bài và tất cả lần đăng liên quan sẽ bị xóa khỏi lịch đăng Postiva.'
-      : 'Bài và tất cả lần đăng liên quan sẽ bị xóa khỏi lịch sử Postiva.'
+      ? `Chỉ hủy lịch đăng lên ${platform}. Bài trên các nền tảng khác vẫn giữ nguyên.`
+      : `Chỉ xóa bài ${platform} khỏi lịch sử Postiva. Bài trên các nền tảng khác vẫn giữ nguyên.`
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/40 px-4" role="dialog" aria-modal="true" aria-labelledby="delete-post-title">
@@ -40,7 +42,7 @@ export function DeletePostConfirmModal({
           </span>
           <div className="min-w-0 flex-1">
             <div className="flex items-start justify-between gap-3">
-              <h2 id="delete-post-title" className="text-lg font-bold text-slate-800">Xóa bài viết?</h2>
+              <h2 id="delete-post-title" className="text-lg font-bold text-slate-800">Xóa bài {post.platform}?</h2>
               <button
                 type="button"
                 onClick={onCancel}
@@ -76,7 +78,7 @@ export function DeletePostConfirmModal({
             disabled={deleting}
             className="min-h-11 rounded-lg bg-rose-600 px-4 text-sm font-bold text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
-            {deleting ? 'Đang xóa...' : 'Xóa bài viết'}
+            {deleting ? 'Đang xóa...' : `Xóa bài ${post.platform}`}
           </button>
         </div>
       </div>

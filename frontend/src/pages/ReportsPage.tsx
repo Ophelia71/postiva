@@ -410,13 +410,13 @@ export function ReportsPage() {
     setIsDeleting(true)
     setDeleteError('')
     try {
-      const response = await api.delete<DeletePostResponse>(`/app-data/posts/${post.id}`)
+      const response = await api.delete<DeletePostResponse>(`/app-data/posts/${post.id}`, { params: post.scheduleId ? { scheduleId: post.scheduleId } : undefined })
       if (!response.data.deleted) {
         setDeleteError(response.data.message || response.data.facebookMessage || 'Không thể xóa bài viết.')
         return
       }
       setDeleteCandidate(null)
-      setDetailPost((current) => current?.id === post.id ? null : current)
+      setDetailPost((current) => current?.scheduleId === post.scheduleId ? null : current)
       reload()
       postsState.reload()
     } catch (error) {

@@ -22,6 +22,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -170,12 +171,24 @@ public class AppDataController {
         ));
     }
 
+    /**
+     * Deletes one platform's schedule when {@code scheduleId} is given and the post goes elsewhere too;
+     * the post itself (and every platform with it) goes only with its last schedule or without a scheduleId.
+     */
     @DeleteMapping("/posts/{postId}")
     @Transactional
-    public ApiResponse<Map<String, Object>> deletePost(@PathVariable UUID postId) {
+    public ApiResponse<Map<String, Object>> deletePost(@PathVariable UUID postId,
+                                                       @RequestParam(required = false) UUID scheduleId) {
         UUID userId = currentUserService.requireCurrentUserId();
         GeneratedPost post = postRepository.findByIdAndUserId(postId, userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy bài viết"));
+        if (scheduleId != null) {
+            List<ScheduledPost> schedules = safeAllSchedules(userId).stream()
+                    .filter(schedule -> postId.equals(schedule.getPostId())).toList();
+            ScheduledPost target = schedules.stream().filter(schedule -> scheduleId.equals(schedule.getId())).findFirst()
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy lịch đăng"));
+            if (schedules.size() > 1) return deleteOneSchedule(userId, target);
+        }
 
         List<ScheduledPost> publishedSchedules = safeAllSchedules(userId).stream()
                 .filter(schedule -> postId.equals(schedule.getPostId()))
@@ -573,17 +586,38 @@ public class AppDataController {
         );
     }
 
+    /** Removes one platform from a post that also goes to other platforms; the others are untouched. */
+    private ApiResponse<Map<String, Object>> deleteOneSchedule(UUID userId, ScheduledPost schedule) {
+        if (schedule.getStatus() == ScheduledPostStatus.PUBLISHING) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Postiva đang đăng bài này. Bạn thử xóa lại sau ít phút.");
+        }
+        String refusal = null;
+        if (schedule.getStatus() == ScheduledPostStatus.PUBLISHED && schedule.getPlatform() != Platform.FACEBOOK) {
+            refusal = "Chưa thể xóa bài đã đăng trên " + platformLabel(schedule.getPlatform())
+                    + " từ Postiva. Bạn xóa trực tiếp trên ứng dụng đó; bài trong Postiva vẫn được giữ lại.";
+        } else if (schedule.getStatus() == ScheduledPostStatus.PUBLISHED) {
+            refusal = deletePublishedFacebookSchedule(userId, schedule);
+        }
+        if (refusal != null) {
+            return ApiResponse.ok(Map.of("deleted", false, "facebookDeleted", false, "facebookMessage", refusal, "message", refusal));
+        }
+        scheduledRepository.delete(schedule);
+        scheduledRepository.flush();
+        return ApiResponse.ok(Map.of("deleted", true, "facebookDeleted", true, "facebookMessage", "", "message", ""));
+    }
+
     private String deletePublishedFacebookPost(UUID userId, UUID postId) {
+        ScheduledPost publishedSchedule = safeAllSchedules(userId).stream()
+                .filter(schedule -> postId.equals(schedule.getPostId()))
+                .filter(schedule -> schedule.getPlatform() == Platform.FACEBOOK)
+                .filter(schedule -> schedule.getStatus() == ScheduledPostStatus.PUBLISHED)
+                .findFirst()
+                .orElse(null);
+        return publishedSchedule == null ? null : deletePublishedFacebookSchedule(userId, publishedSchedule);
+    }
+
+    private String deletePublishedFacebookSchedule(UUID userId, ScheduledPost publishedSchedule) {
         try {
-            ScheduledPost publishedSchedule = safeAllSchedules(userId).stream()
-                    .filter(schedule -> postId.equals(schedule.getPostId()))
-                    .filter(schedule -> schedule.getPlatform() == Platform.FACEBOOK)
-                    .filter(schedule -> schedule.getStatus() == ScheduledPostStatus.PUBLISHED)
-                    .findFirst()
-                    .orElse(null);
-            if (publishedSchedule == null) {
-                return null;
-            }
 
             PublishLog publishLog = logRepository
                     .findFirstByScheduledPostIdAndStatusOrderByPublishedAtDesc(publishedSchedule.getId(), "SUCCESS")

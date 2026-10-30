@@ -19,6 +19,10 @@ import com.postiva.social.service.SocialAccountService;
 import com.postiva.user.entity.User;
 import com.postiva.user.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Value;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -51,6 +55,8 @@ public class PublishingService {
     private final Map<Platform, PlatformPublisher> publishers;
     private final TransactionTemplate transactionTemplate;
     private final Executor immediateExecutor;
+    // Long enough for Instagram/Threads media processing; beyond it the page shows "đang đăng" and the scheduler finishes.
+    private static final long PUBLISH_NOW_WAIT_SECONDS = 120;
     private final int batchSize;
     private final Duration lease;
 
@@ -119,6 +125,32 @@ public class PublishingService {
         processNow(scheduledId);
         return scheduledRepository.findById(scheduledId).map(this::response)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy yêu cầu đăng"));
+    }
+
+    /**
+     * "Đăng ngay" to several platforms at once: every platform publishes in parallel, so the buyer waits
+     * for the slowest one (Instagram and Threads take ~30 s to process media) instead of the sum of all.
+     */
+    public List<ScheduledPostResponse> publishNowAll(List<PublishNowRequest> requests) {
+        if (TransactionSynchronizationManager.isActualTransactionActive()
+                && TransactionSynchronizationManager.isSynchronizationActive()) {
+            return requests.stream().map(this::publishNow).toList();
+        }
+        List<UUID> ids = transactionTemplate.execute(status -> requests.stream()
+                .map(request -> create(request.postId(), request.socialAccountId(), request.platform(), Instant.now()).getId())
+                .toList());
+        if (ids == null) throw new IllegalStateException("Không thể tạo yêu cầu đăng bài");
+        List<CompletableFuture<Void>> running = ids.stream()
+                .map(id -> CompletableFuture.runAsync(() -> processNow(id), immediateExecutor)).toList();
+        try {
+            CompletableFuture.allOf(running.toArray(CompletableFuture[]::new)).get(PUBLISH_NOW_WAIT_SECONDS, TimeUnit.SECONDS);
+        } catch (TimeoutException | ExecutionException exception) {
+            // A platform still working (or failed) keeps its own status; the scheduler's lease takes over from here.
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+        }
+        return ids.stream().map(id -> scheduledRepository.findById(id).map(this::response)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy yêu cầu đăng"))).toList();
     }
 
     private void processNow(UUID scheduledId) {
@@ -190,11 +222,16 @@ public class PublishingService {
         return response(scheduledRepository.findById(scheduledPostId).orElse(scheduled));
     }
 
+    /** Posts due at the same time (one post on three platforms, a whole Daily week) publish side by side. */
     public void publishDuePosts() {
         List<Claim> due = claims.claimDue(Instant.now(), batchSize, lease);
-        for (Claim claim : due) {
-            processor.process(claim);
+        if (due.size() == 1) {
+            processor.process(due.getFirst());
+            return;
         }
+        CompletableFuture.allOf(due.stream()
+                .map(claim -> CompletableFuture.runAsync(() -> processor.process(claim), immediateExecutor))
+                .toArray(CompletableFuture[]::new)).join();
     }
 
     @Transactional

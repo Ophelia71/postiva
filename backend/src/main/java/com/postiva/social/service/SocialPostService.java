@@ -78,12 +78,16 @@ public class SocialPostService {
         post = postRepository.save(post);
 
         List<SocialPostTargetResponse> results = new ArrayList<>();
-        for (SocialPostTargetRequest target : targets) {
-            ScheduledPostResponse scheduled = scheduledTime == null
-                    ? publishingService.publishNow(new PublishNowRequest(
-                            post.getId(), target.socialAccountId(), target.platform()))
-                    : publishingService.schedule(new SchedulePostRequest(
-                            post.getId(), target.socialAccountId(), target.platform(), scheduledTime));
+        UUID postId = post.getId();
+        // Publishing now runs every platform at the same time; scheduling just records each one.
+        List<ScheduledPostResponse> outcomes = scheduledTime == null
+                ? publishingService.publishNowAll(targets.stream()
+                        .map(target -> new PublishNowRequest(postId, target.socialAccountId(), target.platform())).toList())
+                : targets.stream().map(target -> publishingService.schedule(new SchedulePostRequest(
+                        postId, target.socialAccountId(), target.platform(), scheduledTime))).toList();
+        for (int index = 0; index < targets.size(); index++) {
+            SocialPostTargetRequest target = targets.get(index);
+            ScheduledPostResponse scheduled = outcomes.get(index);
             results.add(new SocialPostTargetResponse(
                     target.socialAccountId(),
                     target.platform(),
