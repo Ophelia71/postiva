@@ -179,6 +179,8 @@ export function BillingPage() {
 
   // Only a payOS link needs a way back to its page; a transfer's QR code is already shown in the order panel.
   const openCheckout = orders.find((order) => order.status === 'PENDING' && order.checkoutUrl)?.checkoutUrl
+  // While a transfer waits for money its QR code is on screen; a second buy button would only reopen it.
+  const transferWaiting = orders.some((order) => order.status === 'PENDING' && order.provider === 'BANK_TRANSFER')
   const bankTransfer = offer?.method === 'BANK_TRANSFER'
 
   return <div className="space-y-6">
@@ -220,7 +222,7 @@ export function BillingPage() {
         <div className="mt-5 flex flex-wrap items-center gap-3">
           {openCheckout
             ? <a href={openCheckout} className="inline-flex min-h-11 items-center rounded-lg bg-indigo-600 px-5 font-semibold text-white">{t('Tiếp tục thanh toán', 'Continue payment')}</a>
-            : <button type="button" disabled={!offer.available || busy} onClick={() => void buy()} className="min-h-11 rounded-lg bg-indigo-600 px-5 font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400">{busy ? t('Đang tạo đơn…', 'Creating the order…') : usage?.plan === 'PRO' ? t('Gia hạn Pro', 'Renew Pro') : t('Nâng lên Pro', 'Upgrade to Pro')}</button>}
+            : !transferWaiting && <button type="button" disabled={!offer.available || busy} onClick={() => void buy()} className="min-h-11 rounded-lg bg-indigo-600 px-5 font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400">{busy ? t('Đang tạo đơn…', 'Creating the order…') : usage?.plan === 'PRO' ? t('Gia hạn Pro', 'Renew Pro') : t('Nâng lên Pro', 'Upgrade to Pro')}</button>}
           <Link to="/refund-policy" className="text-sm font-semibold text-indigo-700 underline underline-offset-4">{t('Chính sách hoàn tiền', 'Refund policy')}</Link>
         </div>
         {!offer.available && <p className="mt-3 text-sm text-slate-600">{t('Thanh toán trực tuyến đang tạm đóng. Bạn vẫn dùng Free bình thường; cần Pro ngay thì liên hệ postiva84@gmail.com.', 'Online payment is paused. Free keeps working; for Pro now, contact postiva84@gmail.com.')}</p>}
