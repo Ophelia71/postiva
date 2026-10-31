@@ -117,6 +117,22 @@ public class EmailService {
         sendEmail(recipient, "Hướng dẫn đặt lại mật khẩu Postiva", content);
     }
 
+    /** Tells the shop a channel's access token expires soon; {@code connectionsUrl} may be null. */
+    public void sendTokenExpiring(String recipient, String fullName, String channel, long daysLeft, String connectionsUrl) {
+        String link = connectionsUrl == null ? "" : "\nKết nối lại tại: " + connectionsUrl + "\n";
+        String content = """
+                Xin chào %s,
+
+                Access token của kênh %s sẽ hết hạn sau khoảng %d ngày. Khi hết hạn, Postiva không đăng bài hay đọc số liệu của kênh này được nữa.
+
+                Hãy lấy token mới và kết nối lại kênh trong mục Kết nối kênh.
+                %s
+                Trân trọng,
+                Postiva
+                """.formatted(fullName, channel, daysLeft, link);
+        sendEmail(recipient, "Access token của " + channel + " sắp hết hạn", content);
+    }
+
     private void requireConfiguredMail() {
         if (!enabled || !StringUtils.hasText(username) || !StringUtils.hasText(password)) {
             throw new IllegalStateException("Dịch vụ email khôi phục chưa được cấu hình");

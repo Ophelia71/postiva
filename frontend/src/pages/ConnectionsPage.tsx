@@ -16,6 +16,8 @@ type SocialPlatform = 'facebook' | 'instagram' | 'threads'
 type ManualConnectionForm = {
   accountId: string
   accessToken: string
+  /** Days until the token expires, as read from Meta's token debugger; optional. */
+  expiresInDays: string
 }
 type PendingConfirm = { kind: 'delete'; channelId: string }
 type SyncResult = { imported: number; updated: number; removed: number; metricsAvailable: boolean; warning?: string | null }
@@ -73,6 +75,7 @@ type ConnectedAccount = { pageId: string; pageName: string }
 const emptyManualConnection = (): ManualConnectionForm => ({
   accountId: '',
   accessToken: '',
+  expiresInDays: '',
 })
 
 const inputClass = 'h-11 w-full rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20'
@@ -146,9 +149,11 @@ export function ConnectionsPage() {
     setConnectStatus(`${t('Đang kiểm tra kết nối với')} ${title}...`)
 
     try {
+      const days = Math.floor(Number(current.expiresInDays))
+      const expiresInSeconds = Number.isFinite(days) && days > 0 ? Math.min(days, 3650) * 86_400 : undefined
       const body = platform === 'facebook'
-        ? { pageId: accountId, pageAccessToken: accessToken }
-        : { accountId, accessToken }
+        ? { pageId: accountId, pageAccessToken: accessToken, expiresInSeconds }
+        : { accountId, accessToken, expiresInSeconds }
       const response = await api.post<ConnectedAccount>(path, body)
       setManualConnections((connections) => ({
         ...connections,
@@ -404,6 +409,21 @@ export function ConnectionsPage() {
                       data-lpignore="true"
                       className={`mt-1 ${inputClass}`}
                     />
+                  </div>
+                  <div>
+                    <label htmlFor={`${idPrefix}-expires-days`} className="block text-xs font-semibold">Token hết hạn sau (ngày, không bắt buộc)</label>
+                    <input
+                      id={`${idPrefix}-expires-days`}
+                      name={`${type.platform}-token-days`}
+                      type="number"
+                      inputMode="numeric"
+                      min={1}
+                      max={3650}
+                      value={form.expiresInDays}
+                      onChange={(event) => updateForm(type.platform, 'expiresInDays', event.target.value)}
+                      className={`mt-1 ${inputClass}`}
+                    />
+                    <p className="mt-1 text-xs text-[var(--muted-text)]">Xem ở Access Token Debugger của Meta. Điền để Postiva nhắc trước khi hết hạn.</p>
                   </div>
                   <button
                     type="submit"

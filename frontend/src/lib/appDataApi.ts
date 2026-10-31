@@ -9,6 +9,8 @@ export type AppChannel = {
   badge: string
   color: string
   active: boolean
+  /** When the access token stops working, if the shop told Postiva while connecting. */
+  tokenExpiresAt?: string | null
 }
 
 export type AppPost = {

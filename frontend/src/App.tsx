@@ -49,6 +49,7 @@ import { BillingPage } from './pages/BillingPage'
 import { DailyPage } from './pages/DailyPage'
 import { ShopProfilePage } from './pages/ShopProfilePage'
 import { ShopProfileReminder } from './components/ShopProfileReminder'
+import { TokenExpiryNotice } from './components/TokenExpiryNotice'
 import { AppIndexRedirect, StartPage } from './pages/StartPage'
 import { type AppOverview, normalizeAppOverview, refreshChannelsOnOpen, useAppDataResource } from './lib/appDataApi'
 import { getOnboardingState } from './lib/onboarding'
@@ -517,6 +518,7 @@ function AppShell({ session, onLogout, onPasswordChanged, demo }: ShellProps) {
         <div className="mx-auto min-h-svh max-w-[1920px] px-4 py-5 sm:px-6 lg:px-10 lg:py-8">
           {demo && <DemoBanner onSignUp={demo.onSignUp} onExit={demo.onExit} />}
           {!isOnboardingPage && <ShopProfileReminder />}
+          {!isOnboardingPage && !demo && <TokenExpiryNotice />}
           <Routes>
             <Route path="/" element={<AppIndexRedirect />} />
             <Route path="/products" element={<Navigate to="/app/reports" replace />} />

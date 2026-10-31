@@ -284,6 +284,7 @@ public class AppDataController {
         result.put("badge", badge);
         result.put("color", channelColor(account.provider()));
         result.put("active", true);
+        result.put("tokenExpiresAt", account.tokenExpiresAt() == null ? null : account.tokenExpiresAt().toString());
         return result;
     }
 
