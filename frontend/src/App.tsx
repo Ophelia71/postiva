@@ -522,7 +522,7 @@ function AppShell({ session, onLogout, onPasswordChanged, demo }: ShellProps) {
 
       <main className={`pb-24 transition-[padding] duration-200 lg:pb-0 ${collapsed ? 'lg:pl-[76px]' : 'lg:pl-[272px]'}`}>
         {/* Phones have the bell in their own header; from lg it sits at the top right of the page. */}
-        <div className="sticky top-0 z-20 hidden h-14 items-center justify-end px-10 lg:flex">
+        <div className="sticky top-0 z-20 hidden h-[4.5rem] items-center justify-end px-10 lg:flex">
           <NotificationBell channels={channels} />
         </div>
         {/* Wide enough to use the room freed by collapsing the sidebar, capped only on very large screens. */}
