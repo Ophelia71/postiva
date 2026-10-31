@@ -16,6 +16,7 @@ export function ChangePasswordPage({ onPasswordChanged }: { onPasswordChanged: (
   const [pending, setPending] = useState(false)
   const [sessionError, setSessionError] = useState('')
   const [revoking, setRevoking] = useState(false)
+  const [revokePassword, setRevokePassword] = useState('')
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -36,15 +37,17 @@ export function ChangePasswordPage({ onPasswordChanged }: { onPasswordChanged: (
     }
   }
 
-  async function revokeSessions() {
-    if (revoking || !currentPassword) {
+  async function revokeSessions(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (revoking) return
+    if (!revokePassword) {
       setSessionError('Nhập mật khẩu hiện tại để xác minh yêu cầu.')
       return
     }
     setRevoking(true)
     setSessionError('')
     try {
-      await api.post('/auth/sessions/revoke', { currentPassword })
+      await api.post('/auth/sessions/revoke', { currentPassword: revokePassword })
       onPasswordChanged('Đã đăng xuất khỏi tất cả thiết bị. Bạn đăng nhập lại để tiếp tục.')
     } catch (requestError) {
       setSessionError(getErrorMessage(requestError, 'Chưa đăng xuất được các thiết bị. Vui lòng thử lại.'))
@@ -69,8 +72,11 @@ export function ChangePasswordPage({ onPasswordChanged }: { onPasswordChanged: (
           </form>
         </SettingRow>
         <SettingRow title="Đăng xuất khỏi mọi thiết bị" description="Dùng khi bạn quên đăng xuất trên máy khác. Bạn cũng sẽ được đăng xuất tại đây.">
-          {sessionError && <p role="alert" className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{sessionError}</p>}
-          <button type="button" onClick={() => void revokeSessions()} disabled={revoking} className={SECONDARY}>{revoking ? 'Đang đăng xuất...' : 'Đăng xuất khỏi tất cả thiết bị'}</button>
+          <form onSubmit={(event) => void revokeSessions(event)} className="space-y-4">
+            <PasswordVisibilityField label="Mật khẩu hiện tại" value={revokePassword} onChange={setRevokePassword} autoComplete="current-password" disabled={revoking} />
+            {sessionError && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{sessionError}</p>}
+            <button type="submit" disabled={revoking} className={SECONDARY}>{revoking ? 'Đang đăng xuất...' : 'Đăng xuất khỏi tất cả thiết bị'}</button>
+          </form>
         </SettingRow>
         <DeleteAccountSection onDeleted={() => onPasswordChanged('Tài khoản và toàn bộ dữ liệu của bạn đã được xóa.')} />
       </div>
