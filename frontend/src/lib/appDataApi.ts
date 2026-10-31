@@ -78,7 +78,7 @@ export const CHANNELS_REFRESHED_EVENT = 'postiva:channels-refreshed'
 const REFRESH_CHECKS_MS = [15_000, 45_000, 90_000]
 
 /**
- * Asks the server to read the shop's channels again (it skips any read in the last half hour), then has open
+ * Asks the server to read the shop's channels again (it skips any read in the last two minutes), then has open
  * pages pick up the new numbers. Called whenever the app opens, so nobody has to press "Cập nhật".
  */
 export function refreshChannelsOnOpen() {

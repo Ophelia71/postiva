@@ -55,7 +55,7 @@ public class ChannelSyncService {
     /** A post published moments ago may not be listed by the platform yet; never treat it as deleted. */
     static final Duration REMOVAL_GRACE = Duration.ofMinutes(15);
     /** Opening Postiva again within this time shows the numbers read last time; Meta's rate limits stay far away. */
-    static final Duration REFRESH_ON_OPEN = Duration.ofMinutes(30);
+    static final Duration REFRESH_ON_OPEN = Duration.ofMinutes(2);
     static final Duration REFRESH_IN_BACKGROUND = Duration.ofHours(6);
     /** Channels refreshed per timer run, so a growing user base never floods Meta or the sync threads. */
     static final int BACKGROUND_BATCH = 20;
