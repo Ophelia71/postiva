@@ -148,6 +148,9 @@ function DailyHome() {
   const plansState = useAppDataResource<WeeklyPlan[]>('/weekly-plans')
   const [view, setView] = useState<View>({ kind: 'home' })
   const [showPast, setShowPast] = useState(false)
+  const [addingDay, setAddingDay] = useState<string | null>(null)
+  const [addError, setAddError] = useState('')
+  useSessionWork({ busy: addingDay !== null })
 
   if (channelsState.loading || plansState.loading) return <PageState title="Đang tải kế hoạch tuần..." />
   if (channelsState.error || plansState.error || !channelsState.data || !plansState.data) {
@@ -189,6 +192,21 @@ function DailyHome() {
   }
 
   const [current, ...past] = plans
+
+  async function addDay(day: string) {
+    if (!current) return
+    setAddingDay(day)
+    setAddError('')
+    try {
+      const next = await addDayToPlan(current.id, day)
+      plansState.reload()
+      setView({ kind: 'plan', planId: next.id, itemId: next.items.find((item) => item.plannedDate === day)?.id })
+    } catch (error) {
+      setAddError(getErrorMessage(error, 'Không thêm được bài vào ngày này.'))
+    } finally {
+      setAddingDay(null)
+    }
+  }
   const createButton = channels.length > 0 && (
     <button type="button" onClick={() => setView({ kind: 'create' })} className={PRIMARY}>
       {current ? 'Lên kế hoạch tuần tới' : 'Lên kế hoạch tuần đầu tiên'}
@@ -215,7 +233,8 @@ function DailyHome() {
             <h2 className="text-base font-bold">Tuần {weekRange(current)} · {PLATFORM_NAMES[current.platform ?? ''] ?? 'Kênh'} · {current.accountName ?? 'Kênh đã chọn'}</h2>
             <PlanStatusBadge status={current.status} />
           </div>
-          <WeekBoard plan={current} onSelect={(itemId) => setView({ kind: 'plan', planId: current.id, itemId })} />
+          {addError && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800">{addError}</p>}
+          <WeekBoard plan={current} onSelect={(itemId) => setView({ kind: 'plan', planId: current.id, itemId })} onAddDay={(day) => void addDay(day)} addingDay={addingDay} />
           <button type="button" onClick={() => setView({ kind: 'plan', planId: current.id })} className="min-h-11 text-sm font-semibold text-[#505db8] underline underline-offset-4">
             {current.status === 'READY' ? 'Xem và duyệt tuần này →' : 'Xem chi tiết tuần này →'}
           </button>
@@ -269,7 +288,23 @@ function ItemStatusBadge({ status }: { status: PlanItemStatus }) {
 }
 
 /** Seven day columns; days without a post stay visible so the rhythm of the week is clear. */
-function WeekBoard({ plan, selectedId, onSelect }: { plan: WeeklyPlan; selectedId?: string; onSelect: (itemId: string) => void }) {
+/** A rest day can take a new post while the week is waiting for review and the day has not passed. */
+function canAddDay(plan: WeeklyPlan, day: string) {
+  return plan.status === 'READY' && day >= isoDay(new Date())
+}
+
+/** Writes a post for a rest day and returns the updated week; the caller decides what to show next. */
+async function addDayToPlan(planId: string, day: string) {
+  return (await api.post<WeeklyPlan>(`/weekly-plans/${planId}/items`, { plannedDate: day })).data
+}
+
+function WeekBoard({ plan, selectedId, onSelect, onAddDay, addingDay }: {
+  plan: WeeklyPlan
+  selectedId?: string
+  onSelect: (itemId: string) => void
+  onAddDay?: (day: string) => void
+  addingDay?: string | null
+}) {
   const byDay = new Map(plan.items.map((item) => [item.plannedDate, item]))
   const generating = plan.status === 'GENERATING'
   return (
@@ -306,7 +341,19 @@ function WeekBoard({ plan, selectedId, onSelect }: { plan: WeeklyPlan; selectedI
             ) : (
               <div className="flex h-full min-h-[3rem] flex-col justify-between rounded-2xl border border-dashed border-[var(--app-border)] p-3 text-xs text-[var(--muted-text)] sm:min-h-[11rem]">
                 <span className="font-bold">{WEEKDAY_LABELS[weekday(day)]} · {shortDate(day)}</span>
-                <span>Nghỉ</span>
+                {onAddDay && canAddDay(plan, day) ? (
+                  <button
+                    type="button"
+                    disabled={Boolean(addingDay)}
+                    onClick={() => onAddDay(day)}
+                    aria-label={`Thêm bài vào ${WEEKDAY_NAMES[weekday(day)]} ${shortDate(day)}`}
+                    className="inline-flex min-h-11 items-center gap-1 self-start rounded-full border border-[#b9bfee] px-3 font-semibold text-[#505db8] hover:bg-[#eef0fd] disabled:opacity-60"
+                  >
+                    <Plus size={14} aria-hidden="true" />{addingDay === day ? 'Đang soạn...' : 'Thêm bài'}
+                  </button>
+                ) : (
+                  <span>Nghỉ</span>
+                )}
               </div>
             )}
           </li>
@@ -697,6 +744,8 @@ function PlanView({ planId, initialItemId, onBack, onCreateNew }: { planId: stri
   const selected = items.find((item) => item.id === selectedId) ?? items.find((item) => item.status === 'DRAFT') ?? items[0]
   const selectedIndex = selected ? items.indexOf(selected) : -1
   const drafted = items.filter((item) => item.post).length
+  const taken = new Set(items.map((item) => item.plannedDate))
+  const restDays = weekDates(plan.startDate).filter((day) => !taken.has(day) && canAddDay(plan, day))
   const toSchedule = items.filter((item) => item.status === 'DRAFT').length
   const firstTime = items.filter((item) => item.status === 'DRAFT' && item.scheduledTime).map((item) => item.scheduledTime as string).sort()[0]
 
@@ -708,6 +757,21 @@ function PlanView({ planId, initialItemId, onBack, onCreateNew }: { planId: stri
       setNotice({ tone: 'ok', text: 'Đã duyệt tuần. Các bài đã được lên lịch và sẽ tự đăng đúng giờ.' })
     } catch (error) {
       setNotice({ tone: 'error', text: getErrorMessage(error, 'Không duyệt được kế hoạch.') })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function addDay(day: string) {
+    setBusy(true)
+    setNotice(null)
+    try {
+      const next = await addDayToPlan(planId, day)
+      replace(next)
+      setSelectedId(next.items.find((item) => item.plannedDate === day)?.id)
+      setNotice({ tone: 'ok', text: 'Đã soạn bài cho ngày vừa thêm. Bạn xem lại rồi duyệt như các ngày khác.' })
+    } catch (error) {
+      setNotice({ tone: 'error', text: getErrorMessage(error, 'Không thêm được bài vào ngày này.') })
     } finally {
       setBusy(false)
     }
@@ -786,6 +850,27 @@ function PlanView({ planId, initialItemId, onBack, onCreateNew }: { planId: stri
                 </li>
               ))}
             </ol>
+            {restDays.length > 0 && (
+              <div className="rounded-xl border border-dashed border-[var(--app-border)] p-3">
+                <p className="text-xs font-bold">Ngày chưa có bài</p>
+                <ul className="mt-2 flex flex-wrap gap-2">
+                  {restDays.map((day) => (
+                    <li key={day}>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void addDay(day)}
+                        aria-label={`Thêm bài vào ${WEEKDAY_NAMES[weekday(day)]} ${shortDate(day)}`}
+                        className="inline-flex min-h-11 items-center gap-1 rounded-full border border-[#b9bfee] px-3 text-sm font-semibold text-[#505db8] hover:bg-[#eef0fd] disabled:opacity-60"
+                      >
+                        <Plus size={14} aria-hidden="true" />{WEEKDAY_LABELS[weekday(day)]} {shortDate(day)}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-2 text-xs text-[var(--muted-text)]">Mỗi bài thêm dùng 1 lượt AI.</p>
+              </div>
+            )}
             <div className="hidden lg:block"><InsightTiles summary={plan.performance} stacked /></div>
           </aside>
 

@@ -155,6 +155,48 @@ public class WeeklyPlanGenerator {
         }
     }
 
+    /** Post types offered, in order, to a day the shop adds by hand; the first one the week has not used yet wins. */
+    private static final List<String> ADDED_DAY_TYPES = List.of(
+            "Giới thiệu sản phẩm", "Feedback khách hàng", "Ưu đãi", "Hậu trường", "Mẹo sử dụng");
+
+    /**
+     * Writes one more day into a plan that is ready for review. The draft goes through the normal post generator, so
+     * it costs one AI unit and carries the week's images. If the draft cannot be written nothing is left behind.
+     */
+    public void addDay(ContentCalendar plan, LocalDate day, Instant slot, Platform platform, List<CalendarItem> existing) {
+        CreateWeeklyPlanRequest brief = json.convertValue(plan.getBrief(), CreateWeeklyPlanRequest.class);
+        ZoneId zone = ZoneId.of(plan.getTimezone());
+        PerformanceSummary summary = plan.getPerformance() == null
+                ? analyzer.analyze(List.of(), null, zone)
+                : json.convertValue(plan.getPerformance(), PerformanceSummary.class);
+        String postType = ADDED_DAY_TYPES.stream()
+                .filter(type -> existing.stream().noneMatch(entry -> type.equals(entry.getPostType())))
+                .findFirst().orElse("Bài đăng");
+
+        CalendarItem item = new CalendarItem();
+        item.setCalendarId(plan.getId());
+        item.setPlatform(platform);
+        item.setPlannedDate(day);
+        item.setScheduledTime(slot);
+        item.setPostType(postType);
+        item.setTopic(postType + " — " + brief.productName());
+        item.setReason("Bạn thêm ngày này vào kế hoạch.");
+        item.setStatus(CalendarItemStatus.GENERATING);
+        item = items.save(item);
+        try {
+            GeneratePostRequest request = draftRequest(brief, platform, item, summary, zone);
+            var post = withAiSlot(plan.getUserId(),
+                    () -> posts.generateForUser(plan.getUserId(), request, UUID.randomUUID()));
+            item.setGeneratedPostId(post.postId());
+            item.setStatus(CalendarItemStatus.DRAFT);
+            items.save(item);
+        } catch (RuntimeException exception) {
+            log.warn("Added day for weekly plan {} failed: {}", plan.getId(), exception.getMessage());
+            items.delete(item);
+            throw exception;
+        }
+    }
+
     private WeeklyIdeasResult planIdeas(UUID userId, CreateWeeklyPlanRequest brief, Platform platform,
                                         List<Instant> slots, PerformanceSummary summary, ZoneId zone) {
         BusinessProfile profile = shopProfiles.forUser(userId).orElse(null);

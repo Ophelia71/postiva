@@ -255,6 +255,38 @@ export async function handleDailyMock(api: AxiosInstance, method: string, url: s
     }))
     return requirePlan(plan.id)
   }
+  if (method === 'post' && sub === 'items' && !itemId) {
+    if (plan.status !== 'READY') throw new MockError(409, 'Kế hoạch này không còn chỉnh sửa được')
+    const day = (body as { plannedDate: string }).plannedDate
+    if (plan.items.some((item) => item.plannedDate === day)) throw new MockError(409, 'Ngày này đã có bài trong kế hoạch')
+    const scheduledTime = new Date(`${day}T09:00:00`).toISOString()
+    const text = draftFor('Giới thiệu sản phẩm', 'sản phẩm', '')
+    updatePlan(plan.id, (current) => ({
+      ...current,
+      items: [...current.items, {
+        id: crypto.randomUUID(),
+        plannedDate: day,
+        scheduledTime,
+        postType: 'Giới thiệu sản phẩm',
+        topic: 'Giới thiệu sản phẩm',
+        reason: 'Bạn thêm ngày này vào kế hoạch.',
+        status: 'DRAFT' as const,
+        error: null,
+        scheduledPostId: null,
+        post: {
+          postId: `mock-${crypto.randomUUID()}`,
+          title: 'Giới thiệu sản phẩm',
+          platformContents: { [current.platform ?? 'FACEBOOK']: { title: 'Giới thiệu sản phẩm', [current.platform === 'INSTAGRAM' ? 'caption' : 'content']: text } },
+          hashtags: [],
+          cta: null,
+          imageSuggestion: null,
+          imageUrl: null,
+        },
+        media: [],
+      }].sort((a, b) => a.plannedDate.localeCompare(b.plannedDate)),
+    }))
+    return requirePlan(plan.id)
+  }
   if (method === 'post' && sub === 'approve') {
     if (plan.status !== 'READY') throw new MockError(409, 'Kế hoạch này không còn chỉnh sửa được')
     updatePlan(plan.id, (current) => ({
