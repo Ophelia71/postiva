@@ -122,18 +122,19 @@ export function ReportsPage() {
               : t('Chưa có số liệu. Postiva đang lấy từ các kênh, vài phút nữa sẽ hiện.', 'No numbers yet. Postiva is reading your channels; they appear in a few minutes.')}
           </span>
         </div>
-        <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {/* Only the numbers the connected platforms actually give; a metric no post reported is left out. */}
+        <dl className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fit,minmax(10rem,1fr))]">
           {([
             [t('Lượt thích', 'Likes'), engagement.likes, Heart],
             [t('Bình luận', 'Comments'), engagement.comments, MessageCircle],
             [t('Chia sẻ', 'Shares'), engagement.shares, Repeat2],
             [t('Lượt xem', 'Views'), engagement.views, Eye],
-          ] as const).map(([label, value, Icon]) => (
+          ] as const).flatMap(([label, value, Icon]) => value === null ? [] : [(
             <div key={label} className="rounded-lg border border-[var(--app-border)] px-4 py-3">
               <dt className="flex items-center gap-2 text-xs text-[var(--muted-text)]"><Icon size={14} aria-hidden="true" />{label}</dt>
-              <dd className="mt-1 text-xl font-bold">{value === null ? '—' : value.toLocaleString('vi-VN')}</dd>
+              <dd className="mt-1 text-xl font-bold">{value.toLocaleString('vi-VN')}</dd>
             </div>
-          ))}
+          )])}
         </dl>
       </div>
 

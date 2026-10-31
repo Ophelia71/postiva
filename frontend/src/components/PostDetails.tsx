@@ -1,4 +1,4 @@
-import { CopyPlus, ExternalLink, Pencil, Trash2, X } from 'lucide-react'
+import { CopyPlus, ExternalLink, Eye, Heart, MessageCircle, Pencil, Repeat2, Trash2, X } from 'lucide-react'
 import { ProtectedMediaImage, ProtectedMediaVideo } from './ProtectedMedia'
 import { type AppPost } from '../lib/appDataApi'
 import { resolveMediaUrl } from '../lib/media'
@@ -197,11 +197,39 @@ export function PostDetailModal({
               </a>
             )}
           </div>
-          <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
-            Số lượt xem, tương tác và bình luận chưa được đồng bộ. Mở bài trên nền tảng để xem số liệu hiện tại.
-          </p>
+          <PostMetricsPanel post={post} />
         </div>
       </div>
     </div>
+  )
+}
+
+/** Shows the numbers the platform gave for this post, and only those; says so only when it gave none. */
+function PostMetricsPanel({ post }: { post: AppPost }) {
+  const items = ([
+    ['likes', Heart, 'Lượt thích'],
+    ['comments', MessageCircle, 'Bình luận'],
+    ['shares', Repeat2, 'Chia sẻ'],
+    ['views', Eye, 'Lượt xem'],
+  ] as const).flatMap(([key, Icon, label]) => {
+    const value = post.metrics?.[key]
+    return typeof value === 'number' ? [{ key, Icon, label, value }] : []
+  })
+  if (items.length === 0) {
+    return (
+      <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
+        Chưa có số liệu tương tác cho bài này. Mở bài trên nền tảng để xem số liệu hiện tại.
+      </p>
+    )
+  }
+  return (
+    <dl className="grid grid-cols-2 gap-2 sm:grid-cols-[repeat(auto-fit,minmax(8rem,1fr))]">
+      {items.map(({ key, Icon, label, value }) => (
+        <div key={key} className="rounded-lg border border-slate-200 px-3 py-2">
+          <dt className="flex items-center gap-2 text-xs text-slate-500"><Icon size={13} aria-hidden="true" />{label}</dt>
+          <dd className="mt-1 text-lg font-bold text-slate-800">{value.toLocaleString('vi-VN')}</dd>
+        </div>
+      ))}
+    </dl>
   )
 }
