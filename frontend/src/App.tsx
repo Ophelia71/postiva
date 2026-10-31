@@ -470,6 +470,7 @@ function AppShell({ session, onLogout, onPasswordChanged, demo }: ShellProps) {
           >
             {collapsed ? <PanelLeftOpen size={18} aria-hidden="true" /> : <PanelLeftClose size={18} aria-hidden="true" />}
           </button>
+          {!collapsed && <NotificationBell channels={channels} placement="side" />}
         </div>
 
         <nav aria-label="Điều hướng chính" className="flex-1 space-y-2 py-5">
@@ -503,7 +504,7 @@ function AppShell({ session, onLogout, onPasswordChanged, demo }: ShellProps) {
         </nav>
 
         <div className="space-y-1 border-t border-[var(--app-border)] pt-3">
-          <NotificationBell channels={channels} placement="above" collapsed={collapsed} />
+          {collapsed && <NotificationBell channels={channels} placement="side" />}
           <AccountMenu session={session} onLogout={onLogout} placement="above" demo={demo} collapsed={collapsed} />
         </div>
       </aside>

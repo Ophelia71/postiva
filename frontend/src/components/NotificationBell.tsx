@@ -5,10 +5,10 @@ import type { AppChannel } from '../lib/appDataApi'
 import { expiringChannels, expiryText } from './TokenExpiryNotice'
 
 /** The bell in the app's menu: lists what needs the shop's attention, today only tokens that are about to expire. */
-export function NotificationBell({ channels, placement, collapsed = false }: {
+export function NotificationBell({ channels, placement }: {
   channels: AppChannel[] | null
-  placement: 'above' | 'below'
-  collapsed?: boolean
+  /** side: in the desktop sidebar, the list opens to its right; below: in the phone header. */
+  placement: 'side' | 'below'
 }) {
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -30,7 +30,6 @@ export function NotificationBell({ channels, placement, collapsed = false }: {
     }
   }, [open])
 
-  const compact = placement === 'below'
   return (
     <div ref={rootRef} className="relative">
       <button
@@ -39,14 +38,11 @@ export function NotificationBell({ channels, placement, collapsed = false }: {
         aria-expanded={open}
         aria-haspopup="dialog"
         aria-label={items.length > 0 ? `Thông báo, ${items.length} thông báo mới` : 'Thông báo'}
-        className={compact
-          ? 'relative flex h-11 w-11 items-center justify-center rounded-full text-[var(--app-text)] hover:bg-[var(--soft-bg)]'
-          : `relative flex min-h-11 w-full items-center rounded-xl text-sm font-semibold hover:bg-[var(--soft-bg)] ${collapsed ? 'justify-center' : 'gap-3 px-3'}`}
+        className="relative flex h-11 w-11 items-center justify-center rounded-full text-[var(--muted-text)] hover:bg-[var(--soft-bg)] hover:text-[var(--app-text)]"
       >
         <Bell size={18} aria-hidden="true" />
-        {!compact && !collapsed && <span>Thông báo</span>}
         {items.length > 0 && (
-          <span aria-hidden="true" className={`absolute flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-600 px-1 text-[11px] font-bold text-white ${compact ? 'right-0 top-0' : collapsed ? 'right-1 top-0' : 'right-3 top-1/2 -translate-y-1/2'}`}>
+          <span aria-hidden="true" className="absolute right-0 top-0 flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-600 px-1 text-[11px] font-bold text-white">
             {items.length}
           </span>
         )}
@@ -56,11 +52,10 @@ export function NotificationBell({ channels, placement, collapsed = false }: {
         <div
           role="dialog"
           aria-label="Thông báo"
-          className={`absolute z-30 w-72 rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] p-2 shadow-xl shadow-slate-200/40 ${placement === 'above' ? 'bottom-12 left-0' : 'right-0 top-12'}`}
+          className={`absolute z-30 w-72 max-w-[calc(100vw-2rem)] rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] p-2 shadow-xl shadow-slate-200/40 ${placement === 'side' ? 'left-0 top-12 lg:left-full lg:top-0 lg:ml-3' : 'right-0 top-12'}`}
         >
-          <p className="px-3 py-2 text-sm font-bold">Thông báo</p>
           {items.length === 0 ? (
-            <p className="px-3 pb-3 text-sm text-[var(--muted-text)]">Chưa có thông báo nào.</p>
+            <p className="px-3 py-2 text-sm text-[var(--muted-text)]">Chưa có thông báo</p>
           ) : (
             <ul>
               {items.map((item) => (
