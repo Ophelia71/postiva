@@ -910,7 +910,6 @@ function CreatePostForm({ onNewPost }: { onNewPost: () => void }) {
                 <GeneratingProgress
                   platforms={selectedPlatforms.map((platform) => PLATFORM_LABELS[platform]).join(', ')}
                   label={(platforms) => t(`Đang soạn bài cho ${platforms}`, `Writing posts for ${platforms}`)}
-                  hint={t('Thường mất 10 đến 30 giây, bạn không cần tải lại trang.', 'This usually takes 10 to 30 seconds.')}
                 />
               )}
               <div className="my-3 border-t border-slate-100" />
@@ -1131,7 +1130,7 @@ function TextField({
 }
 
 /** Shown while the AI writes: moving dots, the platforms being written, and how long it has taken so far. */
-function GeneratingProgress({ platforms, label, hint }: { platforms: string; label: (platforms: string) => string; hint: string }) {
+function GeneratingProgress({ platforms, label }: { platforms: string; label: (platforms: string) => string }) {
   const [seconds, setSeconds] = useState(0)
   useEffect(() => {
     const timer = window.setInterval(() => setSeconds((value) => value + 1), 1000)
@@ -1151,7 +1150,6 @@ function GeneratingProgress({ platforms, label, hint }: { platforms: string; lab
       <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-violet-100" aria-hidden="true">
         <span className="block h-full w-full animate-pulse rounded-full bg-violet-400" />
       </div>
-      <p className="mt-2 text-xs text-violet-800">{hint}</p>
     </div>
   )
 }
