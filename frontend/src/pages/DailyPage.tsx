@@ -587,7 +587,7 @@ function PlanCreator({ channels, onCancel, onCreated }: { channels: AppChannel[]
           )}
         </fieldset>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.3fr)_auto_minmax(0,1fr)]">
           <label className="block text-sm font-bold">Kênh
             <select value={channelId} onChange={(event) => setChannelId(event.target.value)} className={INPUT}>
               {channels.map((channel) => <option key={channel.id} value={channel.id}>{channel.name} ({channel.badge})</option>)}
@@ -610,23 +610,16 @@ function PlanCreator({ channels, onCancel, onCreated }: { channels: AppChannel[]
               <button type="button" aria-label="Thêm một bài" disabled={posts >= MAX_POSTS} onClick={() => choosePosts(posts + 1)} className={`${SECONDARY} h-11 w-11 px-0`}><Plus size={16} aria-hidden="true" /></button>
             </div>
             <p className="mt-1 text-xs font-normal text-[var(--muted-text)]">
-              {suggestion
-                ? `Gợi ý ${suggestion} bài: kênh đang đăng khoảng ${currentInsights?.summary?.postsPerWeek} bài/tuần.`
-                : `Từ ${MIN_POSTS} đến ${MAX_POSTS} bài, tối đa một bài mỗi ngày.`}
+              {suggestion ? `Gợi ý ${suggestion} bài` : `Từ ${MIN_POSTS} đến ${MAX_POSTS} bài`}
             </p>
           </div>
-        </div>
-
-        <div role="group" aria-labelledby="week-label" className="text-sm font-bold">
-          <span id="week-label">Tuần đăng</span>
-          <div className="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {weeks.map((week, index) => (
-              <button key={week} type="button" aria-pressed={startDate === week} onClick={() => setStartDate(week)} className={`${chipClass(startDate === week)} flex flex-col items-center justify-center !rounded-2xl px-2 py-1.5 leading-tight`}>
-                <span className="whitespace-nowrap">{shortDate(week)} – {shortDate(weekDates(week)[6])}</span>
-                <span className="text-xs font-normal opacity-80">{index === 0 ? 'Tuần tới' : `${index + 1} tuần nữa`}</span>
-              </button>
-            ))}
-          </div>
+          <label className="block text-sm font-bold">Tuần đăng
+            <select value={startDate} onChange={(event) => setStartDate(event.target.value)} className={INPUT}>
+              {weeks.map((week, index) => (
+                <option key={week} value={week}>{shortDate(week)} – {shortDate(weekDates(week)[6])}{index === 0 ? ' · Tuần tới' : ''}</option>
+              ))}
+            </select>
+          </label>
         </div>
 
         <div className="space-y-6 xl:hidden">{insightsPanel(false)}</div>
@@ -639,7 +632,7 @@ function PlanCreator({ channels, onCancel, onCreated }: { channels: AppChannel[]
 
         {profileComplete && (
           <button type="button" aria-expanded={showMore} onClick={() => setShowMore((value) => !value)} className="min-h-11 text-sm font-semibold underline underline-offset-4">
-            {showMore ? 'Ẩn tuỳ chỉnh' : 'Tuỳ chỉnh thêm (ngày, giờ, sản phẩm riêng cho tuần này, ảnh)'}
+            {showMore ? 'Ẩn tuỳ chỉnh' : 'Tuỳ chỉnh thêm'}
           </button>
         )}
 
@@ -677,7 +670,7 @@ function PlanCreator({ channels, onCancel, onCreated }: { channels: AppChannel[]
             )}
             <div className="space-y-2 rounded-xl border border-[var(--app-border)] p-3 text-sm">
               <p className="font-bold">Ảnh hoặc video cho các bài {needsMedia ? '*' : '(tùy chọn)'}</p>
-              <p className="text-[var(--muted-text)]">{needsMedia ? 'Instagram không đăng được bài chỉ có chữ, và chỉ nhận ảnh JPG.' : 'Gắn vào mọi bài của tuần. Bỏ trống để đăng bài chỉ có chữ.'}</p>
+              <p className="text-[var(--muted-text)]">{needsMedia ? 'Bắt buộc với Instagram, chỉ nhận ảnh JPG.' : 'Gắn vào mọi bài của tuần.'}</p>
               <label className="inline-flex min-h-11 cursor-pointer items-center rounded-full border border-[var(--app-border)] px-4 font-bold hover:bg-[var(--soft-bg)]">
                 {uploading ? 'Đang tải lên...' : 'Chọn tệp'}
                 <input type="file" multiple accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm" disabled={uploading} className="sr-only" onChange={(event) => { void upload(event.target.files); event.target.value = '' }} />
