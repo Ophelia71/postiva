@@ -34,6 +34,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.ArrayList;
@@ -160,6 +161,9 @@ public class AppDataController {
 
         if (platform == Platform.FACEBOOK) {
             syncPublishedFacebookPost(userId, postId, targetSchedule, message.trim());
+        }
+        if (request.mediaIds() != null) {
+            replaceMediaOfPendingPost(userId, post, targetSchedule, request.mediaIds());
         }
 
         post = postRepository.save(post);
@@ -530,6 +534,32 @@ public class AppDataController {
         return value == null || value.isBlank() ? fallback : value;
     }
 
+    /**
+     * Images and videos belong to the post, so a change reaches every platform it is still waiting to go to.
+     * Only a post nobody has published yet can change them; the limits are the ones each platform enforces.
+     */
+    private void replaceMediaOfPendingPost(UUID userId, GeneratedPost post, ScheduledPost targetSchedule, List<UUID> mediaIds) {
+        List<ScheduledPost> schedules = safeAllSchedules(userId).stream()
+                .filter(schedule -> post.getId().equals(schedule.getPostId()))
+                .toList();
+        boolean published = schedules.stream().anyMatch(schedule -> schedule.getStatus() == ScheduledPostStatus.PUBLISHED)
+                || (targetSchedule != null && targetSchedule.getStatus() != ScheduledPostStatus.SCHEDULED);
+        if (published) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Bài đã đăng hoặc đang được đăng nên không đổi được ảnh. Bạn tạo một bài mới với ảnh mong muốn.");
+        }
+        List<UUID> distinct = mediaIds.stream().distinct().toList();
+        List<Platform> platforms = schedules.stream().map(ScheduledPost::getPlatform).filter(Objects::nonNull).distinct().toList();
+        if (platforms.contains(Platform.INSTAGRAM) && distinct.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Instagram cần ít nhất một ảnh hoặc video.");
+        }
+        int limit = platforms.contains(Platform.INSTAGRAM) || platforms.contains(Platform.FACEBOOK) ? 10 : 20;
+        if (distinct.size() > limit) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Bài này chỉ đăng được tối đa " + limit + " ảnh hoặc video.");
+        }
+        post.setImageUrl(fileService.replacePostMedia(distinct, userId, post.getBriefId(), post.getId()));
+    }
+
     private ScheduledPost resolveTargetSchedule(UUID userId, UUID postId, UUID scheduleId) {
         if (scheduleId == null) {
             return null;
@@ -651,6 +681,6 @@ public class AppDataController {
         return message.length() <= 300 ? message : message.substring(0, 300);
     }
 
-    private record UpdateAppPostRequest(String message, Platform platform, UUID scheduleId) {
+    private record UpdateAppPostRequest(String message, Platform platform, UUID scheduleId, List<UUID> mediaIds) {
     }
 }

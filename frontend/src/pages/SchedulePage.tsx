@@ -1,6 +1,6 @@
 import { CalendarDays, ChevronLeft, ChevronRight, Eye, Pencil, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { EditPostModal } from '../components/EditPostModal'
+import { EditPostModal, type EditMediaItem } from '../components/EditPostModal'
 import { EmptyState } from '../components/EmptyState'
 import { SetupReminder } from '../components/SetupReminder'
 import { DeletePostConfirmModal } from '../components/DeletePostConfirmModal'
@@ -42,6 +42,11 @@ export function SchedulePage() {
   const [editingMessage, setEditingMessage] = useState('')
   const [editError, setEditError] = useState('')
   const [isSavingEdit, setIsSavingEdit] = useState(false)
+  const [editingMedia, setEditingMedia] = useState<EditMediaItem[]>([])
+  const [originalMediaIds, setOriginalMediaIds] = useState<string[]>([])
+  const [isUploadingMedia, setIsUploadingMedia] = useState(false)
+  const mediaChanged = editingMedia.length !== originalMediaIds.length
+    || editingMedia.some((item, index) => item.id !== originalMediaIds[index])
   const [detailPost, setDetailPost] = useState<AppPost | null>(null)
   const [deleteCandidate, setDeleteCandidate] = useState<AppPost | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -319,6 +324,14 @@ export function SchedulePage() {
           saveLabel={t('Lưu thay đổi')}
           savingLabel={t('Đang lưu...')}
           draftKey={`edit:${editingPost.id}`}
+          media={{
+            items: editingMedia,
+            uploading: isUploadingMedia,
+            changed: mediaChanged,
+            max: 10,
+            onAdd: (files) => void addEditMedia(files),
+            onRemove: (id) => setEditingMedia((current) => current.filter((item) => item.id !== id)),
+          }}
           onChange={setEditingMessage}
           onClose={closeEditPost}
           onSubmit={(event) => void submitEditPost(event)}
@@ -356,6 +369,10 @@ export function SchedulePage() {
     setEditingPost(post)
     setEditingMessage(post.content)
     setEditError('')
+    const items = post.mediaIds.map((id, index) => ({ id, url: post.mediaUrls[index] ?? '' }))
+    setEditingMedia(items)
+    setOriginalMediaIds(post.mediaIds)
+    setIsUploadingMedia(false)
   }
 
   function closeEditPost() {
@@ -364,6 +381,32 @@ export function SchedulePage() {
     setEditingPost(null)
     setEditingMessage('')
     setEditError('')
+    setEditingMedia([])
+    setOriginalMediaIds([])
+  }
+
+  async function addEditMedia(files: File[]) {
+    if (files.some((file) => !file.type.startsWith('image/') && !file.type.startsWith('video/'))) {
+      setEditError('Chỉ hỗ trợ file ảnh hoặc video.')
+      return
+    }
+    setIsUploadingMedia(true)
+    setEditError('')
+    try {
+      const uploaded = await Promise.all(files.map(async (file) => {
+        const formData = new FormData()
+        formData.append('file', file)
+        const response = await api.post<{ id: string; fileUrl: string }>('/files/upload', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        })
+        return { id: response.data.id, url: response.data.fileUrl }
+      }))
+      setEditingMedia((current) => [...current, ...uploaded])
+    } catch (error) {
+      setEditError(getErrorMessage(error, 'Không thể tải file media.'))
+    } finally {
+      setIsUploadingMedia(false)
+    }
   }
 
   async function submitEditPost(event: FormEvent<HTMLFormElement>) {
@@ -381,6 +424,8 @@ export function SchedulePage() {
         message: editingMessage.trim(),
         platform: editingPost.platform.toUpperCase(),
         scheduleId: editingPost.scheduleId || undefined,
+        // Sent only when the images changed, so a text-only edit leaves them alone.
+        mediaIds: mediaChanged ? editingMedia.map((item) => item.id) : undefined,
       })
       closeEditPost()
       reload()
