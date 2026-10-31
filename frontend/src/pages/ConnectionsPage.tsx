@@ -5,7 +5,7 @@ import { EmptyState } from '../components/EmptyState'
 import { FacebookBadge } from '../components/FacebookBadge'
 import { HelpTip } from '../components/HelpTip'
 import { api, FACEBOOK_SYNC_TIMEOUT_MS } from '../lib/api'
-import { type AppChannel, useAppDataResource } from '../lib/appDataApi'
+import { type AppChannel, CHANNELS_REFRESHED_EVENT, useAppDataResource } from '../lib/appDataApi'
 import { getErrorMessage } from '../lib/errors'
 import { trackOnboardingStep } from '../lib/webAnalytics'
 import { usePreferences } from '../lib/preferences'
@@ -162,6 +162,7 @@ export function ConnectionsPage() {
       setConnectStatusTone('success')
       setConnectStatus(`${t('Đã kết nối')} ${response.data.pageName}. Postiva đang lấy các bài cũ của kênh, vài phút nữa sẽ thấy ở Báo cáo.`)
       reload()
+      window.dispatchEvent(new Event(CHANNELS_REFRESHED_EVENT))
     } catch (error) {
       trackOnboardingStep(`connect-failed/${platform}`)
       setConnectStatusTone('error')

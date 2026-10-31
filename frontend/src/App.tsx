@@ -49,9 +49,10 @@ import { BillingPage } from './pages/BillingPage'
 import { DailyPage } from './pages/DailyPage'
 import { ShopProfilePage } from './pages/ShopProfilePage'
 import { ShopProfileReminder } from './components/ShopProfileReminder'
+import { NotificationBell } from './components/NotificationBell'
 import { TokenExpiryNotice } from './components/TokenExpiryNotice'
 import { AppIndexRedirect, StartPage } from './pages/StartPage'
-import { type AppOverview, normalizeAppOverview, refreshChannelsOnOpen, useAppDataResource } from './lib/appDataApi'
+import { type AppChannel, type AppOverview, normalizeAppOverview, refreshChannelsOnOpen, useAppDataResource } from './lib/appDataApi'
 import { getOnboardingState } from './lib/onboarding'
 import { isShopProfileComplete, type ShopProfile } from './lib/shopProfile'
 import { readSidebarCollapsed, writeSidebarCollapsed } from './lib/sidebarState'
@@ -422,6 +423,9 @@ function AppShell({ session, onLogout, onPasswordChanged, demo }: ShellProps) {
   useEffect(() => {
     if (!inDemo) refreshChannelsOnOpen()
   }, [inDemo])
+  // One read of the channels feeds both the bell and the notice above the page; the demo has no real tokens.
+  const channelList = useAppDataResource<AppChannel[]>('/app-data/channels')
+  const channels = inDemo || channelList.error ? null : channelList.data
   const toggleSidebar = () => {
     setCollapsed((value) => {
       writeSidebarCollapsed(!value)
@@ -498,7 +502,8 @@ function AppShell({ session, onLogout, onPasswordChanged, demo }: ShellProps) {
           })}
         </nav>
 
-        <div className="border-t border-[var(--app-border)] pt-3">
+        <div className="space-y-1 border-t border-[var(--app-border)] pt-3">
+          <NotificationBell channels={channels} placement="above" collapsed={collapsed} />
           <AccountMenu session={session} onLogout={onLogout} placement="above" demo={demo} collapsed={collapsed} />
         </div>
       </aside>
@@ -510,7 +515,10 @@ function AppShell({ session, onLogout, onPasswordChanged, demo }: ShellProps) {
           </span>
           Postiva
         </Link>
-        <AccountMenu session={session} onLogout={onLogout} placement="below" demo={demo} />
+        <div className="flex items-center gap-1">
+          <NotificationBell channels={channels} placement="below" />
+          <AccountMenu session={session} onLogout={onLogout} placement="below" demo={demo} />
+        </div>
       </header>
 
       <main className={`pb-24 transition-[padding] duration-200 lg:pb-0 ${collapsed ? 'lg:pl-[76px]' : 'lg:pl-[272px]'}`}>
@@ -518,7 +526,7 @@ function AppShell({ session, onLogout, onPasswordChanged, demo }: ShellProps) {
         <div className="mx-auto min-h-svh max-w-[1920px] px-4 py-5 sm:px-6 lg:px-10 lg:py-8">
           {demo && <DemoBanner onSignUp={demo.onSignUp} onExit={demo.onExit} />}
           {!isOnboardingPage && <ShopProfileReminder />}
-          {!isOnboardingPage && !demo && <TokenExpiryNotice />}
+          {!isOnboardingPage && <TokenExpiryNotice channels={channels} />}
           <Routes>
             <Route path="/" element={<AppIndexRedirect />} />
             <Route path="/products" element={<Navigate to="/app/reports" replace />} />
