@@ -139,14 +139,20 @@ function simulateDrafting(planId: string, request: CreateWeeklyPlanRequest) {
             hashtags: hashtagFor(request.productName ?? ''),
             cta: 'Nhắn shop để đặt ngay',
             imageSuggestion: 'Ảnh sản phẩm chụp gần, ánh sáng tự nhiên',
-            imageUrl: request.imageIds[0] ? `/api/files/${request.imageIds[0]}` : null,
+            imageUrl: imagesFor(request, index)[0] ? `/api/files/${imagesFor(request, index)[0]}` : null,
           },
-          media: request.imageIds.map((id) => ({ id, url: `/api/files/${id}`, mimeType: null, fileName: null })),
+          media: imagesFor(request, index).map((id) => ({ id, url: `/api/files/${id}`, mimeType: null, fileName: null })),
         }),
       }))
       if (index === plan.items.length - 1) updatePlan(planId, (current) => ({ ...current, status: 'READY' }))
     }, 900 * (index + 2))
   })
+}
+
+/** Mirrors WeeklyPlanGenerator.imagesFor: all images, or in EACH mode one per post taking them in turn. */
+function imagesFor(request: CreateWeeklyPlanRequest, position: number) {
+  if (request.imageIds.length < 2 || request.imageMode !== 'EACH') return request.imageIds
+  return [request.imageIds[position % request.imageIds.length]]
 }
 
 export class MockError extends Error {

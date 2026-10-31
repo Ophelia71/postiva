@@ -450,6 +450,7 @@ function PlanCreator({ channels, onCancel, onCreated }: { channels: AppChannel[]
   const [postsChosen, setPostsChosen] = useState(false)
   const [days, setDays] = useState<number[]>([])
   const [fixedTime, setFixedTime] = useState('')
+  const [imageMode, setImageMode] = useState<'ALL' | 'EACH'>('EACH')
   const [brief, setBrief] = useState<Brief | null>(null)
   const [showMore, setShowMore] = useState(false)
   const [insights, setInsights] = useState<{ accountId: string; summary: PerformanceSummary | null; error: string } | null>(null)
@@ -535,6 +536,7 @@ function PlanCreator({ channels, onCancel, onCreated }: { channels: AppChannel[]
       goal: weekGoal.slice(0, 255),
       tone: currentBrief.tone,
       imageIds: currentBrief.mediaIds,
+      imageMode: currentBrief.mediaIds.length > 1 ? imageMode : undefined,
     }
     try {
       onCreated((await api.post<WeeklyPlan>('/weekly-plans', request)).data)
@@ -675,6 +677,12 @@ function PlanCreator({ channels, onCancel, onCreated }: { channels: AppChannel[]
                 {uploading ? 'Đang tải lên...' : 'Chọn tệp'}
                 <input type="file" multiple accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm" disabled={uploading} className="sr-only" onChange={(event) => { void upload(event.target.files); event.target.value = '' }} />
               </label>
+              {currentBrief.mediaIds.length > 1 && (
+                <div role="radiogroup" aria-label="Cách dùng ảnh" className="flex flex-wrap gap-2 pt-1">
+                  <button type="button" role="radio" aria-checked={imageMode === 'EACH'} onClick={() => setImageMode('EACH')} className={chipClass(imageMode === 'EACH')}>Mỗi bài một ảnh</button>
+                  <button type="button" role="radio" aria-checked={imageMode === 'ALL'} onClick={() => setImageMode('ALL')} className={chipClass(imageMode === 'ALL')}>Mọi bài dùng cả {currentBrief.mediaIds.length} ảnh</button>
+                </div>
+              )}
               {currentBrief.mediaIds.length > 0 && (
                 <ul className="space-y-1">
                   {currentBrief.mediaIds.map((id) => (
