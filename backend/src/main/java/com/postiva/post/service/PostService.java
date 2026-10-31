@@ -190,7 +190,24 @@ public class PostService {
         post.setPlatformContents(contents);
         post.setHashtags(request.hashtags() == null ? List.of() : request.hashtags());
         post.setCta(request.cta());
+        if (request.mediaIds() != null) {
+            replaceMedia(post, contents, request.mediaIds());
+        }
         return toResponse(postRepository.save(post));
+    }
+
+    /** Same media rules as publishing: Instagram needs at least one file, Facebook and Instagram take up to ten. */
+    private void replaceMedia(GeneratedPost post, Map<String, Object> contents, List<UUID> mediaIds) {
+        List<UUID> distinct = mediaIds.stream().distinct().toList();
+        boolean instagram = contents.containsKey("INSTAGRAM");
+        if (instagram && distinct.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Instagram cần ít nhất một ảnh hoặc video");
+        }
+        if ((instagram || contents.containsKey("FACEBOOK")) && distinct.size() > 10) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Facebook và Instagram nhận tối đa 10 ảnh hoặc video");
+        }
+        fileService.validateAttachments(distinct, post.getUserId());
+        post.setImageUrl(fileService.replacePostMedia(distinct, post.getUserId(), post.getBriefId(), post.getId()));
     }
 
     private GeneratePostResponse toResponse(GeneratedPost post) {

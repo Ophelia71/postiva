@@ -139,13 +139,20 @@ function simulateDrafting(planId: string, request: CreateWeeklyPlanRequest) {
             hashtags: hashtagFor(request.productName ?? ''),
             cta: 'Nhắn shop để đặt ngay',
             imageSuggestion: 'Ảnh sản phẩm chụp gần, ánh sáng tự nhiên',
-            imageUrl: null,
+            imageUrl: imagesFor(request, index)[0] ? `/api/files/${imagesFor(request, index)[0]}` : null,
           },
+          media: imagesFor(request, index).map((id) => ({ id, url: `/api/files/${id}`, mimeType: null, fileName: null })),
         }),
       }))
       if (index === plan.items.length - 1) updatePlan(planId, (current) => ({ ...current, status: 'READY' }))
     }, 900 * (index + 2))
   })
+}
+
+/** Mirrors WeeklyPlanGenerator.imagesFor: all images, or in EACH mode one per post taking them in turn. */
+function imagesFor(request: CreateWeeklyPlanRequest, position: number) {
+  if (request.imageIds.length < 2 || request.imageMode !== 'EACH') return request.imageIds
+  return [request.imageIds[position % request.imageIds.length]]
 }
 
 export class MockError extends Error {
@@ -167,12 +174,15 @@ export async function handleDailyMock(api: AxiosInstance, method: string, url: s
   const [path] = url.split('?')
   if (path.startsWith('/posts/mock-') && method === 'put') {
     const postId = path.slice('/posts/'.length)
-    const update = body as { platformContents?: Record<string, Record<string, string>> }
+    const update = body as { platformContents?: Record<string, Record<string, string>>; mediaIds?: string[] }
     plans = plans.map((plan) => ({
       ...plan,
       items: plan.items.map((item) => item.post?.postId !== postId ? item : {
         ...item,
         post: { ...item.post, platformContents: { ...item.post.platformContents, ...(update.platformContents ?? {}) } },
+        media: update.mediaIds
+          ? update.mediaIds.map((id) => item.media.find((media) => media.id === id) ?? { id, url: `/api/files/${id}`, mimeType: null, fileName: null })
+          : item.media,
       }),
     }))
     return null
@@ -202,6 +212,7 @@ export async function handleDailyMock(api: AxiosInstance, method: string, url: s
         error: null,
         scheduledPostId: null,
         post: null,
+        media: [],
       }))
       const end = new Date(`${request.startDate}T00:00:00`)
       end.setDate(end.getDate() + 6)
@@ -247,6 +258,38 @@ export async function handleDailyMock(api: AxiosInstance, method: string, url: s
         const status = change.skipped === true ? 'SKIPPED' : change.skipped === false && item.status === 'SKIPPED' ? 'DRAFT' : item.status
         return { ...item, scheduledTime, plannedDate: scheduledTime ? localDate(scheduledTime) : item.plannedDate, status }
       }),
+    }))
+    return requirePlan(plan.id)
+  }
+  if (method === 'post' && sub === 'items' && !itemId) {
+    if (plan.status !== 'READY') throw new MockError(409, 'Kế hoạch này không còn chỉnh sửa được')
+    const day = (body as { plannedDate: string }).plannedDate
+    if (plan.items.some((item) => item.plannedDate === day)) throw new MockError(409, 'Ngày này đã có bài trong kế hoạch')
+    const scheduledTime = new Date(`${day}T09:00:00`).toISOString()
+    const text = draftFor('Giới thiệu sản phẩm', 'sản phẩm', '')
+    updatePlan(plan.id, (current) => ({
+      ...current,
+      items: [...current.items, {
+        id: crypto.randomUUID(),
+        plannedDate: day,
+        scheduledTime,
+        postType: 'Giới thiệu sản phẩm',
+        topic: 'Giới thiệu sản phẩm',
+        reason: 'Bạn thêm ngày này vào kế hoạch.',
+        status: 'DRAFT' as const,
+        error: null,
+        scheduledPostId: null,
+        post: {
+          postId: `mock-${crypto.randomUUID()}`,
+          title: 'Giới thiệu sản phẩm',
+          platformContents: { [current.platform ?? 'FACEBOOK']: { title: 'Giới thiệu sản phẩm', [current.platform === 'INSTAGRAM' ? 'caption' : 'content']: text } },
+          hashtags: [],
+          cta: null,
+          imageSuggestion: null,
+          imageUrl: null,
+        },
+        media: [],
+      }].sort((a, b) => a.plannedDate.localeCompare(b.plannedDate)),
     }))
     return requirePlan(plan.id)
   }

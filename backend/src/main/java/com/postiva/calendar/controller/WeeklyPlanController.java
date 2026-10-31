@@ -1,5 +1,6 @@
 package com.postiva.calendar.controller;
 
+import com.postiva.calendar.dto.AddWeeklyPlanItemRequest;
 import com.postiva.calendar.dto.CreateWeeklyPlanRequest;
 import com.postiva.calendar.dto.UpdateWeeklyPlanItemRequest;
 import com.postiva.calendar.dto.WeeklyPlanResponse;
@@ -55,6 +56,12 @@ public class WeeklyPlanController {
     public ApiResponse<WeeklyPlanResponse> updateItem(@PathVariable UUID planId, @PathVariable UUID itemId,
                                                       @RequestBody UpdateWeeklyPlanItemRequest request) {
         return ApiResponse.ok(weeklyPlanService.updateItem(planId, itemId, request));
+    }
+
+    @PostMapping("/{planId}/items")
+    public ApiResponse<WeeklyPlanResponse> addItem(@PathVariable UUID planId,
+                                                   @Valid @RequestBody AddWeeklyPlanItemRequest request) {
+        return ApiResponse.ok(weeklyPlanService.addItem(planId, request));
     }
 
     @PostMapping("/{planId}/approve")

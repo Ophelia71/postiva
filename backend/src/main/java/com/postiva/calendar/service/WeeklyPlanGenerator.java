@@ -155,6 +155,48 @@ public class WeeklyPlanGenerator {
         }
     }
 
+    /** Post types offered, in order, to a day the shop adds by hand; the first one the week has not used yet wins. */
+    private static final List<String> ADDED_DAY_TYPES = List.of(
+            "Giới thiệu sản phẩm", "Feedback khách hàng", "Ưu đãi", "Hậu trường", "Mẹo sử dụng");
+
+    /**
+     * Writes one more day into a plan that is ready for review. The draft goes through the normal post generator, so
+     * it costs one AI unit and carries the week's images. If the draft cannot be written nothing is left behind.
+     */
+    public void addDay(ContentCalendar plan, LocalDate day, Instant slot, Platform platform, List<CalendarItem> existing) {
+        CreateWeeklyPlanRequest brief = json.convertValue(plan.getBrief(), CreateWeeklyPlanRequest.class);
+        ZoneId zone = ZoneId.of(plan.getTimezone());
+        PerformanceSummary summary = plan.getPerformance() == null
+                ? analyzer.analyze(List.of(), null, zone)
+                : json.convertValue(plan.getPerformance(), PerformanceSummary.class);
+        String postType = ADDED_DAY_TYPES.stream()
+                .filter(type -> existing.stream().noneMatch(entry -> type.equals(entry.getPostType())))
+                .findFirst().orElse("Bài đăng");
+
+        CalendarItem item = new CalendarItem();
+        item.setCalendarId(plan.getId());
+        item.setPlatform(platform);
+        item.setPlannedDate(day);
+        item.setScheduledTime(slot);
+        item.setPostType(postType);
+        item.setTopic(postType + " — " + brief.productName());
+        item.setReason("Bạn thêm ngày này vào kế hoạch.");
+        item.setStatus(CalendarItemStatus.GENERATING);
+        item = items.save(item);
+        try {
+            GeneratePostRequest request = draftRequest(brief, platform, item, summary, zone, existing.size());
+            var post = withAiSlot(plan.getUserId(),
+                    () -> posts.generateForUser(plan.getUserId(), request, UUID.randomUUID()));
+            item.setGeneratedPostId(post.postId());
+            item.setStatus(CalendarItemStatus.DRAFT);
+            items.save(item);
+        } catch (RuntimeException exception) {
+            log.warn("Added day for weekly plan {} failed: {}", plan.getId(), exception.getMessage());
+            items.delete(item);
+            throw exception;
+        }
+    }
+
     private WeeklyIdeasResult planIdeas(UUID userId, CreateWeeklyPlanRequest brief, Platform platform,
                                         List<Instant> slots, PerformanceSummary summary, ZoneId zone) {
         BusinessProfile profile = shopProfiles.forUser(userId).orElse(null);
@@ -229,7 +271,8 @@ public class WeeklyPlanGenerator {
                          List<CalendarItem> created, PerformanceSummary summary, ZoneId zone) {
         int failed = 0;
         String stopReason = null;
-        for (CalendarItem item : created) {
+        for (int position = 0; position < created.size(); position++) {
+            CalendarItem item = created.get(position);
             if (stopReason != null) {
                 failItem(item, stopReason);
                 failed++;
@@ -238,7 +281,7 @@ public class WeeklyPlanGenerator {
             item.setStatus(CalendarItemStatus.GENERATING);
             items.save(item);
             try {
-                GeneratePostRequest request = draftRequest(brief, platform, item, summary, zone);
+                GeneratePostRequest request = draftRequest(brief, platform, item, summary, zone, position);
                 var post = withAiSlot(plan.getUserId(),
                         () -> posts.generateForUser(plan.getUserId(), request, UUID.randomUUID()));
                 item.setGeneratedPostId(post.postId());
@@ -261,8 +304,17 @@ public class WeeklyPlanGenerator {
         return failed;
     }
 
+    /** The images one post of the week carries: all of them, or in EACH mode one, taking the list in turn. */
+    static List<UUID> imagesFor(CreateWeeklyPlanRequest brief, int position) {
+        List<UUID> ids = brief.imageIds() == null ? List.of() : brief.imageIds().stream().distinct().toList();
+        if (ids.size() < 2 || !"EACH".equals(brief.imageMode())) {
+            return ids;
+        }
+        return List.of(ids.get(position % ids.size()));
+    }
+
     private GeneratePostRequest draftRequest(CreateWeeklyPlanRequest brief, Platform platform, CalendarItem item,
-                                             PerformanceSummary summary, ZoneId zone) {
+                                             PerformanceSummary summary, ZoneId zone, int position) {
         StringBuilder info = new StringBuilder()
                 .append("Bài trong kế hoạch tuần, đăng ").append(slotLabel(item.getScheduledTime(), zone)).append(".\n")
                 .append("Loại bài: ").append(item.getPostType()).append(".\n")
@@ -278,7 +330,7 @@ public class WeeklyPlanGenerator {
                 brief.targetAudience(), brief.highlights(),
                 truncate("Mục tiêu tuần: " + brief.goal() + ". Bài này: " + item.getTopic(), 1000),
                 toneOf(brief), List.of(platform), truncate(info.toString(), 4000),
-                brief.imageIds() == null ? List.of() : brief.imageIds());
+                imagesFor(brief, position));
     }
 
     /** Retries while another AI request of the same user is running; any other limit is final. */
