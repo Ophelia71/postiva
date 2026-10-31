@@ -84,9 +84,11 @@ public class InstagramPublisher implements PlatformPublisher {
                             accountId, accessToken, mediaUrls.get(index), null, true, apiMode)
                     : instagramClient.createImageContainer(
                             accountId, accessToken, mediaUrls.get(index), null, true, apiMode);
-            instagramClient.awaitContainerReady(childId, accessToken, apiMode);
             childIds.add(childId);
         }
+        // Instagram processes the children side by side, so waiting after creating them all takes as long as
+        // the slowest one instead of the sum of every wait.
+        childIds.forEach(childId -> instagramClient.awaitContainerReady(childId, accessToken, apiMode));
         String containerId = instagramClient.createCarouselContainer(
                 accountId, accessToken, childIds, caption, apiMode);
         instagramClient.awaitContainerReady(containerId, accessToken, apiMode);

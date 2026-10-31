@@ -18,6 +18,10 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
@@ -101,9 +105,7 @@ public class FacebookGraphClient {
     }
 
     public String publishPhotos(String pageId, String accessToken, String message, List<Resource> images) {
-        List<String> photoIds = images.stream()
-                .map(image -> uploadUnpublishedPhoto(pageId, accessToken, image))
-                .toList();
+        List<String> photoIds = uploadPhotosInParallel(pageId, accessToken, images);
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
         form.add("message", message);
         form.add("access_token", accessToken);
@@ -117,6 +119,30 @@ public class FacebookGraphClient {
                 .retrieve()
                 .bodyToMono(String.class)
                 .block());
+    }
+
+    /** Uploads the photos side by side (a few at a time) so a post with many photos waits for the slowest, not the sum. */
+    private List<String> uploadPhotosInParallel(String pageId, String accessToken, List<Resource> images) {
+        if (images.size() == 1) {
+            return List.of(uploadUnpublishedPhoto(pageId, accessToken, images.get(0)));
+        }
+        ExecutorService pool = Executors.newFixedThreadPool(Math.min(4, images.size()));
+        try {
+            List<CompletableFuture<String>> uploads = images.stream()
+                    .map(image -> CompletableFuture.supplyAsync(() -> uploadUnpublishedPhoto(pageId, accessToken, image), pool))
+                    .toList();
+            List<String> photoIds = new ArrayList<>();
+            for (CompletableFuture<String> upload : uploads) {
+                try {
+                    photoIds.add(upload.join());
+                } catch (CompletionException failure) {
+                    throw failure.getCause() instanceof RuntimeException cause ? cause : failure;
+                }
+            }
+            return photoIds;
+        } finally {
+            pool.shutdown();
+        }
     }
 
     private String uploadUnpublishedPhoto(String pageId, String accessToken, Resource image) {
