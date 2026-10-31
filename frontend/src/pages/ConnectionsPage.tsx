@@ -15,10 +15,9 @@ type StatusTone = 'info' | 'success' | 'error'
 type SocialPlatform = 'facebook' | 'instagram' | 'threads'
 type ManualConnectionForm = {
   accountId: string
-  accountName: string
   accessToken: string
 }
-type PendingConfirm = { kind: 'delete' | 'test'; channelId: string }
+type PendingConfirm = { kind: 'delete'; channelId: string }
 type SyncResult = { imported: number; updated: number; removed: number; metricsAvailable: boolean; warning?: string | null }
 type DeletionImpact = { publishedPosts: number; scheduledPosts: number; failedPosts: number; weeklyPlans: number }
 
@@ -30,12 +29,11 @@ const channelTypes = [
     platform: 'facebook',
     manualPath: '/social/meta/facebook/manual',
     idLabel: 'Page ID',
-    nameLabel: 'Tên Page',
     tokenLabel: 'Page Access Token',
     steps: [
       'Mở Meta for Developers, chọn đúng ứng dụng của Postiva và mở Graph API Explorer.',
       'Lấy danh sách Page qua /me/accounts (trường id, name, access_token), rồi chọn Page của bạn.',
-      'Dán Page ID, tên Page và Page Access Token của đúng Page đó vào form. Đừng dán token người dùng.',
+      'Dán Page ID và Page Access Token của đúng Page đó vào form. Postiva tự lấy tên Page. Đừng dán token người dùng.',
     ],
     note: 'Postiva kiểm tra token với Meta trước khi lưu. Nút Kiểm tra sau đó tạo một bài thử không công khai để xác nhận quyền đăng.',
   },
@@ -46,12 +44,11 @@ const channelTypes = [
     platform: 'instagram',
     manualPath: '/social/instagram/manual',
     idLabel: 'Account ID',
-    nameLabel: 'Tên tài khoản',
     tokenLabel: 'Access Token',
     steps: [
       'Dùng tài khoản Instagram Business hoặc Creator đã liên kết trong ứng dụng Meta của bạn.',
       'Tạo access token có quyền đăng nội dung cho tài khoản đó.',
-      'Dán Account ID, tên tài khoản và token vào form.',
+      'Dán Account ID và token vào form. Postiva tự lấy tên tài khoản.',
     ],
     note: 'Instagram cần ảnh hoặc video, không đăng được bài chỉ có chữ. Hiện đang thử nghiệm giới hạn.',
   },
@@ -62,12 +59,11 @@ const channelTypes = [
     platform: 'threads',
     manualPath: '/social/threads/manual',
     idLabel: 'Account ID',
-    nameLabel: 'Tên tài khoản',
     tokenLabel: 'Access Token',
     steps: [
       'Mở ứng dụng Meta có sản phẩm Threads và tạo token cho tài khoản Threads của bạn.',
       'Chọn quyền đăng nội dung cho token.',
-      'Dán Account ID, tên tài khoản và token vào form.',
+      'Dán Account ID và token vào form. Postiva tự lấy tên tài khoản.',
     ],
     note: 'Threads đăng được chữ, ảnh và video. Hiện đang thử nghiệm giới hạn.',
   },
@@ -76,7 +72,6 @@ const channelTypes = [
 type ConnectedAccount = { pageId: string; pageName: string }
 const emptyManualConnection = (): ManualConnectionForm => ({
   accountId: '',
-  accountName: '',
   accessToken: '',
 })
 
@@ -122,21 +117,13 @@ export function ConnectionsPage() {
   const connectedChannels = channels.filter((channel) => ['Facebook', 'Instagram', 'Threads'].includes(channel.badge))
 
   async function handleTestPost(channel: AppChannel) {
-    const isFacebook = channel.badge === 'Facebook'
     setPendingConfirm(null)
     setPostingPageId(channel.id)
     setConnectStatusTone('info')
     setConnectStatus(`${t('Đang kiểm tra kết nối với')} ${channel.name}...`)
 
     try {
-      if (isFacebook) {
-        await api.post('/social/meta/facebook/test-post', {
-          pageId: channel.accountId,
-          message: `Postiva demo: kết nối Facebook Business thành công lúc ${new Date().toLocaleString('vi-VN')}.`,
-        })
-      } else {
-        await api.post(`/social/meta/accounts/${channel.id}/check`)
-      }
+      await api.post(`/social/meta/accounts/${channel.id}/check`)
       setConnectStatusTone('success')
       setConnectStatus(`${t('Kết nối hoạt động tốt trên')} ${channel.name}.`)
     } catch (error) {
@@ -150,9 +137,8 @@ export function ConnectionsPage() {
   async function handleManualConnect(platform: SocialPlatform, title: string, path: string) {
     const current = manualConnections[platform]
     const accountId = current.accountId.trim()
-    const accountName = current.accountName.trim()
     const accessToken = current.accessToken.trim()
-    if (!accountId || !accountName || !accessToken) {
+    if (!accountId || !accessToken) {
       return
     }
     setConnectingType(platform)
@@ -161,8 +147,8 @@ export function ConnectionsPage() {
 
     try {
       const body = platform === 'facebook'
-        ? { pageId: accountId, pageName: accountName, pageAccessToken: accessToken }
-        : { accountId, accountName, accessToken }
+        ? { pageId: accountId, pageAccessToken: accessToken }
+        : { accountId, accessToken }
       const response = await api.post<ConnectedAccount>(path, body)
       setManualConnections((connections) => ({
         ...connections,
@@ -285,9 +271,7 @@ export function ConnectionsPage() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => channel.badge === 'Facebook'
-                          ? setPendingConfirm({ kind: 'test', channelId: channel.id })
-                          : void handleTestPost(channel)}
+                        onClick={() => void handleTestPost(channel)}
                         disabled={postingPageId === channel.id}
                         className="h-11 rounded-lg bg-blue-600 px-3 text-xs font-bold text-white hover:bg-blue-700 disabled:bg-slate-300"
                       >
@@ -307,24 +291,20 @@ export function ConnectionsPage() {
 
                   {confirming && (
                     <div role="alertdialog" aria-label="Xác nhận" className="mt-3 flex flex-col gap-3 rounded-lg border border-[var(--app-border)] bg-[var(--soft-bg)] p-4 text-sm sm:flex-row sm:items-start sm:justify-between">
-                      {confirming === 'delete' ? (
-                        <DeleteChannelSummary
-                          channel={channel}
-                          impact={deletionImpact?.channelId === channel.id ? deletionImpact.impact : undefined}
-                        />
-                      ) : (
-                        <p>Postiva sẽ tạo một bài thử không công khai trên Page này để kiểm tra quyền đăng. Tiếp tục?</p>
-                      )}
+                      <DeleteChannelSummary
+                        channel={channel}
+                        impact={deletionImpact?.channelId === channel.id ? deletionImpact.impact : undefined}
+                      />
                       <div className="flex shrink-0 gap-2">
                         <button type="button" onClick={() => setPendingConfirm(null)} className="min-h-11 rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] px-4 text-sm font-semibold hover:bg-[var(--soft-bg)]">
                           Hủy
                         </button>
                         <button
                           type="button"
-                          onClick={() => void (confirming === 'delete' ? handleDelete(channel) : handleTestPost(channel))}
-                          className={`min-h-11 rounded-lg px-4 text-sm font-bold text-white ${confirming === 'delete' ? 'bg-rose-600 hover:bg-rose-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+                          onClick={() => void handleDelete(channel)}
+                          className="min-h-11 rounded-lg bg-rose-600 px-4 text-sm font-bold text-white hover:bg-rose-700"
                         >
-                          {confirming === 'delete' ? 'Xóa kênh' : 'Tạo bài thử'}
+                          Xóa kênh
                         </button>
                       </div>
                     </div>
@@ -405,18 +385,6 @@ export function ConnectionsPage() {
                       data-1p-ignore="true"
                       data-bwignore="true"
                       data-lpignore="true"
-                      className={`mt-1 ${inputClass}`}
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor={`${idPrefix}-account-name`} className="block text-xs font-semibold">{type.nameLabel}</label>
-                    <input
-                      id={`${idPrefix}-account-name`}
-                      type="text"
-                      autoComplete="off"
-                      required
-                      value={form.accountName}
-                      onChange={(event) => updateForm(type.platform, 'accountName', event.target.value)}
                       className={`mt-1 ${inputClass}`}
                     />
                   </div>

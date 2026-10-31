@@ -101,7 +101,24 @@ class SocialConnectionSecurityTest {
 
     @Test
     @WithMockUser(username = "manual-user@example.test")
-    void manualConnectionRequiresIdNameAndAccessToken() throws Exception {
+    void manualConnectionRequiresIdAndAccessTokenButNotName() throws Exception {
+        mockMvc.perform(post("/api/social/meta/facebook/manual")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "pageId": "page-123"
+                                }
+                                """))
+                .andExpect(status().isUnprocessableEntity());
+        mockMvc.perform(post("/api/social/instagram/manual")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "accessToken": "account-token"
+                                }
+                                """))
+                .andExpect(status().isUnprocessableEntity());
+        // The name is read from the platform, so a request without one is accepted.
         mockMvc.perform(post("/api/social/meta/facebook/manual")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -110,16 +127,16 @@ class SocialConnectionSecurityTest {
                                   "pageAccessToken": "page-token"
                                 }
                                 """))
-                .andExpect(status().isUnprocessableEntity());
-        mockMvc.perform(post("/api/social/instagram/manual")
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/social/threads/manual")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "accountName": "Postiva",
+                                  "accountId": "account-123",
                                   "accessToken": "account-token"
                                 }
                                 """))
-                .andExpect(status().isUnprocessableEntity());
+                .andExpect(status().isOk());
     }
 
     @Test
