@@ -2,6 +2,8 @@ package com.postiva.social.client;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.postiva.common.Platform;
+import com.postiva.social.insights.PostMetrics;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -13,7 +15,12 @@ import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 @Component
 public class InstagramGraphClient {
@@ -98,6 +105,64 @@ public class InstagramGraphClient {
                     "Không thể kiểm tra Instagram. Nếu dùng Instagram Business qua Facebook Page, hãy dùng IG User ID và Page Access Token. "
                             + "Chi tiết: " + exceptionMessage(businessError)
             );
+        }
+    }
+
+    /** Recent media with like and comment counts; both come with the basic permission, no insights scope needed. */
+    public List<PostMetrics> getRecentMediaMetrics(String accountId, String accessToken, ApiMode apiMode, int limit) {
+        String body = client(apiMode).get()
+                .uri(uri -> uri.path("/{accountId}/media")
+                        .queryParam("fields", "id,caption,media_type,media_product_type,timestamp,like_count,comments_count,permalink")
+                        .queryParam("limit", limit)
+                        .queryParam("access_token", accessToken)
+                        .build(accountId))
+                .retrieve()
+                .onStatus(HttpStatusCode::isError, response -> response.bodyToMono(String.class)
+                        .map(responseBody -> new MetaApiException(response.statusCode().value(),
+                                metaErrorMessage("Instagram", responseBody))))
+                .bodyToMono(String.class)
+                .block();
+        try {
+            List<PostMetrics> posts = new ArrayList<>();
+            for (JsonNode node : objectMapper.readTree(body).path("data")) {
+                String id = node.path("id").asText();
+                if (id.isBlank()) {
+                    continue;
+                }
+                // Reels report media_type VIDEO; media_product_type tells them apart.
+                String productType = node.path("media_product_type").asText("");
+                String mediaType = "REELS".equalsIgnoreCase(productType) ? "REELS" : node.path("media_type").asText("IMAGE");
+                posts.add(new PostMetrics(
+                        id,
+                        Platform.INSTAGRAM,
+                        parseTimestamp(node.path("timestamp").asText()),
+                        node.path("caption").asText(""),
+                        mediaType,
+                        node.path("like_count").canConvertToInt() ? node.path("like_count").asInt() : null,
+                        node.path("comments_count").canConvertToInt() ? node.path("comments_count").asInt() : null,
+                        null,
+                        null,
+                        node.path("permalink").asText(null)
+                ));
+            }
+            return posts;
+        } catch (Exception exception) {
+            throw new IllegalStateException("Instagram trả về danh sách bài không hợp lệ", exception);
+        }
+    }
+
+    private static Instant parseTimestamp(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return OffsetDateTime.parse(value, DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssZ")).toInstant();
+        } catch (RuntimeException exception) {
+            try {
+                return OffsetDateTime.parse(value).toInstant();
+            } catch (RuntimeException invalid) {
+                return null;
+            }
         }
     }
 
@@ -316,7 +381,20 @@ public class InstagramGraphClient {
 
     public enum ApiMode {
         FACEBOOK_LOGIN,
-        INSTAGRAM_LOGIN
+        INSTAGRAM_LOGIN;
+
+        /** Reads the mode stored on a connected account; accounts saved before the flag existed are inferred. */
+        public static ApiMode fromAccountMetadata(Map<String, Object> metadata) {
+            String configuredMode = metadata == null ? "" : String.valueOf(metadata.getOrDefault("apiMode", ""));
+            if (INSTAGRAM_LOGIN.name().equalsIgnoreCase(configuredMode)) {
+                return INSTAGRAM_LOGIN;
+            }
+            if (FACEBOOK_LOGIN.name().equalsIgnoreCase(configuredMode)) {
+                return FACEBOOK_LOGIN;
+            }
+            String accountType = metadata == null ? "" : String.valueOf(metadata.getOrDefault("accountType", ""));
+            return accountType.isBlank() ? FACEBOOK_LOGIN : INSTAGRAM_LOGIN;
+        }
     }
 
     public record AccessToken(String accessToken, String userId, long expiresInSeconds) {

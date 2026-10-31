@@ -11,7 +11,7 @@ import org.springframework.validation.annotation.Validated;
 @Validated
 public class UsageProperties {
     @Min(0) private int freeAiLimit = 30;
-    @Min(0) private int proAiLimit = 50;
+    @Min(0) private int proAiLimit = 300;
     @Min(1) @Max(366) private int periodDays = 30;
     @Min(0) private int globalDailyAttempts = 100;
     @Min(1) private int userDailyAttempts = 20;

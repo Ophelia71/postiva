@@ -6,6 +6,7 @@ import com.postiva.common.Platform;
 import com.postiva.common.PostStatus;
 import com.postiva.social.dto.SocialAccountResponse;
 import com.postiva.social.service.SocialAccountService;
+import com.postiva.social.sync.PostMetricsReader;
 import com.postiva.post.entity.GeneratedPost;
 import com.postiva.post.repository.GeneratedPostRepository;
 import com.postiva.scheduler.entity.ScheduledPost;
@@ -21,6 +22,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -32,6 +34,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.ArrayList;
@@ -54,6 +57,7 @@ public class AppDataController {
     private final PublishLogRepository logRepository;
     private final FacebookGraphClient facebookGraphClient;
     private final FileService fileService;
+    private final PostMetricsReader metricsReader;
 
     public AppDataController(CurrentUserService currentUserService,
                              SocialAccountService socialAccountService,
@@ -61,7 +65,9 @@ public class AppDataController {
                              ScheduledPostRepository scheduledRepository,
                              PublishLogRepository logRepository,
                              FacebookGraphClient facebookGraphClient,
-                             FileService fileService) {
+                             FileService fileService,
+                             PostMetricsReader metricsReader) {
+        this.metricsReader = metricsReader;
         this.currentUserService = currentUserService;
         this.socialAccountService = socialAccountService;
         this.postRepository = postRepository;
@@ -126,7 +132,7 @@ public class AppDataController {
                 && platform != Platform.FACEBOOK) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
-                    "API hiện chưa hỗ trợ sửa bài " + platformLabel(platform) + " sau khi đã đăng"
+                    platformLabel(platform) + " không cho sửa bài sau khi đã đăng. Bạn sửa trực tiếp trên " + platformLabel(platform) + "."
             );
         }
 
@@ -156,6 +162,9 @@ public class AppDataController {
         if (platform == Platform.FACEBOOK) {
             syncPublishedFacebookPost(userId, postId, targetSchedule, message.trim());
         }
+        if (request.mediaIds() != null) {
+            replaceMediaOfPendingPost(userId, post, targetSchedule, request.mediaIds());
+        }
 
         post = postRepository.save(post);
 
@@ -166,12 +175,24 @@ public class AppDataController {
         ));
     }
 
+    /**
+     * Deletes one platform's schedule when {@code scheduleId} is given and the post goes elsewhere too;
+     * the post itself (and every platform with it) goes only with its last schedule or without a scheduleId.
+     */
     @DeleteMapping("/posts/{postId}")
     @Transactional
-    public ApiResponse<Map<String, Object>> deletePost(@PathVariable UUID postId) {
+    public ApiResponse<Map<String, Object>> deletePost(@PathVariable UUID postId,
+                                                       @RequestParam(required = false) UUID scheduleId) {
         UUID userId = currentUserService.requireCurrentUserId();
         GeneratedPost post = postRepository.findByIdAndUserId(postId, userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy bài viết"));
+        if (scheduleId != null) {
+            List<ScheduledPost> schedules = safeAllSchedules(userId).stream()
+                    .filter(schedule -> postId.equals(schedule.getPostId())).toList();
+            ScheduledPost target = schedules.stream().filter(schedule -> scheduleId.equals(schedule.getId())).findFirst()
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy lịch đăng"));
+            if (schedules.size() > 1) return deleteOneSchedule(userId, target);
+        }
 
         List<ScheduledPost> publishedSchedules = safeAllSchedules(userId).stream()
                 .filter(schedule -> postId.equals(schedule.getPostId()))
@@ -185,7 +206,7 @@ public class AppDataController {
                 .toList();
         if (!unsupportedPlatforms.isEmpty()) {
             String message = "Chưa thể xóa bài đã đăng trên " + String.join(", ", unsupportedPlatforms)
-                    + " qua API. Bài trong Postiva được giữ lại để tránh mất dấu nội dung đang còn trên nền tảng.";
+                    + " từ Postiva. Bạn xóa trực tiếp trên ứng dụng đó; bài trong Postiva vẫn được giữ lại.";
             return ApiResponse.ok(Map.of(
                     "deleted", false,
                     "facebookDeleted", false,
@@ -275,13 +296,14 @@ public class AppDataController {
     }
 
     private List<Map<String, Object>> postData(UUID userId) {
-        List<ScheduledPost> schedules = safeAllSchedules(userId);
+        // Posts ever scheduled, including on removed channels, so those posts are not shown again as drafts.
         Set<UUID> postsWithSchedules = new java.util.HashSet<>();
-        schedules.forEach(schedule -> {
+        safeAllSchedules(userId).forEach(schedule -> {
             if (schedule.getPostId() != null) postsWithSchedules.add(schedule.getPostId());
         });
+        // Only connected channels count: a removed channel's history no longer belongs in reports.
         Map<UUID, List<ScheduledPost>> schedulesByPost = new LinkedHashMap<>();
-        schedules.forEach(schedule -> {
+        safeConnectedSchedules(userId).forEach(schedule -> {
             if (schedule.getPostId() != null) {
                 schedulesByPost.computeIfAbsent(schedule.getPostId(), ignored -> new ArrayList<>())
                         .add(schedule);
@@ -294,6 +316,7 @@ public class AppDataController {
             }
         });
         Map<UUID, List<UploadedFile>> mediaByPost = new HashMap<>();
+        Map<UUID, Map<String, Object>> metrics = metricsReader.forUser(userId);
         return postRepository.findAllByUserIdOrderByCreatedAtDesc(userId).stream()
                 .flatMap(post -> {
                     List<ScheduledPost> postSchedules = schedulesByPost.getOrDefault(post.getId(), List.of());
@@ -301,12 +324,12 @@ public class AppDataController {
                             post.getId(), ignored -> fileService.allMediaForPost(post.getId()));
                     if (!postSchedules.isEmpty()) {
                         return postSchedules.stream().map(schedule -> safePostMap(
-                                post, schedule, latestLog.get(schedule.getId()), mediaFiles));
+                                post, schedule, latestLog.get(schedule.getId()), mediaFiles, metrics.get(schedule.getId())));
                     }
                     if (postsWithSchedules.contains(post.getId()) || !shouldShowInAppData(post)) {
                         return Stream.empty();
                     }
-                    return Stream.of(safePostMap(post, null, null, mediaFiles));
+                    return Stream.of(safePostMap(post, null, null, mediaFiles, null));
                 })
                 .toList();
     }
@@ -314,14 +337,19 @@ public class AppDataController {
     private Map<String, Object> safePostMap(GeneratedPost post,
                                             ScheduledPost schedule,
                                             PublishLog publishLog,
-                                            List<UploadedFile> mediaFiles) {
+                                            List<UploadedFile> mediaFiles,
+                                            Map<String, Object> metrics) {
+        Map<String, Object> result;
         try {
-            return postMap(post, schedule, publishLog, mediaFiles);
+            result = postMap(post, schedule, publishLog, mediaFiles);
         } catch (RuntimeException exception) {
             log.warn("Could not map app post data. postId={}, scheduleId={}",
                     post.getId(), schedule == null ? null : schedule.getId(), exception);
-            return fallbackPostMap(post, schedule, mediaFiles);
+            result = fallbackPostMap(post, schedule, mediaFiles);
         }
+        // Engagement last read from the platform; empty when never synced or not readable.
+        result.put("metrics", metrics == null ? Map.of() : metrics);
+        return result;
     }
 
     private boolean shouldShowInAppData(GeneratedPost post) {
@@ -334,6 +362,15 @@ public class AppDataController {
             return scheduledRepository.findAllIncludingDisconnectedForUser(userId);
         } catch (RuntimeException exception) {
             log.warn("Could not load schedules including disconnected accounts for app data. userId={}", userId, exception);
+            return List.of();
+        }
+    }
+
+    private List<ScheduledPost> safeConnectedSchedules(UUID userId) {
+        try {
+            return scheduledRepository.findAllForUser(userId);
+        } catch (RuntimeException exception) {
+            log.warn("Could not load schedules for app data. userId={}", userId, exception);
             return List.of();
         }
     }
@@ -497,6 +534,32 @@ public class AppDataController {
         return value == null || value.isBlank() ? fallback : value;
     }
 
+    /**
+     * Images and videos belong to the post, so a change reaches every platform it is still waiting to go to.
+     * Only a post nobody has published yet can change them; the limits are the ones each platform enforces.
+     */
+    private void replaceMediaOfPendingPost(UUID userId, GeneratedPost post, ScheduledPost targetSchedule, List<UUID> mediaIds) {
+        List<ScheduledPost> schedules = safeAllSchedules(userId).stream()
+                .filter(schedule -> post.getId().equals(schedule.getPostId()))
+                .toList();
+        boolean published = schedules.stream().anyMatch(schedule -> schedule.getStatus() == ScheduledPostStatus.PUBLISHED)
+                || (targetSchedule != null && targetSchedule.getStatus() != ScheduledPostStatus.SCHEDULED);
+        if (published) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Bài đã đăng hoặc đang được đăng nên không đổi được ảnh. Bạn tạo một bài mới với ảnh mong muốn.");
+        }
+        List<UUID> distinct = mediaIds.stream().distinct().toList();
+        List<Platform> platforms = schedules.stream().map(ScheduledPost::getPlatform).filter(Objects::nonNull).distinct().toList();
+        if (platforms.contains(Platform.INSTAGRAM) && distinct.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Instagram cần ít nhất một ảnh hoặc video.");
+        }
+        int limit = platforms.contains(Platform.INSTAGRAM) || platforms.contains(Platform.FACEBOOK) ? 10 : 20;
+        if (distinct.size() > limit) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Bài này chỉ đăng được tối đa " + limit + " ảnh hoặc video.");
+        }
+        post.setImageUrl(fileService.replacePostMedia(distinct, userId, post.getBriefId(), post.getId()));
+    }
+
     private ScheduledPost resolveTargetSchedule(UUID userId, UUID postId, UUID scheduleId) {
         if (scheduleId == null) {
             return null;
@@ -535,15 +598,15 @@ public class AppDataController {
                 .findFirstByScheduledPostIdAndStatusOrderByPublishedAtDesc(publishedSchedule.getId(), "SUCCESS")
                 .orElse(null);
         if (publishLog == null || publishLog.getExternalPostId() == null || publishLog.getExternalPostId().isBlank()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Không tìm thấy ID bài viết Facebook để cập nhật");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Không tìm thấy bài này trên Facebook nữa nên chưa sửa được.");
         }
 
         SocialAccount account = socialAccountService.requireActiveAccount(publishedSchedule.getSocialAccountId());
         if (account.getTokenExpiresAt() != null && account.getTokenExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Meta token đã hết hạn, hãy kết nối lại Page");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Kết nối Facebook đã hết hạn. Vào Kết nối kênh để kết nối lại.");
         }
         if (account.getAccessTokenEncrypted() == null || account.getAccessTokenEncrypted().isBlank()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Facebook Page chưa có Page Access Token");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Kết nối Facebook đã hết hạn. Vào Kết nối kênh để kết nối lại.");
         }
 
         facebookGraphClient.updatePostMessage(
@@ -553,31 +616,52 @@ public class AppDataController {
         );
     }
 
+    /** Removes one platform from a post that also goes to other platforms; the others are untouched. */
+    private ApiResponse<Map<String, Object>> deleteOneSchedule(UUID userId, ScheduledPost schedule) {
+        if (schedule.getStatus() == ScheduledPostStatus.PUBLISHING) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Postiva đang đăng bài này. Bạn thử xóa lại sau ít phút.");
+        }
+        String refusal = null;
+        if (schedule.getStatus() == ScheduledPostStatus.PUBLISHED && schedule.getPlatform() != Platform.FACEBOOK) {
+            refusal = "Chưa thể xóa bài đã đăng trên " + platformLabel(schedule.getPlatform())
+                    + " từ Postiva. Bạn xóa trực tiếp trên ứng dụng đó; bài trong Postiva vẫn được giữ lại.";
+        } else if (schedule.getStatus() == ScheduledPostStatus.PUBLISHED) {
+            refusal = deletePublishedFacebookSchedule(userId, schedule);
+        }
+        if (refusal != null) {
+            return ApiResponse.ok(Map.of("deleted", false, "facebookDeleted", false, "facebookMessage", refusal, "message", refusal));
+        }
+        scheduledRepository.delete(schedule);
+        scheduledRepository.flush();
+        return ApiResponse.ok(Map.of("deleted", true, "facebookDeleted", true, "facebookMessage", "", "message", ""));
+    }
+
     private String deletePublishedFacebookPost(UUID userId, UUID postId) {
+        ScheduledPost publishedSchedule = safeAllSchedules(userId).stream()
+                .filter(schedule -> postId.equals(schedule.getPostId()))
+                .filter(schedule -> schedule.getPlatform() == Platform.FACEBOOK)
+                .filter(schedule -> schedule.getStatus() == ScheduledPostStatus.PUBLISHED)
+                .findFirst()
+                .orElse(null);
+        return publishedSchedule == null ? null : deletePublishedFacebookSchedule(userId, publishedSchedule);
+    }
+
+    private String deletePublishedFacebookSchedule(UUID userId, ScheduledPost publishedSchedule) {
         try {
-            ScheduledPost publishedSchedule = safeAllSchedules(userId).stream()
-                    .filter(schedule -> postId.equals(schedule.getPostId()))
-                    .filter(schedule -> schedule.getPlatform() == Platform.FACEBOOK)
-                    .filter(schedule -> schedule.getStatus() == ScheduledPostStatus.PUBLISHED)
-                    .findFirst()
-                    .orElse(null);
-            if (publishedSchedule == null) {
-                return null;
-            }
 
             PublishLog publishLog = logRepository
                     .findFirstByScheduledPostIdAndStatusOrderByPublishedAtDesc(publishedSchedule.getId(), "SUCCESS")
                     .orElse(null);
             if (publishLog == null || publishLog.getExternalPostId() == null || publishLog.getExternalPostId().isBlank()) {
-                return "Không tìm thấy ID bài viết Facebook để xóa";
+                return "Không tìm thấy bài này trên Facebook nữa nên chưa xóa được.";
             }
 
             SocialAccount account = socialAccountService.requireActiveAccount(publishedSchedule.getSocialAccountId());
             if (account.getTokenExpiresAt() != null && account.getTokenExpiresAt().isBefore(LocalDateTime.now())) {
-                return "Meta token đã hết hạn, hãy kết nối lại Page";
+                return "Kết nối Facebook đã hết hạn. Vào Kết nối kênh để kết nối lại.";
             }
             if (account.getAccessTokenEncrypted() == null || account.getAccessTokenEncrypted().isBlank()) {
-                return "Facebook Page chưa có Page Access Token";
+                return "Kết nối Facebook đã hết hạn. Vào Kết nối kênh để kết nối lại.";
             }
 
             facebookGraphClient.deletePost(
@@ -597,6 +681,6 @@ public class AppDataController {
         return message.length() <= 300 ? message : message.substring(0, 300);
     }
 
-    private record UpdateAppPostRequest(String message, Platform platform, UUID scheduleId) {
+    private record UpdateAppPostRequest(String message, Platform platform, UUID scheduleId, List<UUID> mediaIds) {
     }
 }

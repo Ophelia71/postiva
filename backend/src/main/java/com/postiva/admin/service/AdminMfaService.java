@@ -8,8 +8,10 @@ import com.postiva.admin.repository.AdminSecurityEventRepository;
 import com.postiva.admin.security.MfaSecretCipher;
 import com.postiva.admin.security.Totp;
 import com.postiva.auth.service.CurrentUserService;
+import com.postiva.common.RateLimitException;
 import com.postiva.user.entity.User;
 import com.postiva.user.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -21,6 +23,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HexFormat;
@@ -37,13 +40,17 @@ public class AdminMfaService {
     private final PasswordEncoder passwords;
     private final MfaSecretCipher cipher;
     private final Totp totp;
+    /** Name shown in the authenticator app. Give each environment its own so codes are not taken from the wrong entry. */
+    private final String issuer;
     private final SecureRandom random = new SecureRandom();
 
     public AdminMfaService(UserRepository users, AdminMfaRepository states,
                            AdminSecurityEventRepository events, CurrentUserService current,
-                           PasswordEncoder passwords, MfaSecretCipher cipher, Totp totp) {
+                           PasswordEncoder passwords, MfaSecretCipher cipher, Totp totp,
+                           @Value("${postiva.security.mfa-issuer:Postiva}") String issuer) {
         this.users = users; this.states = states; this.events = events; this.current = current;
         this.passwords = passwords; this.cipher = cipher; this.totp = totp;
+        this.issuer = issuer == null || issuer.isBlank() ? "Postiva" : issuer.trim();
     }
 
     @Transactional(readOnly = true)
@@ -68,9 +75,9 @@ public class AdminMfaService {
         state.setSetupExpiresAt(Instant.now().plusSeconds(600));
         state.setLastUsedStep(-1);
         resetFailures(state);
-        String label = URLEncoder.encode("Postiva:" + admin.getEmail(), StandardCharsets.UTF_8).replace("+", "%20");
+        String label = uriEncode(issuer + ":" + admin.getEmail());
         return new Setup(secret, "otpauth://totp/" + label + "?secret=" + secret
-                + "&issuer=Postiva&algorithm=SHA1&digits=6&period=30", state.getSetupExpiresAt());
+                + "&issuer=" + uriEncode(issuer) + "&algorithm=SHA1&digits=6&period=30", state.getSetupExpiresAt());
     }
 
     @Transactional(noRollbackFor = ResponseStatusException.class)
@@ -103,7 +110,7 @@ public class AdminMfaService {
         AdminMfaState state = state(admin);
         checkLoginBlocked(state);
         if (password == null || !passwords.matches(password, admin.getPasswordHash())) {
-            recordFailedAttempt(admin, state);
+            if (recordFailedAttempt(admin, state)) throw loginBlocked(state);
             throw error(HttpStatus.UNAUTHORIZED, "Email hoặc mật khẩu không chính xác");
         }
         if (!admin.isMfaEnabled()) { resetFailures(state); return new VerifiedLogin(admin, false); }
@@ -170,10 +177,10 @@ public class AdminMfaService {
             if (step >= 0) { state.setLastUsedStep(step); resetFailures(state); return; }
         }
         boolean blocked = recordFailedAttempt(admin, state);
-        if (blocked && invalidStatus != HttpStatus.UNAUTHORIZED) {
-            throw error(HttpStatus.TOO_MANY_REQUESTS, "Đã nhập sai nhiều lần; thử lại sau 5 phút");
-        }
-        throw error(invalidStatus, "Mã xác thực không đúng hoặc đã dùng; lấy mã mới rồi thử lại");
+        if (blocked && invalidStatus == HttpStatus.UNAUTHORIZED) throw loginBlocked(state);
+        if (blocked) throw error(HttpStatus.TOO_MANY_REQUESTS, "Đã nhập sai nhiều lần; thử lại sau 5 phút");
+        throw error(invalidStatus, "Mã không đúng. Hãy lấy mã mới từ đúng mục " + issuer
+                + " trong ứng dụng xác thực, hoặc dùng một mã khôi phục.");
     }
 
     private User lockedCurrent() {
@@ -210,11 +217,20 @@ public class AdminMfaService {
 
     private void checkLoginBlocked(AdminMfaState state) {
         if (state.getBlockedUntil() != null) {
-            if (state.getBlockedUntil().isAfter(Instant.now())) {
-                throw error(HttpStatus.UNAUTHORIZED, "Email hoặc mật khẩu không chính xác");
-            }
+            if (state.getBlockedUntil().isAfter(Instant.now())) throw loginBlocked(state);
             resetFailures(state);
         }
+    }
+
+    /** Says plainly that sign-in is paused; otherwise a correct code looks wrong while the block lasts. */
+    private RateLimitException loginBlocked(AdminMfaState state) {
+        long seconds = Duration.between(Instant.now(), state.getBlockedUntil()).toSeconds() + 1;
+        return new RateLimitException("Bạn đã nhập sai nhiều lần nên đăng nhập tạm bị khóa. Thử lại sau "
+                + Math.max(1, (seconds + 59) / 60) + " phút.", seconds);
+    }
+
+    private static String uriEncode(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20");
     }
 
     private void failed(User admin, AdminMfaState state) {

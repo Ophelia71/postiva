@@ -36,3 +36,12 @@ database/backups/
 # Uploaded media
 backend/uploads/
 uploads/
+
+# AI assistant files (kept on this machine only)
+.agents/
+.codex/
+.codegraph/
+AGENTS.md
+CLAUDE.md
+.claude/
+/claude

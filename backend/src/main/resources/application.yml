@@ -70,13 +70,22 @@ spring:
 postiva:
   billing:
     enabled: ${POSTIVA_BILLING_ENABLED:false}
-    pro-price-vnd: ${POSTIVA_PRO_PRICE_VND:0}
+    pro-price-vnd: ${POSTIVA_PRO_PRICE_VND:149000}
     client-id: ${PAYOS_CLIENT_ID:}
     api-key: ${PAYOS_API_KEY:}
     checksum-key: ${PAYOS_CHECKSUM_KEY:}
-    return-url: ${POSTIVA_BILLING_RETURN_URL:}
-    cancel-url: ${POSTIVA_BILLING_CANCEL_URL:}
-    refund-policy-url: ${POSTIVA_BILLING_REFUND_POLICY_URL:}
+    # payOS sends the buyer back to the billing page; the refund policy is a public page of the frontend.
+    return-url: ${POSTIVA_BILLING_RETURN_URL:${postiva.frontend-origin}/app/billing}
+    cancel-url: ${POSTIVA_BILLING_CANCEL_URL:${postiva.frontend-origin}/app/billing}
+    refund-policy-url: ${POSTIVA_BILLING_REFUND_POLICY_URL:${postiva.frontend-origin}/refund-policy}
+    # Manual VietQR bank transfer, confirmed by an admin. Empty account = off.
+    bank-code: ${POSTIVA_BANK_CODE:TPB}
+    bank-account-no: ${POSTIVA_BANK_ACCOUNT_NO:}
+    bank-account-name: ${POSTIVA_BANK_ACCOUNT_NAME:}
+    # Optional: SePay reports incoming transfers so they confirm without the admin.
+    sepay-api-key: ${POSTIVA_SEPAY_API_KEY:}
+    # Optional: SePay API token, so Postiva asks SePay for incoming transfers itself (no public address needed).
+    sepay-api-token: ${POSTIVA_SEPAY_API_TOKEN:}
   ai:
     cost:
       enabled: ${POSTIVA_AI_ENABLED:true}
@@ -94,7 +103,7 @@ postiva:
       warning-percent: ${POSTIVA_AI_BUDGET_WARNING_PERCENT:80}
   usage:
     free-ai-limit: ${POSTIVA_FREE_AI_LIMIT:30}
-    pro-ai-limit: ${POSTIVA_PRO_AI_LIMIT:50}
+    pro-ai-limit: ${POSTIVA_PRO_AI_LIMIT:300}
     period-days: 30
     global-daily-attempts: ${POSTIVA_AI_GLOBAL_DAILY_ATTEMPTS:100}
     user-daily-attempts: ${POSTIVA_AI_USER_DAILY_ATTEMPTS:20}
@@ -130,6 +139,7 @@ postiva:
     login-attempts-per-15-minutes: ${POSTIVA_LOGIN_ATTEMPTS_PER_15_MINUTES:10}
     token-encryption-key: ${POSTIVA_TOKEN_ENCRYPTION_KEY:}
     mfa-encryption-key: ${POSTIVA_MFA_ENCRYPTION_KEY:}
+    mfa-issuer: ${POSTIVA_MFA_ISSUER:Postiva}
 
   storage:
     upload-dir: ${POSTIVA_UPLOAD_DIR:uploads/images}
@@ -140,7 +150,7 @@ postiva:
 
   scheduler:
     publish-delay-ms: ${POSTIVA_PUBLISH_DELAY_MS:10000}
-    batch-size: ${POSTIVA_SCHEDULER_BATCH_SIZE:1}
+    batch-size: ${POSTIVA_SCHEDULER_BATCH_SIZE:6}
     max-attempts: ${POSTIVA_SCHEDULER_MAX_ATTEMPTS:4}
     lease-seconds: ${POSTIVA_SCHEDULER_LEASE_SECONDS:1800}
     backoff-base-seconds: ${POSTIVA_SCHEDULER_BACKOFF_BASE_SECONDS:60}
@@ -149,6 +159,8 @@ postiva:
   mail:
     enabled: ${POSTIVA_MAIL_ENABLED:false}
     from: ${MAIL_FROM:no-reply@postiva.local}
+    # Local development only: with mail disabled, write registration codes and reset links to the log instead.
+    log-codes: ${POSTIVA_MAIL_LOG_CODES:false}
 
 
 app:

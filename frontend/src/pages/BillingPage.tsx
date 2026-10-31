@@ -1,26 +1,71 @@
-import { useCallback, useEffect, useState } from 'react'
+import { BarChart3, CalendarDays, Check, Clock, Share2, Sparkles, type LucideIcon } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { BankTransferPanel, type BankAccount } from '../components/BankTransferPanel'
+import { PageHeader } from '../components/PageUi'
 import { api } from '../lib/api'
 import { usePreferences } from '../lib/preferences'
 
-type Offer = { available: boolean; amountVnd: number; aiLimit: number; periodDays: number; refundPolicyUrl: string | null }
-type Order = { id: string; orderCode: number; amountVnd: number; aiLimit: number; periodDays: number; status: string; grantStatus: string; checkoutUrl: string | null; expiresAt: string; createdAt: string; paidAt: string | null }
+const CARD = 'rounded-2xl border border-[var(--app-border)] bg-[var(--panel-bg)] shadow-sm'
+
+type Feature = { icon: string; text: string }
+type Plan = { code: string; name: string; headline: string; description: string; priceVnd: number; aiLimit: number; periodDays: number; features: Feature[]; purchasable: boolean }
+type Offer = { available: boolean; amountVnd: number; periodDays: number; refundPolicyUrl: string | null; method: 'PAYOS' | 'BANK_TRANSFER' | null; bank: BankAccount | null; autoConfirm: boolean; plans: Plan[] }
+type Order = { id: string; orderCode: number; amountVnd: number; aiLimit: number; periodDays: number; status: string; grantStatus: string; checkoutUrl: string | null; expiresAt: string; createdAt: string; paidAt: string | null; provider: 'PAYOS' | 'BANK_TRANSFER' }
+type Usage = { plan: string; endsAt: string; limit: number; remaining: number }
 type Refund = { id: string; orderId: string; amountVnd: number; status: string; reason: string; createdAt: string; providerRef: string | null }
+type T = (vi: string, en: string) => string
 
 const money = (amount: number) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount)
+const dateTime = (value: string) => new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value))
+const isOpen = (order: Order) => order.status === 'PENDING' || order.status === 'CREATING'
+
+// One plain status per order, instead of the payment and the plan as two technical columns.
+function orderLabel(order: Order, t: T) {
+  if (order.status === 'PAID') {
+    if (order.grantStatus === 'GRANTED') return t('Đã thanh toán · Pro đã bật', 'Paid · Pro active')
+    if (order.grantStatus === 'NOT_APPLICABLE') return t('Đã hoàn tiền', 'Refunded')
+    return t('Đã thanh toán · đang bật Pro', 'Paid · turning Pro on')
+  }
+  if (order.provider === 'BANK_TRANSFER' && order.status === 'PENDING') return t('Chờ chuyển khoản', 'Waiting for transfer')
+  if (isOpen(order)) return t('Chờ thanh toán', 'Waiting for payment')
+  if (order.status === 'REVIEW') return t('Đang kiểm tra', 'Being checked')
+  if (order.status === 'EXPIRED') return t('Hết hạn', 'Expired')
+  return t('Đã hủy', 'Cancelled')
+}
+
+const REFUND_STATUS_LABELS: Record<string, string> = {
+  REQUESTED: 'Đã gửi yêu cầu', APPROVED: 'Đã duyệt', REJECTED: 'Bị từ chối', PROCESSING: 'Đang hoàn tiền',
+  SUCCEEDED: 'Đã hoàn tiền', FAILED: 'Chưa hoàn được',
+}
 
 export function BillingPage() {
   const { t } = usePreferences()
   const [offer, setOffer] = useState<Offer | null>(null)
+  const [usage, setUsage] = useState<Usage | null>(null)
   const [orders, setOrders] = useState<Order[]>([])
-  const [selected, setSelected] = useState<Order | null>(null)
+  // The history row the buyer opened, for its details and refund request.
+  const [openedId, setOpenedId] = useState<string | null>(null)
   const [refunds, setRefunds] = useState<Refund[]>([])
   const [refundReason, setRefundReason] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
-  const selectedId = selected?.id
-  const selectedStatus = selected?.status
-  const selectedGrantStatus = selected?.grantStatus
+  // The order the buyer just started: once its payOS page is ready we send them there.
+  const redirectFor = useRef<string | null>(null)
+  // Orders seen while still unpaid: only these may announce "payment received" when they turn paid.
+  const watching = useRef(new Set<string>())
+
+  // At most one unpaid order at a time: it gets the big checkout panel at the top.
+  const pending = orders.find(isOpen) ?? null
+  const opened = orders.find((order) => order.id === openedId && !isOpen(order)) ?? null
+  const pendingId = pending?.id
+  const pendingProvider = pending?.provider
+
+  const loadUsage = useCallback(() => {
+    // The plan line is a convenience; the page still works if it fails to load.
+    void api.get<Usage>('/usage').then((response) => setUsage(response.data)).catch(() => undefined)
+  }, [])
 
   const refresh = useCallback(async () => {
     const [offerResponse, ordersResponse] = await Promise.all([
@@ -28,109 +73,234 @@ export function BillingPage() {
     ])
     setOffer(offerResponse.data)
     setOrders(ordersResponse.data)
-    const returnedCode = new URLSearchParams(window.location.search).get('orderCode')
-    setSelected((current) => ordersResponse.data.find((item) => item.id === current?.id)
-      ?? ordersResponse.data.find((item) => String(item.orderCode) === returnedCode)
-      ?? ordersResponse.data[0] ?? null)
+    loadUsage()
+    return ordersResponse.data
+  }, [loadUsage])
+
+  const showOrder = useCallback((order: Order) => {
+    setOrders((existing) => existing.some((item) => item.id === order.id)
+      ? existing.map((item) => item.id === order.id ? order : item) : [order, ...existing])
   }, [])
 
-  useEffect(() => { void refresh().catch(() => setError(t('Không thể tải thông tin thanh toán.', 'Could not load billing details.'))) }, [refresh, t])
+  // First visit, or the buyer coming back from the payOS page (?orderCode=…&cancel=…).
   useEffect(() => {
-    if (!selectedId) { setRefunds([]); return }
-    void api.get<Refund[]>(`/billing/orders/${selectedId}/refund-requests`).then((response) => setRefunds(response.data)).catch(() => setRefunds([]))
-  }, [selectedId])
+    const params = new URLSearchParams(window.location.search)
+    const returnedCode = params.get('orderCode')
+    const cancelled = params.get('cancel') === 'true'
+    if (returnedCode) window.history.replaceState(null, '', window.location.pathname)
+    void refresh().then(async (list) => {
+      const order = list.find((item) => String(item.orderCode) === returnedCode)
+      if (!order) return
+      if (cancelled) {
+        if (order.status === 'PENDING') await api.post(`/billing/orders/${order.id}/cancel`).catch(() => undefined)
+        setNotice(t('Bạn đã hủy thanh toán. Chưa có khoản nào bị trừ.', 'Payment cancelled. Nothing was charged.'))
+        await refresh()
+        return
+      }
+      watching.current.add(order.id)
+      setNotice(t('Đang xác nhận thanh toán. Gói Pro sẽ bật ngay khi Postiva nhận được tiền.', 'Confirming your payment. Pro turns on as soon as it arrives.'))
+      const response = await api.post<Order>(`/billing/orders/${order.id}/refresh`).catch(() => null)
+      if (response) showOrder(response.data)
+    }).catch(() => setError(t('Không thể tải thông tin thanh toán.', 'Could not load billing details.')))
+  }, [refresh, showOrder, t])
+
   useEffect(() => {
-    if (!selectedId || !selectedStatus || !['CREATING', 'PENDING', 'PAID', 'REVIEW'].includes(selectedStatus)
-      || selectedGrantStatus === 'GRANTED') return
+    if (!opened) { setRefunds([]); return }
+    void api.get<Refund[]>(`/billing/orders/${opened.id}/refund-requests`).then((response) => setRefunds(response.data)).catch(() => setRefunds([]))
+  }, [opened])
+
+  // Follow the unpaid order until the money arrives; its QR code disappears the moment it is paid.
+  useEffect(() => {
+    if (!pendingId) return
+    watching.current.add(pendingId)
     const timer = window.setInterval(() => {
-      void api.get<Order>(`/billing/orders/${selectedId}`).then((response) => {
-        setSelected(response.data)
-        setOrders((existing) => existing.map((item) => item.id === response.data.id ? response.data : item))
-      }).catch(() => undefined)
+      void api.get<Order>(`/billing/orders/${pendingId}`).then((response) => showOrder(response.data)).catch(() => undefined)
     }, 4000)
     return () => window.clearInterval(timer)
-  }, [selectedId, selectedStatus, selectedGrantStatus])
+  }, [pendingId, pendingProvider, showOrder])
+
+  // A paid order may still be turning Pro on; keep asking until it is.
+  const granting = orders.find((order) => order.status === 'PAID' && ['PENDING', 'FAILED'].includes(order.grantStatus))?.id
+  useEffect(() => {
+    if (!granting) return
+    const timer = window.setInterval(() => {
+      void api.get<Order>(`/billing/orders/${granting}`).then((response) => showOrder(response.data)).catch(() => undefined)
+    }, 4000)
+    return () => window.clearInterval(timer)
+  }, [granting, showOrder])
+
+  useEffect(() => {
+    for (const order of orders) {
+      if (order.status === 'PAID' && order.grantStatus === 'GRANTED' && watching.current.delete(order.id)) {
+        setNotice(t('Thanh toán thành công. Gói Pro đã được bật.', 'Payment received. Pro is now active.'))
+        loadUsage()
+      }
+      if (redirectFor.current === order.id && order.status === 'PENDING' && order.checkoutUrl) {
+        redirectFor.current = null
+        window.location.assign(order.checkoutUrl)
+      }
+    }
+  }, [orders, loadUsage, t])
 
   async function buy() {
     setBusy(true); setError(''); setNotice('')
     try {
       const response = await api.post<Order>('/billing/orders', null, { headers: { 'Idempotency-Key': crypto.randomUUID() } })
-      setSelected(response.data)
+      const order = response.data
+      if (order.provider !== 'BANK_TRANSFER' && order.status === 'PENDING' && order.checkoutUrl) {
+        // Straight to the payOS page with the QR code; it sends the buyer back here afterwards.
+        window.location.assign(order.checkoutUrl)
+        return
+      }
+      if (order.provider !== 'BANK_TRANSFER') redirectFor.current = order.id
+      showOrder(order)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      if (order.status === 'CREATING') setNotice(t('Đang chuẩn bị mã thanh toán…', 'Preparing the payment code…'))
+    } catch {
+      setError(t('Chưa tạo được đơn thanh toán. Vui lòng thử lại.', 'Could not create the order. Please retry.'))
+    } finally { setBusy(false) }
+  }
+
+  async function cancel(order: Order) {
+    setBusy(true); setError('')
+    try {
+      await api.post(`/billing/orders/${order.id}/cancel`)
       await refresh()
-      setNotice(response.data.status === 'PENDING'
-        ? t('Kiểm tra số tiền của đơn bên dưới rồi chọn Tiếp tục thanh toán.', 'Check the order amount below, then choose Continue payment.')
-        : t('Đang tạo liên kết thanh toán. Trang sẽ tự cập nhật; chưa cần trả tiền lần nữa.', 'Creating the payment link. The page will update; do not pay twice.'))
-    } catch { setError(t('Chưa tạo được đơn thanh toán. Vui lòng thử lại.', 'Could not create the order. Please retry.')) }
+      setNotice(t('Đã hủy đơn. Chưa có khoản nào bị trừ.', 'Order cancelled. Nothing was charged.'))
+    } catch { setError(t('Chưa hủy được đơn. Vui lòng thử lại.', 'Could not cancel the order. Please retry.')) }
     finally { setBusy(false) }
   }
 
-  async function cancel() {
-    if (!selected) return
+  async function requestRefund(order: Order) {
     setBusy(true); setError('')
     try {
-      await api.post(`/billing/orders/${selected.id}/cancel`)
-      await refresh()
-      setNotice(t('Đã cập nhật trạng thái đơn từ payOS.', 'Order status updated from payOS.'))
-    } catch { setError(t('Chưa hủy được đơn. Vui lòng kiểm tra lại trạng thái.', 'Could not cancel the order. Check its status.')) }
-    finally { setBusy(false) }
-  }
-
-  async function requestRefund() {
-    if (!selected) return
-    setBusy(true); setError('')
-    try {
-      await api.post(`/billing/orders/${selected.id}/refund-requests`, { reason: refundReason })
-      const response = await api.get<Refund[]>(`/billing/orders/${selected.id}/refund-requests`)
+      await api.post(`/billing/orders/${order.id}/refund-requests`, { reason: refundReason })
+      const response = await api.get<Refund[]>(`/billing/orders/${order.id}/refund-requests`)
       setRefunds(response.data); setRefundReason('')
-      setNotice(t('Đã ghi nhận yêu cầu hoàn tiền. Bộ phận hỗ trợ sẽ đối chiếu theo chính sách.', 'Refund request recorded for review under the policy.'))
+      setNotice(t('Đã gửi yêu cầu hoàn tiền. Postiva sẽ trả lời trong vòng 3 ngày làm việc.', 'Refund request sent. Postiva replies within 3 working days.'))
     } catch { setError(t('Chưa gửi được yêu cầu hoàn tiền.', 'Could not submit the refund request.')) }
     finally { setBusy(false) }
   }
 
-  return <div className="mx-auto max-w-4xl space-y-6">
-    <header><h1 className="text-2xl font-bold">{t('Gói Pro và thanh toán', 'Pro plan and billing')}</h1>
-      <p className="mt-2 text-sm text-slate-600">{t('Thanh toán từng kỳ; không tự động gia hạn hoặc lưu thẻ.', 'Pay per period; no automatic renewal or card storage.')}</p></header>
+  return <div className="space-y-6">
+    <PageHeader
+      title={t('Gói dịch vụ', 'Plans')}
+      subtitle={t('Chọn gói phù hợp với shop của bạn. Trả theo từng kỳ, không tự động gia hạn.', 'Pick the plan that fits your shop. Pay per period; no automatic renewal.')}
+    />
     {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</p>}
-    {notice && <p role="status" className="rounded-lg bg-blue-50 p-3 text-sm text-blue-900">{notice}</p>}
-    <section className="rounded-xl border border-slate-200 bg-white p-5">
-      <h2 className="text-lg font-bold">Pro</h2>
-      {offer ? <>
-        <p className="mt-2 text-sm">{offer.aiLimit} {t('lượt tạo AI trong', 'AI generations over')} {offer.periodDays} {t('ngày', 'days')} · {offer.amountVnd > 0 ? money(offer.amountVnd) : t('Giá chưa công bố', 'Price not published')}</p>
-        <p className="mt-2 text-sm text-slate-600">{t('Gia hạn khi kỳ Pro còn hiệu lực sẽ nối thêm kỳ mới; lượt của kỳ hiện tại không được đặt lại sớm.', 'Renewing an active Pro plan adds a future period; the current quota is not reset early.')}</p>
-        {offer.refundPolicyUrl && <a className="mt-2 inline-block text-sm font-semibold text-indigo-700 underline" href={offer.refundPolicyUrl} target="_blank" rel="noreferrer">{t('Chính sách hoàn tiền', 'Refund policy')}</a>}
-        <div className="mt-4"><button type="button" disabled={!offer.available || busy} onClick={() => void buy()} className="min-h-11 rounded-lg bg-indigo-600 px-5 font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400">{t('Mua hoặc gia hạn Pro', 'Buy or renew Pro')}</button></div>
-        {!offer.available && <p className="mt-3 text-sm text-slate-600">{t('Gói Pro chưa mở bán. Bạn vẫn dùng Free bình thường.', 'Pro is not on sale yet. Free remains available.')}</p>}
-      </> : <p className="mt-2 text-sm">{t('Đang tải giá gói…', 'Loading plan details…')}</p>}
+    {notice && <p role="status" className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">{notice}</p>}
+
+    {pending && offer && <CheckoutPanel order={pending} offer={offer} plans={offer.plans} busy={busy} onCancel={() => void cancel(pending)} t={t} />}
+
+    {/* One card per plan, side by side like a pricing page; a new plan is simply one more card. */}
+    {offer ? <section aria-label={t('Các gói', 'Plans')} className="grid gap-5 md:grid-cols-[repeat(auto-fit,minmax(280px,1fr))]">
+      {offer.plans.map((plan) => <PlanCard key={plan.code} plan={plan} usage={usage} busy={busy} blocked={Boolean(pending)} onBuy={() => void buy()} t={t} />)}
+    </section> : <p className="text-sm text-slate-600">{t('Đang tải…', 'Loading…')}</p>}
+    {offer && !offer.available && <p className="text-sm text-slate-600">{t('Thanh toán trực tuyến đang tạm đóng. Bạn vẫn dùng Free bình thường; cần Pro ngay thì liên hệ postiva84@gmail.com.', 'Online payment is paused. Free keeps working; for Pro now, contact postiva84@gmail.com.')}</p>}
+
+    <section className={`${CARD} p-5 sm:p-6`}>
+      <h2 className="text-lg font-bold">{t('Lịch sử thanh toán', 'Payment history')}</h2>
+      {orders.length === 0 ? <p className="mt-3 text-sm text-slate-600">{t('Chưa có thanh toán nào.', 'No payments yet.')}</p> : <ul className="mt-4 divide-y divide-slate-100 rounded-lg border border-slate-200">
+        {orders.map((order) => <li key={order.id}>
+          <button type="button" onClick={() => setOpenedId(openedId === order.id ? null : order.id)} disabled={isOpen(order)} aria-expanded={openedId === order.id}
+            className="flex min-h-12 w-full flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-3 text-left text-sm hover:bg-slate-50 disabled:cursor-default disabled:hover:bg-transparent">
+            <span><span className="font-semibold">#{order.orderCode}</span> · Pro {order.periodDays} {t('ngày', 'days')} · {money(order.amountVnd)}</span>
+            <span className="flex items-center gap-4"><span className="font-medium">{orderLabel(order, t)}</span><span className="text-slate-500">{dateTime(order.createdAt)}</span></span>
+          </button>
+          {opened?.id === order.id && <OrderDetails order={order} refunds={refunds} reason={refundReason} onReason={setRefundReason} busy={busy} onRefund={() => void requestRefund(order)} t={t} />}
+        </li>)}
+      </ul>}
     </section>
-    <section className="rounded-xl border border-slate-200 bg-white p-5">
-      <h2 className="text-lg font-bold">{t('Lịch sử đơn', 'Order history')}</h2>
-      {orders.length === 0 ? <p className="mt-3 text-sm text-slate-600">{t('Chưa có đơn thanh toán.', 'No payment orders yet.')}</p> : <ul className="mt-3 space-y-2">{orders.map((order) => <li key={order.id}>
-        <button type="button" onClick={() => setSelected(order)} className={`min-h-12 w-full rounded-lg border px-3 py-2 text-left text-sm ${selected?.id === order.id ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200'}`}>
-          <span className="font-semibold">#{order.orderCode}</span> · {money(order.amountVnd)} · {order.status} / {order.grantStatus}
-          <span className="ml-2 text-slate-500">{new Date(order.createdAt).toLocaleString()}</span>
-        </button>
-      </li>)}</ul>}
-    </section>
-    {selected && <section className="rounded-xl border border-slate-200 bg-white p-5 text-sm">
-      <h2 className="text-lg font-bold">{t('Chi tiết đơn', 'Order details')} #{selected.orderCode}</h2>
-      <p className="mt-2">{money(selected.amountVnd)} · Pro {selected.aiLimit} {t('lượt AI /', 'AI generations /')} {selected.periodDays} {t('ngày', 'days')}</p>
-      <p className="mt-1">{t('Thanh toán:', 'Payment:')} <strong>{selected.status}</strong> · {t('Cấp quyền:', 'Entitlement:')} <strong>{selected.grantStatus}</strong></p>
-      {selected.status === 'PAID' && selected.grantStatus === 'GRANTED' && <p role="status" className="mt-2 text-emerald-700">{t('Đã xác minh và cấp Pro. Nếu đang gia hạn, kỳ mới bắt đầu sau kỳ Pro hiện tại.', 'Verified and Pro granted. A renewal starts after the current Pro period.')}</p>}
-      {selected.status === 'PAID' && selected.grantStatus === 'NOT_APPLICABLE' && refunds.some((refund) => refund.status === 'SUCCEEDED') && <p role="status" className="mt-2 text-slate-700">{t('Đơn đã hoàn tiền; kỳ Pro liên quan đã dừng.', 'This order was refunded; its Pro period has ended.')}</p>}
-      {selected.status === 'PAID' && ['PENDING', 'FAILED'].includes(selected.grantStatus) && <p role="status" className="mt-2 text-amber-700">{t('Đã ghi nhận tiền, đang xử lý cấp quyền. Không thanh toán lại đơn này.', 'Payment recorded; entitlement is being processed. Do not pay again.')}</p>}
-      {['CREATING', 'PENDING', 'REVIEW'].includes(selected.status) && <p role="status" className="mt-2 text-slate-600">{t('Chờ backend xác minh. Kết quả chuyển trang của payOS không tự cấp Pro.', 'Waiting for server verification. The payOS return page does not grant Pro.')}</p>}
-      <div className="mt-4 flex flex-wrap gap-3">
-        {selected.status === 'PENDING' && selected.checkoutUrl && <a href={selected.checkoutUrl} className="inline-flex min-h-11 items-center rounded-lg bg-indigo-600 px-4 font-semibold text-white">{t('Tiếp tục thanh toán', 'Continue payment')}</a>}
-        {selected.status === 'PENDING' && <button type="button" disabled={busy} onClick={() => void cancel()} className="min-h-11 rounded-lg border border-slate-300 px-4 font-semibold disabled:opacity-50">{t('Hủy link chưa thanh toán', 'Cancel unpaid link')}</button>}
-        <button type="button" onClick={() => void refresh().catch(() => setError(t('Chưa cập nhật được trạng thái.', 'Could not refresh status.')))} className="min-h-11 rounded-lg border border-slate-300 px-4 font-semibold">{t('Cập nhật trạng thái', 'Refresh status')}</button>
-      </div>
-      {selected.status === 'PAID' && <div className="mt-6 border-t border-slate-200 pt-4">
-        <h3 className="font-bold">{t('Yêu cầu hoàn tiền', 'Refund request')}</h3>
-        {refunds.map((refund) => <p key={refund.id} className="mt-2">{new Date(refund.createdAt).toLocaleString()} · {money(refund.amountVnd)} · {refund.status}</p>)}
-        {refunds.length === 0 && <><label htmlFor="refund-reason" className="mt-3 block">{t('Lý do (ít nhất 10 ký tự)', 'Reason (at least 10 characters)')}</label>
-          <textarea id="refund-reason" value={refundReason} onChange={(event) => setRefundReason(event.target.value)} maxLength={1000} rows={3} className="mt-1 w-full rounded-lg border border-slate-300 p-2" />
-          <button type="button" disabled={busy || refundReason.trim().length < 10} onClick={() => void requestRefund()} className="mt-2 min-h-11 rounded-lg border border-slate-300 px-4 font-semibold disabled:opacity-50">{t('Gửi yêu cầu', 'Submit request')}</button></>}
-      </div>}
-    </section>}
+  </div>
+}
+
+/** The order waiting for money, given the most room on the page: summary on one side, how to pay on the other. */
+function CheckoutPanel({ order, offer, plans, busy, onCancel, t }: { order: Order; offer: Offer; plans: Plan[]; busy: boolean; onCancel: () => void; t: T }) {
+  const plan = plans.find((item) => item.code === 'PRO')
+  const bankTransfer = order.provider === 'BANK_TRANSFER'
+  return <section aria-label={t('Đơn đang chờ thanh toán', 'Order waiting for payment')} className={`${CARD} grid gap-6 p-5 sm:p-7 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)] lg:gap-10`}>
+    <div>
+      <p className="text-sm font-semibold text-indigo-700">{t('Đơn đang chờ thanh toán', 'Waiting for payment')}</p>
+      <h2 className="mt-1 text-2xl font-bold">{plan?.name ?? 'Pro'} · {order.periodDays} {t('ngày', 'days')}</h2>
+      <p className="mt-3 text-3xl font-bold tracking-tight">{money(order.amountVnd)}</p>
+      <dl className="mt-5 space-y-2 text-sm">
+        <div className="flex justify-between gap-3"><dt className="text-slate-500">{t('Mã đơn', 'Order')}</dt><dd className="font-medium">#{order.orderCode}</dd></div>
+        <div className="flex justify-between gap-3"><dt className="text-slate-500">{t('Lượt AI mỗi kỳ', 'AI uses per period')}</dt><dd className="font-medium">{order.aiLimit}</dd></div>
+        <div className="flex justify-between gap-3"><dt className="text-slate-500">{t('Giữ đơn đến', 'Open until')}</dt><dd className="font-medium">{dateTime(order.expiresAt)}</dd></div>
+      </dl>
+      {order.amountVnd !== offer.amountVnd && <p className="mt-4 text-sm text-slate-600">{t(`Đơn này tạo lúc giá còn ${money(order.amountVnd)}. Hủy đơn để mua theo giá hiện tại ${money(offer.amountVnd)}.`, `This order was created at ${money(order.amountVnd)}. Cancel it to buy at today's ${money(offer.amountVnd)}.`)}</p>}
+      <button type="button" disabled={busy} onClick={onCancel} className="mt-5 min-h-11 rounded-lg border border-slate-300 px-4 text-sm font-semibold disabled:opacity-50">{t('Hủy đơn này', 'Cancel this order')}</button>
+    </div>
+    <div className="min-w-0 border-t border-slate-100 pt-6 lg:border-l lg:border-t-0 lg:pl-10 lg:pt-0">
+      {bankTransfer && offer.bank
+        ? <BankTransferPanel bank={offer.bank} orderCode={order.orderCode} amountVnd={order.amountVnd} autoConfirm={offer.autoConfirm} />
+        : order.checkoutUrl
+          ? <div className="space-y-3 text-sm"><p>{t('Mở trang thanh toán để quét mã QR và hoàn tất.', 'Open the payment page to scan the QR code and finish.')}</p><a href={order.checkoutUrl} className="inline-flex min-h-11 items-center rounded-lg bg-indigo-600 px-5 font-semibold text-white">{t('Tiếp tục thanh toán', 'Continue payment')}</a></div>
+          : <p className="text-sm text-slate-600">{t('Đang chuẩn bị mã thanh toán…', 'Preparing the payment code…')}</p>}
+    </div>
+  </section>
+}
+
+// Pictures for the feature keys the backend sends; an unknown key falls back to a tick.
+const FEATURE_ICONS: Record<string, LucideIcon> = { ai: Sparkles, channels: Share2, daily: CalendarDays, schedule: Clock, reports: BarChart3 }
+
+/** One plan as a pricing card: what it is, the action, the price, then what it includes. */
+function PlanCard({ plan, usage, busy, blocked, onBuy, t }: { plan: Plan; usage: Usage | null; busy: boolean; blocked: boolean; onBuy: () => void; t: T }) {
+  const current = usage?.plan === plan.code
+  const featured = plan.code !== 'FREE'
+  // A plan without a period is the one-time trial: its AI uses never come back.
+  const trial = plan.periodDays === 0
+  const features: Feature[] = [{ icon: 'ai', text: trial
+    ? t(`${plan.aiLimit} lượt tạo bài bằng AI để dùng thử`, `${plan.aiLimit} AI generations to try it out`)
+    : t(`${plan.aiLimit} lượt tạo bài bằng AI mỗi ${plan.periodDays} ngày`, `${plan.aiLimit} AI generations every ${plan.periodDays} days`) }, ...plan.features]
+  const button = 'flex min-h-12 w-full items-center justify-center gap-2 rounded-full px-5 text-sm font-semibold'
+
+  let action
+  if (current && plan.purchasable && !blocked) {
+    action = <button type="button" disabled={busy} onClick={onBuy} className={`${button} border border-indigo-300 bg-white text-indigo-700 hover:bg-indigo-50 disabled:opacity-60`}>{t('Gia hạn thêm một kỳ', 'Add another period')}</button>
+  } else if (current) {
+    action = <p className={`${button} border border-slate-300 text-slate-600`}>{t('Gói hiện tại', 'Your current plan')}</p>
+  } else if (plan.purchasable && blocked) {
+    action = <p className={`${button} border border-slate-300 text-slate-600`}>{t('Đang chờ thanh toán đơn ở trên', 'Waiting for the order above')}</p>
+  } else if (plan.purchasable) {
+    action = <button type="button" disabled={busy} onClick={onBuy} className={`${button} bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-60`}><Sparkles size={16} aria-hidden="true" />{busy ? t('Đang tạo đơn…', 'Creating the order…') : t(`Nâng lên ${plan.name}`, `Upgrade to ${plan.name}`)}</button>
+  } else {
+    // Keeps the prices of all cards on one line.
+    action = <div className="min-h-12" aria-hidden="true" />
+  }
+
+  return <article className={`flex flex-col rounded-3xl border p-6 sm:p-8 ${featured ? 'border-indigo-300 bg-gradient-to-b from-indigo-50/70 to-[var(--panel-bg)]' : 'border-[var(--app-border)] bg-[var(--panel-bg)]'}`}>
+    <h2 className="text-lg font-bold">{plan.name}</h2>
+    <p className="mt-4 text-2xl font-bold tracking-tight sm:text-3xl">{plan.headline}</p>
+    <p className="mt-2 text-sm text-slate-600 sm:text-base">{plan.description}</p>
+    <div className="mt-6">{action}</div>
+    {/* Always one line tall, so every card's price sits on the same line. */}
+    <p className="mt-2 h-4 text-center text-xs text-slate-500">
+      {current && usage && <>{t('Còn', 'Left:')} {usage.remaining} {t(trial ? 'lượt dùng thử' : 'lượt', trial ? 'trial uses' : 'uses')}{!trial && <> · {t('đến', 'until')} {dateTime(usage.endsAt)}</>}</>}
+    </p>
+    <p className="mt-6 text-4xl font-bold tracking-tight">{plan.priceVnd > 0 ? money(plan.priceVnd) : '0 ₫'}<span className="ml-2 text-base font-medium text-slate-500">{trial ? t('· dùng thử', '· trial') : `/ ${plan.periodDays} ${t('ngày', 'days')}`}</span></p>
+    <ul className="mt-6 space-y-3.5 text-sm sm:text-base">
+      {features.map((feature) => {
+        const Icon = FEATURE_ICONS[feature.icon] ?? Check
+        return <li key={feature.text} className="flex gap-3"><Icon size={19} className={`mt-0.5 shrink-0 ${featured ? 'text-indigo-600' : 'text-slate-500'}`} aria-hidden="true" /><span>{feature.text}</span></li>
+      })}
+    </ul>
+    {featured && <p className="mt-auto pt-8 text-xs leading-5 text-slate-500">{t('Trả bằng chuyển khoản ngân hàng, không tự động gia hạn.', 'Paid by bank transfer, never renewed automatically.')}{' '}
+      <Link to="/refund-policy" className="font-semibold underline underline-offset-2">{t('Chính sách hoàn tiền', 'Refund policy')}</Link></p>}
+  </article>
+}
+
+function OrderDetails({ order, refunds, reason, onReason, busy, onRefund, t }: { order: Order; refunds: Refund[]; reason: string; onReason: (value: string) => void; busy: boolean; onRefund: () => void; t: T }) {
+  return <div className="space-y-2 border-t border-slate-100 bg-slate-50/60 px-4 py-4 text-sm">
+    <p>{money(order.amountVnd)} · Pro {order.periodDays} {t('ngày', 'days')}, {order.aiLimit} {t('lượt AI', 'AI generations')}{order.paidAt && <> · {t('trả lúc', 'paid')} {dateTime(order.paidAt)}</>}</p>
+    {order.status === 'PAID' && ['PENDING', 'FAILED'].includes(order.grantStatus) && <p className="text-slate-700">{t('Postiva đã nhận tiền và đang bật Pro cho bạn. Không cần thanh toán lại.', 'Payment received; Pro is being turned on. Do not pay again.')}</p>}
+    {order.status === 'REVIEW' && <p className="text-slate-700">{t('Khoản thanh toán cần kiểm tra thêm. Postiva sẽ liên hệ nếu cần; không cần thanh toán lại.', 'This payment needs a check. Postiva will contact you if needed; do not pay again.')}</p>}
+    {order.status === 'PAID' && <div className="pt-2">
+      <h3 className="font-bold">{t('Yêu cầu hoàn tiền', 'Refund request')}</h3>
+      {refunds.map((refund) => <p key={refund.id} className="mt-2">{dateTime(refund.createdAt)} · {money(refund.amountVnd)} · {REFUND_STATUS_LABELS[refund.status] ?? refund.status}</p>)}
+      {refunds.length === 0 && <><label htmlFor={`refund-${order.id}`} className="mt-2 block">{t('Lý do (ít nhất 10 ký tự)', 'Reason (at least 10 characters)')}</label>
+        <textarea id={`refund-${order.id}`} value={reason} onChange={(event) => onReason(event.target.value)} maxLength={1000} rows={3} className="mt-1 w-full max-w-xl rounded-lg border border-slate-300 bg-white p-2" />
+        <button type="button" disabled={busy || reason.trim().length < 10} onClick={onRefund} className="mt-2 block min-h-11 rounded-lg border border-slate-300 bg-white px-4 font-semibold disabled:opacity-50">{t('Gửi yêu cầu', 'Submit request')}</button></>}
+    </div>}
   </div>
 }

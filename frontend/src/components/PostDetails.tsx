@@ -1,4 +1,4 @@
-import { CopyPlus, ExternalLink, Pencil, Trash2, X } from 'lucide-react'
+import { CopyPlus, ExternalLink, Eye, Heart, MessageCircle, Pencil, Repeat2, Trash2, X } from 'lucide-react'
 import { ProtectedMediaImage, ProtectedMediaVideo } from './ProtectedMedia'
 import { type AppPost } from '../lib/appDataApi'
 import { resolveMediaUrl } from '../lib/media'
@@ -151,7 +151,7 @@ export function PostDetailModal({
           </div>
           <div className="flex items-center gap-1">
             {onEdit && (
-              <button type="button" onClick={onEdit} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-violet-50 hover:text-violet-700" title="Sửa bài">
+              <button type="button" onClick={onEdit} aria-label="Sửa bài" className="flex h-11 w-11 items-center justify-center rounded-lg text-slate-600 hover:bg-violet-50 hover:text-violet-700" title="Sửa bài">
                 <Pencil size={16} />
               </button>
             )}
@@ -161,11 +161,11 @@ export function PostDetailModal({
               </button>
             )}
             {onDelete && (
-              <button type="button" onClick={onDelete} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600" title="Xóa bài">
+              <button type="button" onClick={onDelete} aria-label="Xóa bài" className="flex h-11 w-11 items-center justify-center rounded-lg text-slate-600 hover:bg-rose-50 hover:text-rose-600" title="Xóa bài">
                 <Trash2 size={16} />
               </button>
             )}
-            <button type="button" onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-slate-100" title="Đóng">
+            <button type="button" onClick={onClose} aria-label="Đóng" className="flex h-11 w-11 items-center justify-center rounded-lg hover:bg-slate-100" title="Đóng">
               <X size={17} />
             </button>
           </div>
@@ -175,7 +175,7 @@ export function PostDetailModal({
           <div className="flex flex-wrap items-center gap-3 text-sm">
             <StatusBadge status={post.status} />
             {post.attemptCount > 0 && <span className="text-slate-500">Đã thử {post.attemptCount} lần</span>}
-            {post.nextAttemptAt && <span className="text-amber-700">Thử lại lúc {new Date(post.nextAttemptAt).toLocaleString()}</span>}
+            {post.nextAttemptAt && <span className="text-amber-700">Thử lại lúc {new Date(post.nextAttemptAt).toLocaleString('vi-VN')}</span>}
           </div>
           {post.lastError && (
             <p role="status" className={`rounded-lg p-3 text-sm ${post.status === 'Unknown' ? 'bg-amber-50 text-amber-900' : 'bg-rose-50 text-rose-800'}`}>
@@ -197,11 +197,39 @@ export function PostDetailModal({
               </a>
             )}
           </div>
-          <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
-            Số lượt xem, tương tác và bình luận chưa được đồng bộ. Mở bài trên nền tảng để xem số liệu hiện tại.
-          </p>
+          <PostMetricsPanel post={post} />
         </div>
       </div>
     </div>
+  )
+}
+
+/** Shows the numbers the platform gave for this post, and only those; says so only when it gave none. */
+function PostMetricsPanel({ post }: { post: AppPost }) {
+  const items = ([
+    ['likes', Heart, 'Lượt thích'],
+    ['comments', MessageCircle, 'Bình luận'],
+    ['shares', Repeat2, 'Chia sẻ'],
+    ['views', Eye, 'Lượt xem'],
+  ] as const).flatMap(([key, Icon, label]) => {
+    const value = post.metrics?.[key]
+    return typeof value === 'number' ? [{ key, Icon, label, value }] : []
+  })
+  if (items.length === 0) {
+    return (
+      <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
+        Chưa có số liệu tương tác cho bài này. Mở bài trên nền tảng để xem số liệu hiện tại.
+      </p>
+    )
+  }
+  return (
+    <dl className="grid grid-cols-2 gap-2 sm:grid-cols-[repeat(auto-fit,minmax(8rem,1fr))]">
+      {items.map(({ key, Icon, label, value }) => (
+        <div key={key} className="rounded-lg border border-slate-200 px-3 py-2">
+          <dt className="flex items-center gap-2 text-xs text-slate-500"><Icon size={13} aria-hidden="true" />{label}</dt>
+          <dd className="mt-1 text-lg font-bold text-slate-800">{value.toLocaleString('vi-VN')}</dd>
+        </div>
+      ))}
+    </dl>
   )
 }

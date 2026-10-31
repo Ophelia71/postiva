@@ -16,10 +16,13 @@ import com.postiva.social.client.MetaApiException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    private static final String META_UNAVAILABLE =
+            "Facebook, Instagram hoặc Threads chưa phản hồi. Bạn thử lại sau ít phút; nếu vẫn lỗi, vào Kết nối kênh để kết nối lại.";
+
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ApiResponse<Void> handleInvalidParameter(MethodArgumentTypeMismatchException exception) {
-        return ApiResponse.fail("Tham số " + exception.getName() + " không hợp lệ");
+        return ApiResponse.fail("Thông tin gửi lên không hợp lệ. Bạn tải lại trang rồi thử lại.");
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
@@ -51,25 +54,25 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ApiResponse<Void> handleUnreadableRequest(HttpMessageNotReadableException exception) {
-        return ApiResponse.fail("Request body không hợp lệ");
+        return ApiResponse.fail("Thông tin gửi lên không hợp lệ. Bạn tải lại trang rồi thử lại.");
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     @ResponseStatus(HttpStatus.CONFLICT)
     public ApiResponse<Void> handleDataIntegrityViolation(DataIntegrityViolationException exception) {
-        return ApiResponse.fail("Dữ liệu đã tồn tại hoặc xung đột với dữ liệu hiện có");
+        return ApiResponse.fail("Thông tin này đã có hoặc vừa được thay đổi ở nơi khác. Bạn tải lại trang rồi thử lại.");
     }
 
     @ExceptionHandler(WebClientException.class)
     public ResponseEntity<ApiResponse<Void>> handleMetaError(WebClientException exception) {
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
-                .body(ApiResponse.fail("Meta từ chối yêu cầu. Kiểm tra access token và quyền của tài khoản."));
+                .body(ApiResponse.fail(META_UNAVAILABLE));
     }
 
     @ExceptionHandler(MetaApiException.class)
     public ResponseEntity<ApiResponse<Void>> handleMetaApiError(MetaApiException exception) {
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
-                .body(ApiResponse.fail("Meta từ chối yêu cầu. Kiểm tra access token và quyền của tài khoản."));
+                .body(ApiResponse.fail(META_UNAVAILABLE));
     }
 
     @ExceptionHandler(ResponseStatusException.class)

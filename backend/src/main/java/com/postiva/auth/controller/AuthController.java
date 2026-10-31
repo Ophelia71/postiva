@@ -2,6 +2,7 @@ package com.postiva.auth.controller;
 
 import com.postiva.auth.dto.AuthResponse;
 import com.postiva.auth.dto.ChangePasswordRequest;
+import com.postiva.auth.dto.DeleteAccountRequest;
 import com.postiva.auth.dto.ForgotPasswordRequest;
 import com.postiva.auth.dto.MessageResponse;
 import com.postiva.auth.dto.LoginRequest;
@@ -13,6 +14,7 @@ import com.postiva.auth.dto.UserResponse;
 import com.postiva.auth.dto.VerifyRegisterRequest;
 import com.postiva.auth.service.AuthService;
 import com.postiva.auth.service.PasswordRecoveryService;
+import com.postiva.user.service.AccountDeletionService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.CacheControl;
@@ -26,10 +28,13 @@ public class AuthController {
 
     private final AuthService authService;
     private final PasswordRecoveryService passwordRecovery;
+    private final AccountDeletionService accountDeletion;
 
-    public AuthController(AuthService authService, PasswordRecoveryService passwordRecovery) {
+    public AuthController(AuthService authService, PasswordRecoveryService passwordRecovery,
+                          AccountDeletionService accountDeletion) {
         this.authService = authService;
         this.passwordRecovery = passwordRecovery;
+        this.accountDeletion = accountDeletion;
     }
 
     @PostMapping("/register")
@@ -79,6 +84,13 @@ public class AuthController {
     @PostMapping("/sessions/revoke")
     public ResponseEntity<Void> revokeSessions(@Valid @RequestBody RevokeSessionsRequest request) {
         passwordRecovery.revokeSessions(request.currentPassword());
+        return ResponseEntity.noContent().cacheControl(CacheControl.noStore()).build();
+    }
+
+    /** Permanently deletes the signed-in user's account and data; the password confirms it is really them. */
+    @PostMapping("/account/delete")
+    public ResponseEntity<Void> deleteAccount(@Valid @RequestBody DeleteAccountRequest request) {
+        accountDeletion.deleteCurrentAccount(request.currentPassword());
         return ResponseEntity.noContent().cacheControl(CacheControl.noStore()).build();
     }
 

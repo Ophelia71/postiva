@@ -4,10 +4,15 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.postiva.ai.dto.AiPostResult;
 import com.postiva.ai.dto.ProviderTokenUsage;
+import com.postiva.ai.dto.ShopContext;
+import com.postiva.ai.dto.WeeklyIdeasResult;
+import com.postiva.ai.dto.WeeklyPlanPromptInput;
 import com.postiva.common.Platform;
 import com.postiva.config.OpenAiProperties;
 import com.postiva.post.dto.GeneratePostRequest;
 import com.postiva.template.entity.IndustryTemplate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -27,6 +32,7 @@ import java.util.function.Consumer;
 
 @Service
 public class OpenAiService {
+    private static final Logger log = LoggerFactory.getLogger(OpenAiService.class);
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(90);
     private static final String OPENAI_BASE_URL = "https://api.openai.com/v1";
 
@@ -56,18 +62,29 @@ public class OpenAiService {
 
     public AiPostResult generatePost(GeneratePostRequest request, IndustryTemplate template,
                                      Consumer<ProviderTokenUsage> usageObserver) {
+        return generatePost(request, template, null, usageObserver);
+    }
+
+    /** {@code shop} is the saved shop profile, or null when the shop has not set one up. */
+    public AiPostResult generatePost(GeneratePostRequest request, IndustryTemplate template, ShopContext shop,
+                                     Consumer<ProviderTokenUsage> usageObserver) {
         if (!properties.enabled()) {
+            log.error("OPENAI_API_KEY is not configured; AI requests are refused");
             throw new ResponseStatusException(
                     HttpStatus.SERVICE_UNAVAILABLE,
-                    "Chưa cấu hình OPENAI_API_KEY trong backend/.env"
+                    "Tính năng AI đang tạm gián đoạn. Bạn thử lại sau ít phút."
             );
         }
 
-        String response = callOpenAi(buildRequestPayload(request, template), usageObserver);
+        String response = callOpenAi(buildRequestPayload(request, template, shop), usageObserver);
         return parseOpenAiResponse(response, request);
     }
 
     Map<String, Object> buildRequestPayload(GeneratePostRequest request, IndustryTemplate template) {
+        return buildRequestPayload(request, template, null);
+    }
+
+    Map<String, Object> buildRequestPayload(GeneratePostRequest request, IndustryTemplate template, ShopContext shop) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("model", properties.model());
         payload.put("messages", List.of(
@@ -77,7 +94,7 @@ public class OpenAiService {
                 ),
                 Map.of(
                         "role", "user",
-                        "content", promptBuilder.buildGeneratePostPrompt(request, template)
+                        "content", promptBuilder.buildGeneratePostPrompt(request, template, shop)
                 )
         ));
         payload.put("response_format", Map.of(
@@ -126,6 +143,97 @@ public class OpenAiService {
         } catch (Exception exception) {
             throw invalidResponse(exception);
         }
+    }
+
+    public WeeklyIdeasResult generateWeeklyIdeas(WeeklyPlanPromptInput input, Consumer<ProviderTokenUsage> usageObserver) {
+        if (!properties.enabled()) {
+            log.error("OPENAI_API_KEY is not configured; AI requests are refused");
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "Tính năng AI đang tạm gián đoạn. Bạn thử lại sau ít phút."
+            );
+        }
+        return parseWeeklyIdeasResponse(callOpenAi(buildWeeklyIdeasPayload(input), usageObserver), input.slots().size());
+    }
+
+    Map<String, Object> buildWeeklyIdeasPayload(WeeklyPlanPromptInput input) {
+        Map<String, Object> idea = new LinkedHashMap<>();
+        for (String field : List.of("date", "time", "postType", "topic", "angle", "reason")) {
+            idea.put(field, Map.of("type", "string"));
+        }
+        Map<String, Object> properties = new LinkedHashMap<>();
+        properties.put("strategy", Map.of("type", "string"));
+        properties.put("items", Map.of(
+                "type", "array",
+                "items", objectSchema(idea, List.copyOf(idea.keySet()))
+        ));
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("model", this.properties.model());
+        payload.put("messages", List.of(
+                Map.of("role", "system", "content",
+                        "Bạn là chuyên gia marketing social media. Hãy tuân thủ chính xác JSON schema được cung cấp và chỉ dùng dữ liệu trong yêu cầu."),
+                Map.of("role", "user", "content", promptBuilder.buildWeeklyPlanPrompt(input))
+        ));
+        payload.put("response_format", Map.of(
+                "type", "json_schema",
+                "json_schema", Map.of(
+                        "name", "postiva_weekly_plan",
+                        "strict", true,
+                        "schema", objectSchema(properties, List.of("strategy", "items"))
+                )
+        ));
+        if (this.properties.model() != null && this.properties.model().startsWith("gpt-6")) {
+            payload.put("reasoning_effort", "low");
+        } else {
+            payload.put("temperature", 0.8);
+        }
+        payload.put("max_completion_tokens", 1800);
+        return payload;
+    }
+
+    WeeklyIdeasResult parseWeeklyIdeasResponse(String response, int expectedItems) {
+        try {
+            JsonNode message = objectMapper.readTree(response).path("choices").path(0).path("message");
+            if (!message.path("refusal").asText("").isBlank()) {
+                throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "OpenAI từ chối lên kế hoạch cho yêu cầu này");
+            }
+            String content = message.path("content").asText("");
+            if (content.isBlank()) {
+                throw invalidWeeklyPlan(null);
+            }
+            WeeklyIdeasResult result = objectMapper.readValue(content, WeeklyIdeasResult.class);
+            if (result == null || result.items() == null || result.items().isEmpty()) {
+                throw invalidWeeklyPlan(null);
+            }
+            List<WeeklyIdeasResult.Idea> ideas = new ArrayList<>();
+            for (WeeklyIdeasResult.Idea idea : result.items()) {
+                if (idea == null || isBlank(idea.topic())) continue;
+                ideas.add(new WeeklyIdeasResult.Idea(trim(idea.date()), trim(idea.time()), trim(idea.postType()),
+                        idea.topic().trim(), trim(idea.angle()), trim(idea.reason())));
+                if (ideas.size() == expectedItems) break;
+            }
+            if (ideas.isEmpty()) {
+                throw invalidWeeklyPlan(null);
+            }
+            return new WeeklyIdeasResult(trim(result.strategy()), List.copyOf(ideas));
+        } catch (ResponseStatusException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw invalidWeeklyPlan(exception);
+        }
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
+    }
+
+    private static String trim(String value) {
+        return value == null ? "" : value.trim();
+    }
+
+    private ResponseStatusException invalidWeeklyPlan(Exception cause) {
+        return new ResponseStatusException(HttpStatus.BAD_GATEWAY, "OpenAI trả về kế hoạch tuần không đúng định dạng", cause);
     }
 
     private String callOpenAi(Map<String, Object> payload, Consumer<ProviderTokenUsage> usageObserver) {
@@ -181,30 +289,32 @@ public class OpenAiService {
 
     private ResponseStatusException mapOpenAiError(WebClientResponseException exception) {
         int status = exception.getStatusCode().value();
+        // The shop only learns that AI is unavailable; whoever runs Postiva reads the cause here.
+        log.error("OpenAI call failed with HTTP {}: {}", status, exception.getResponseBodyAsString());
         if (status == 401 || status == 403) {
             return new ResponseStatusException(
                     HttpStatus.BAD_GATEWAY,
-                    "OpenAI API key không hợp lệ hoặc không có quyền sử dụng model đã cấu hình.",
+                    "Tính năng AI đang tạm gián đoạn. Bạn thử lại sau ít phút.",
                     exception
             );
         }
         if (status == 429) {
             return new ResponseStatusException(
                     HttpStatus.TOO_MANY_REQUESTS,
-                    "OpenAI đang giới hạn yêu cầu hoặc tài khoản đã hết quota. Hãy kiểm tra Billing/Usage.",
+                    "AI đang có nhiều yêu cầu cùng lúc. Bạn thử lại sau ít phút.",
                     exception
             );
         }
         if (status == 400 || status == 404) {
             return new ResponseStatusException(
                     HttpStatus.BAD_GATEWAY,
-                    "OpenAI từ chối yêu cầu. Hãy kiểm tra OPENAI_MODEL và quyền truy cập model.",
+                    "Tính năng AI đang tạm gián đoạn. Bạn thử lại sau ít phút.",
                     exception
             );
         }
         return new ResponseStatusException(
                 HttpStatus.BAD_GATEWAY,
-                "OpenAI tạm thời không xử lý được yêu cầu. Hãy thử lại sau.",
+                "Tính năng AI đang tạm gián đoạn. Bạn thử lại sau ít phút.",
                 exception
         );
     }

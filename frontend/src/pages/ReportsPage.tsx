@@ -1,12 +1,15 @@
-import { Eye, X } from 'lucide-react'
+import { BarChart3, Eye, Heart, MessageCircle, Repeat2, X } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
+import { EmptyState } from '../components/EmptyState'
+import { SetupReminder } from '../components/SetupReminder'
 import { EditPostModal } from '../components/EditPostModal'
 import { DeletePostConfirmModal } from '../components/DeletePostConfirmModal'
 import { getPaginatedItems, PaginationControls } from '../components/PaginationControls'
 import { PostDetailModal, PostThumbnail } from '../components/PostDetails'
 import { RepostPostModal } from '../components/RepostPostModal'
 import { api } from '../lib/api'
-import { normalizeAppOverview, type AppOverview, type AppPost, useAppDataResource } from '../lib/appDataApi'
+import { clearDraft } from '../lib/idleSession'
+import { normalizeAppOverview, type AppOverview, type AppPost, type PostMetrics, useAppDataResource } from '../lib/appDataApi'
 import { addDays, toDateKey } from '../lib/dates'
 import { getErrorMessage } from '../lib/errors'
 import { sortPostsNewestFirst } from '../lib/posts'
@@ -34,6 +37,7 @@ export function ReportsPage() {
   const [detailPost, setDetailPost] = useState<AppPost | null>(null)
   const [deleteCandidate, setDeleteCandidate] = useState<AppPost | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
   const [repostingPost, setRepostingPost] = useState<AppPost | null>(null)
   const [chartPeriod, setChartPeriod] = useState<ChartPeriod>('DAY')
   const [selectedChartBucket, setSelectedChartBucket] = useState<string | null>(null)
@@ -62,10 +66,29 @@ export function ReportsPage() {
   }
 
   if (error || postsState.error || !overview || !postsState.data) {
-    return <PageState title="Không thể tải báo cáo" description={error ?? postsState.error ?? undefined} />
+    return <PageState title="Không thể tải báo cáo" description={error ?? postsState.error ?? undefined} onRetry={() => { reload(); postsState.reload() }} />
   }
 
   const normalizedOverview = normalizeAppOverview(overview)
+  if (normalizedOverview.totalPosts === 0 && postsState.data.length === 0) {
+    const hasChannel = normalizedOverview.channels.some((channel) => channel.active)
+    return (
+      <section>
+        <PageHeader title={t('Báo cáo trạng thái đăng', 'Publishing status report')} />
+        <div className="rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] shadow-sm">
+          <EmptyState
+            icon={<BarChart3 size={20} />}
+            title="Báo cáo sẽ xuất hiện sau bài đăng đầu tiên"
+            description={hasChannel
+              ? 'Bạn đã có kênh. Tạo và đăng một bài để thấy lịch sử, tỷ lệ thành công và số bài theo nền tảng.'
+              : 'Kết nối một kênh, rồi đăng bài đầu tiên để thấy lịch sử, tỷ lệ thành công và số bài theo nền tảng.'}
+            actionLabel={hasChannel ? 'Tạo bài đầu tiên' : 'Xem hướng dẫn bắt đầu'}
+            actionTo={hasChannel ? '/app/create' : '/app/start'}
+          />
+        </div>
+      </section>
+    )
+  }
   const reportPosts = sortPostsNewestFirst(postsState.data
     .filter((post) => post.status === 'Published' || post.status === 'Failed'))
   const paginatedReports = getPaginatedItems(reportPosts, reportPage, reportPageSize)
@@ -75,21 +98,48 @@ export function ReportsPage() {
   const selectedBucket = chartBuckets.find((bucket) => bucket.key === selectedChartBucket) ?? null
   const platformCounts = getPlatformCounts(reportPosts)
   const totalPostsForPlatformChart = Math.max(reportPosts.length, 1)
+  const engagement = sumMetrics(publishedPosts)
   const finishedPosts = normalizedOverview.publishedPosts + normalizedOverview.failedPosts
   const successRate = finishedPosts === 0 ? 0 : Math.round((normalizedOverview.publishedPosts / finishedPosts) * 100)
 
   return (
     <section className="space-y-6">
+      <SetupReminder />
       <PageHeader
         title={t('Báo cáo trạng thái đăng', 'Publishing status report')}
         subtitle={t(
-          'Tổng hợp lịch và kết quả do Postiva ghi nhận. Lượt xem, tương tác và bình luận chưa được đồng bộ; hãy xem trực tiếp trên nền tảng.',
-          'Shows schedules and publishing results recorded by Postiva. Views, engagement, and comments are not synced; check them on the platform.',
+          'Kết quả đăng và lượt tương tác của các bài. Số liệu tự cập nhật mỗi khi bạn mở Postiva.',
+          'Publishing results and engagement. Numbers refresh every time you open Postiva.',
         )}
       />
 
+      <div className="rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] p-5 shadow-sm">
+        <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-base font-bold">{t('Tương tác', 'Engagement')}</h2>
+          <span className="text-xs text-[var(--muted-text)]">
+            {engagement.fetchedAt
+              ? `${t('Cập nhật', 'Updated')} ${formatPostDateTime(engagement.fetchedAt)} · ${engagement.measured}/${publishedPosts.length} ${t('bài có số liệu', 'posts measured')}`
+              : t('Chưa có số liệu. Postiva đang lấy từ các kênh, vài phút nữa sẽ hiện.', 'No numbers yet. Postiva is reading your channels; they appear in a few minutes.')}
+          </span>
+        </div>
+        {/* Only the numbers the connected platforms actually give; a metric no post reported is left out. */}
+        <dl className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fit,minmax(10rem,1fr))]">
+          {([
+            [t('Lượt thích', 'Likes'), engagement.likes, Heart],
+            [t('Bình luận', 'Comments'), engagement.comments, MessageCircle],
+            [t('Chia sẻ', 'Shares'), engagement.shares, Repeat2],
+            [t('Lượt xem', 'Views'), engagement.views, Eye],
+          ] as const).flatMap(([label, value, Icon]) => value === null ? [] : [(
+            <div key={label} className="rounded-lg border border-[var(--app-border)] px-4 py-3">
+              <dt className="flex items-center gap-2 text-xs text-[var(--muted-text)]"><Icon size={14} aria-hidden="true" />{label}</dt>
+              <dd className="mt-1 text-xl font-bold">{value.toLocaleString('vi-VN')}</dd>
+            </div>
+          )])}
+        </dl>
+      </div>
+
       <div className="grid gap-6 lg:grid-cols-2">
-        <div className="rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] p-5 shadow-sm">
+        <div className="min-w-0 rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] p-5 shadow-sm">
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-base font-bold">{getChartTitle(chartPeriod, t)}</h2>
             <div className="flex items-center gap-1 rounded-full border border-[var(--app-border)] p-1">
@@ -101,7 +151,7 @@ export function ReportsPage() {
                     setChartPeriod(value)
                     setSelectedChartBucket(null)
                   }}
-                  className={`flex h-10 w-10 items-center justify-center rounded-full p-0 text-[10px] font-bold transition ${chartPeriod === value ? 'bg-blue-600 text-white shadow-sm' : 'text-[var(--muted-text)] hover:bg-[var(--soft-bg)]'}`}
+                  className={`flex h-11 min-w-11 items-center justify-center rounded-full px-3 text-xs font-bold transition ${chartPeriod === value ? 'bg-blue-600 text-white shadow-sm' : 'text-[var(--muted-text)] hover:bg-[var(--soft-bg)]'}`}
                 >
                   {label}
                 </button>
@@ -109,7 +159,7 @@ export function ReportsPage() {
             </div>
           </div>
           <div className="overflow-x-auto pb-1">
-          <div className={`flex h-40 items-end justify-around border-b border-l border-dashed border-slate-200 px-2 sm:px-5 ${chartPeriod === 'MONTH' ? 'min-w-[620px]' : 'min-w-[420px]'}`}>
+          <div className={`flex h-40 items-end justify-around border-b border-l border-dashed border-slate-200 px-2 sm:px-5 ${chartPeriod === 'MONTH' ? 'min-w-[620px]' : 'sm:min-w-[420px]'}`}>
             {chartBuckets.map((bucket) => (
               <button
                 key={bucket.key}
@@ -125,7 +175,7 @@ export function ReportsPage() {
                     style={{ height: bucket.count === 0 ? '2px' : `${Math.round((bucket.count / maxPostsInBucket) * 100)}%` }}
                   />
                 </span>
-                <span className={`whitespace-nowrap text-xs ${selectedChartBucket === bucket.key ? 'font-bold text-blue-600' : 'text-slate-400 group-hover:text-blue-600'}`}>{bucket.label}</span>
+                <span className={`whitespace-nowrap text-xs ${selectedChartBucket === bucket.key ? 'font-bold text-blue-600' : 'text-slate-600 group-hover:text-blue-600'}`}>{bucket.label}</span>
               </button>
             ))}
           </div>
@@ -177,14 +227,15 @@ export function ReportsPage() {
           )}
         </div>
 
-        <div className="rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] p-5 shadow-sm">
+        <div className="flex min-w-0 flex-col rounded-lg border border-[var(--app-border)] bg-[var(--panel-bg)] p-5 shadow-sm">
           <h2 className="mb-6 text-base font-bold">{t('Phân bổ theo nền tảng', 'Platform breakdown')}</h2>
-          <div className="space-y-5">
+          {/* Centred in the height the chart beside it sets, so the card does not end in an empty half. */}
+          <div className="flex flex-1 flex-col justify-center space-y-5">
             {platformCounts.length === 0 ? (
               <p className="text-sm text-[var(--muted-text)]">{t('Chưa có dữ liệu nền tảng.', 'No platform data yet.')}</p>
             ) : (
               platformCounts.map((item) => (
-                <div key={item.platform} className="grid grid-cols-[90px_1fr] items-center gap-3">
+                <div key={item.platform} className="grid grid-cols-[90px_1fr_auto] items-center gap-3">
                   <span className="text-xs text-slate-500">{item.platform}</span>
                   <div className="h-3 rounded-full bg-slate-100">
                     <div
@@ -192,6 +243,9 @@ export function ReportsPage() {
                       style={{ width: `${Math.round((item.count / totalPostsForPlatformChart) * 100)}%` }}
                     />
                   </div>
+                  <span className="w-24 text-right text-xs tabular-nums text-[var(--muted-text)]">
+                    {item.count} {t('bài', 'posts')} · {Math.round((item.count / totalPostsForPlatformChart) * 100)}%
+                  </span>
                 </div>
               ))
             )}
@@ -233,10 +287,11 @@ export function ReportsPage() {
                 key={postRowKey(post)}
                 type="button"
                 onClick={() => setDetailPost(post)}
-                className="grid w-full grid-cols-[90px_minmax(0,1fr)_110px_90px_32px] items-center gap-4 px-5 py-4 text-left text-sm hover:bg-[var(--soft-bg)]"
+                className="flex w-full flex-wrap items-center gap-x-4 gap-y-2 px-5 py-4 text-left text-sm hover:bg-[var(--soft-bg)] md:grid md:grid-cols-[90px_minmax(0,1fr)_170px_110px_90px_32px]"
               >
                 <PlatformBadge platform={post.platform} />
-                <span className="truncate text-slate-700" title={post.content}>{post.content || 'Không có nội dung chữ.'}</span>
+                <span className="basis-full truncate text-slate-700 md:basis-auto" title={post.content}>{post.content || 'Không có nội dung chữ.'}</span>
+                <MetricsInline metrics={post.metrics} />
                 <StatusBadge status={post.status} />
                 <span className="text-xs leading-5 text-[var(--muted-text)]">{formatPostDateTime(post.time)}</span>
                 <span className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400">
@@ -263,6 +318,7 @@ export function ReportsPage() {
           saving={isSavingEdit}
           saveLabel={t('Lưu thay đổi', 'Save changes')}
           savingLabel={t('Đang lưu...', 'Saving...')}
+          draftKey={`edit:${editingPost.id}`}
           onChange={setEditingMessage}
           onClose={closeEditPost}
           onSubmit={(event) => void submitEditPost(event)}
@@ -303,7 +359,8 @@ export function ReportsPage() {
         <DeletePostConfirmModal
           post={deleteCandidate}
           deleting={isDeleting}
-          onCancel={() => setDeleteCandidate(null)}
+          error={deleteError}
+          onCancel={() => { setDeleteError(''); setDeleteCandidate(null) }}
           onConfirm={() => void deletePost(deleteCandidate)}
         />
       )}
@@ -317,6 +374,8 @@ export function ReportsPage() {
   }
 
   function closeEditPost() {
+    // Saved or dropped on purpose: the kept copy of unsaved edits is no longer needed.
+    if (editingPost) clearDraft(`edit:${editingPost.id}`)
     setEditingPost(null)
     setEditingMessage('')
     setEditError('')
@@ -350,23 +409,65 @@ export function ReportsPage() {
 
   async function deletePost(post: AppPost) {
     setIsDeleting(true)
+    setDeleteError('')
     try {
-      const response = await api.delete<DeletePostResponse>(`/app-data/posts/${post.id}`)
+      const response = await api.delete<DeletePostResponse>(`/app-data/posts/${post.id}`, { params: post.scheduleId ? { scheduleId: post.scheduleId } : undefined })
       if (!response.data.deleted) {
-        window.alert(response.data.message || response.data.facebookMessage || 'Không thể xóa bài viết.')
+        setDeleteError(response.data.message || response.data.facebookMessage || 'Không thể xóa bài viết.')
         return
       }
       setDeleteCandidate(null)
-      setDetailPost((current) => current?.id === post.id ? null : current)
+      setDetailPost((current) => current?.scheduleId === post.scheduleId ? null : current)
       reload()
       postsState.reload()
     } catch (error) {
-      window.alert(getErrorMessage(error, 'Không thể xóa bài viết.'))
+      setDeleteError(getErrorMessage(error, 'Không thể xóa bài viết.'))
     } finally {
       setIsDeleting(false)
     }
   }
 
+}
+
+/** Totals over posts with numbers; a metric no post could report stays null and shows as "—". */
+function sumMetrics(posts: AppPost[]) {
+  const totals = { likes: null as number | null, comments: null as number | null, shares: null as number | null, views: null as number | null }
+  let fetchedAt: string | null = null
+  let measured = 0
+  for (const post of posts) {
+    const metrics = post.metrics
+    if (!metrics || metrics.fetchedAt === undefined) continue
+    measured += 1
+    for (const key of ['likes', 'comments', 'shares', 'views'] as const) {
+      const value = metrics[key]
+      if (typeof value === 'number') totals[key] = (totals[key] ?? 0) + value
+    }
+    if (!fetchedAt || metrics.fetchedAt > fetchedAt) fetchedAt = metrics.fetchedAt
+  }
+  return { ...totals, fetchedAt, measured }
+}
+
+function MetricsInline({ metrics }: { metrics?: PostMetrics }) {
+  const items = ([
+    ['likes', Heart, 'lượt thích'],
+    ['comments', MessageCircle, 'bình luận'],
+    ['shares', Repeat2, 'chia sẻ'],
+    ['views', Eye, 'lượt xem'],
+  ] as const).flatMap(([key, Icon, label]) => {
+    const value = metrics?.[key]
+    return typeof value === 'number' ? [{ key, Icon, label, value }] : []
+  })
+  if (items.length === 0) return <span className="text-xs text-[var(--muted-text)]">—</span>
+  return (
+    <span className="flex flex-wrap items-center gap-3 text-xs text-[var(--muted-text)]">
+      {items.map(({ key, Icon, label, value }) => (
+        <span key={key} className="inline-flex items-center gap-1" title={label}>
+          <Icon size={13} aria-hidden="true" />
+          <span className="sr-only">{label}: </span>{value.toLocaleString('vi-VN')}
+        </span>
+      ))}
+    </span>
+  )
 }
 
 function canEditReportedPost(post: AppPost) {

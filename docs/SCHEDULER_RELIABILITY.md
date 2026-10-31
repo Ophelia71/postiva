@@ -32,7 +32,7 @@ Các cấu hình môi trường có trong `backend/.env.example`:
 
 | Biến | Mặc định | Ý nghĩa |
 |---|---:|---|
-| `POSTIVA_SCHEDULER_BATCH_SIZE` | `1` | Số lịch claim mỗi vòng |
+| `POSTIVA_SCHEDULER_BATCH_SIZE` | `6` | Số lịch claim mỗi vòng; các lịch trong một vòng đăng song song (pool `publishingImmediateExecutor` 6 luồng) |
 | `POSTIVA_SCHEDULER_MAX_ATTEMPTS` | `4` | Tổng số lần gửi tối đa cho retry tự động |
 | `POSTIVA_SCHEDULER_LEASE_SECONDS` | `1800` | Thời gian worker giữ claim |
 | `POSTIVA_SCHEDULER_BACKOFF_BASE_SECONDS` | `60` | Khoảng retry đầu tiên |

@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { AUTH_EXPIRED_EVENT, clearAuthSessionIfTokenMatches, getAuthToken } from './auth'
+import { AUTH_ENDING_EVENT, AUTH_EXPIRED_EVENT, clearAuthSessionIfTokenMatches, getAuthToken } from './auth'
 
 export type ApiResponse<T> = {
   success: boolean
@@ -63,9 +63,11 @@ api.interceptors.response.use(
 
     const authorization = axios.isAxiosError(error)
       ? String(error.config?.headers?.Authorization ?? '') : ''
-    if (status === 401 && !isAuthRequest && authorization.startsWith('Bearer ')
-      && clearAuthSessionIfTokenMatches(authorization.slice(7))) {
-      window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT))
+    if (status === 401 && !isAuthRequest && authorization.startsWith('Bearer ')) {
+      const token = authorization.slice(7)
+      // Keep the post being written before the expired session (and the user it belongs to) is forgotten.
+      if (token === getAuthToken()) window.dispatchEvent(new Event(AUTH_ENDING_EVENT))
+      if (clearAuthSessionIfTokenMatches(token)) window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT))
     }
 
     return Promise.reject(error)

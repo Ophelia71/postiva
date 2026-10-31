@@ -59,6 +59,7 @@ public class SecurityConfig {
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/api/billing/payos/webhook",
+                                "/api/billing/sepay/webhook",
                                 "/api/auth/register",
                                 "/api/auth/register/verify",
                                 "/api/auth/login",

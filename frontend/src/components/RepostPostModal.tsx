@@ -7,6 +7,7 @@ import { getErrorMessage } from '../lib/errors'
 import { formatFileSize } from '../lib/format'
 import { resolveMediaUrl } from '../lib/media'
 import { usePreferences } from '../lib/preferences'
+import { clearDraft, readDraft, useSessionWork } from '../lib/idleSession'
 
 type UploadedMedia = {
   id: string
@@ -37,14 +38,30 @@ export function RepostPostModal({
   const channelsState = useAppDataResource<AppChannel[]>('/app-data/channels')
   const facebookChannels = (channelsState.data ?? EMPTY_CHANNELS).filter((channel) => channel.badge === 'Facebook' && channel.active)
   const [selectedChannelId, setSelectedChannelId] = useState('')
-  const [message, setMessage] = useState(post.content)
+  const draftKey = `repost:${post.id}`
+  const [restoredMessage] = useState(() => readDraft<string>(draftKey))
+  const [message, setMessage] = useState(restoredMessage ?? post.content)
   const [newMediaType, setNewMediaType] = useState<RepostMediaType>('NONE')
   const [mediaUrl, setMediaUrl] = useState('')
   const [selectedMedia, setSelectedMedia] = useState<RepostMedia[]>(() => getPostMedia(post))
   const [isUploadingMedia, setIsUploadingMedia] = useState(false)
   const [isPublishing, setIsPublishing] = useState(false)
-  const [status, setStatus] = useState(() => t('Nội dung được sao chép từ bài cũ. Bạn có thể chỉnh sửa trước khi tạo bài mới.'))
+  const [status, setStatus] = useState(() => restoredMessage !== null
+    ? 'Đã mở lại nội dung bạn viết dở.'
+    : t('Nội dung được sao chép từ bài cũ. Bạn có thể chỉnh sửa trước khi tạo bài mới.'))
   const [statusTone, setStatusTone] = useState<'info' | 'success' | 'error'>('info')
+  useSessionWork({
+    busy: isUploadingMedia || isPublishing,
+    unsaved: message !== post.content,
+    draftKey,
+    draft: () => message,
+  })
+
+  // Closing on purpose, or after posting, drops the kept copy of what was typed.
+  function close() {
+    clearDraft(draftKey)
+    onClose()
+  }
 
   useEffect(() => {
     if (!selectedChannelId && facebookChannels[0]) {
@@ -70,7 +87,7 @@ export function RepostPostModal({
       : resolvedMediaUrl ? newMediaType : 'NONE'
     if (newMediaType !== 'NONE' && selectedMedia.length === 0 && !resolvedMediaUrl) {
       setStatusTone('error')
-      setStatus(t('Hãy chọn file từ máy hoặc nhập URL media công khai.'))
+      setStatus(t('Hãy chọn ảnh hoặc video từ máy, hoặc dán đường link ảnh/video.'))
       return
     }
     if (selectedMedia.some((media) => !media.id)) {
@@ -80,7 +97,7 @@ export function RepostPostModal({
     }
     if (selectedMedia.length > 0 && resolvedMediaUrl) {
       setStatusTone('error')
-      setStatus(t('Không thể trộn media đã chọn với URL. Hãy tải URL media về máy rồi chọn file.'))
+      setStatus(t('Không dùng chung được ảnh đã chọn với đường link. Hãy tải ảnh từ link về máy rồi chọn lại.'))
       return
     }
 
@@ -102,7 +119,7 @@ export function RepostPostModal({
         channelName: selectedChannel.name,
       })
       onReposted()
-      onClose()
+      close()
     } catch (error) {
       setStatusTone('error')
       setStatus(getErrorMessage(error, 'Không thể đăng lại lên Trang Facebook.'))
@@ -191,9 +208,9 @@ export function RepostPostModal({
         <div className="mb-5 flex items-start justify-between gap-4">
           <div>
             <h2 className="text-lg font-bold">Tạo bài mới từ bài này</h2>
-            <p className="mt-1 text-xs text-slate-400">Bài cũ không bị thay đổi. Bài mới sẽ có permalink và tương tác riêng.</p>
+            <p className="mt-1 text-xs text-slate-400">Bài cũ giữ nguyên. Bài mới có lượt thích và bình luận riêng.</p>
           </div>
-          <button type="button" onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-slate-100">
+          <button type="button" onClick={close} aria-label="Đóng" className="flex h-11 w-11 items-center justify-center rounded-lg hover:bg-slate-100">
             <X size={17} />
           </button>
         </div>
@@ -295,7 +312,7 @@ export function RepostPostModal({
 
                 <div className="flex items-center gap-3">
                   <div className="h-px flex-1 bg-slate-200" />
-                  <span className="text-xs font-semibold text-slate-400">hoặc URL công khai</span>
+                  <span className="text-xs font-semibold text-slate-400">hoặc dán đường link ảnh/video</span>
                   <div className="h-px flex-1 bg-slate-200" />
                 </div>
                 <input

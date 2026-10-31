@@ -1,11 +1,11 @@
-import { Eye, EyeOff, LockKeyhole, LogIn, UserPlus } from 'lucide-react'
+import { ArrowLeft, Eye, EyeOff, LockKeyhole, LogIn, PlusCircle, UserPlus } from 'lucide-react'
 import axios from 'axios'
 import { useEffect, useState, type FormEvent } from 'react'
 import { api } from '../lib/api'
 import type { AuthSession } from '../lib/auth'
 import { getErrorMessage } from '../lib/errors'
 import { usePreferences } from '../lib/preferences'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
 type AuthMode = 'LOGIN' | 'REGISTER'
 
@@ -23,7 +23,9 @@ type RegisterPendingResponse = {
 
 export function AuthPage({ onAuthenticated, notice }: { onAuthenticated: (session: AuthSession) => void; notice?: string }) {
   const { t } = usePreferences()
-  const [mode, setMode] = useState<AuthMode>('LOGIN')
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const [mode, setMode] = useState<AuthMode>(() => (searchParams.get('mode') === 'register' ? 'REGISTER' : 'LOGIN'))
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -95,6 +97,8 @@ export function AuthPage({ onAuthenticated, notice }: { onAuthenticated: (sessio
           email: verificationEmail,
           code: verificationCode,
         })
+        // A brand-new account always starts with onboarding, wherever the sign-up form was opened from.
+        navigate('/app/start', { replace: true })
         onAuthenticated(response.data)
         return
       }
@@ -132,7 +136,7 @@ export function AuthPage({ onAuthenticated, notice }: { onAuthenticated: (sessio
   }
 
   return (
-    <main className="rescale-grid rescale-glow flex min-h-svh items-center justify-center bg-[#f2f4fb] px-4 py-10 text-[#344260]">
+    <main className="rescale-glow flex min-h-svh items-center justify-center bg-[#f2f4fb] px-4 py-10 text-[#344260]">
       <div className="grid w-full max-w-5xl overflow-hidden rounded-[32px] border border-black/8 bg-white shadow-[0_30px_100px_rgba(29,34,23,.14)] lg:grid-cols-[1fr_420px]">
         <section className="hidden bg-[#5369b8] p-10 text-white lg:block">
           <div className="flex h-full flex-col justify-between">
@@ -143,7 +147,7 @@ export function AuthPage({ onAuthenticated, notice }: { onAuthenticated: (sessio
               <h1 className="mt-8 text-5xl font-semibold leading-[1.02] tracking-[-.055em]">
                 Không gian riêng cho mọi hoạt động nội dung.
               </h1>
-              <p className="mt-5 max-w-md text-sm leading-7 text-white/55">
+              <p className="mt-5 max-w-md text-sm leading-7 text-white/85">
                 Đăng nhập để quản lý Trang Facebook, bài đăng, báo cáo và lịch đăng trong không gian riêng.
               </p>
             </div>
@@ -151,19 +155,30 @@ export function AuthPage({ onAuthenticated, notice }: { onAuthenticated: (sessio
         </section>
 
         <section className="p-6 sm:p-9">
+          <div className="mb-6 flex items-center justify-between">
+            <Link to="/" className="flex items-center gap-2 text-base font-bold tracking-tight">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#6672d8] text-white">
+                <PlusCircle size={16} aria-hidden="true" />
+              </span>
+              Postiva
+            </Link>
+            <Link to="/" className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-[#505db8] hover:text-[#344260]">
+              <ArrowLeft size={14} aria-hidden="true" />
+              Trang chủ
+            </Link>
+          </div>
           <div className="mb-8">
-            <p className="text-xs font-bold uppercase tracking-[.2em] text-[#6673b9]">Không gian Postiva</p>
-            <h2 className="mt-3 text-3xl font-semibold tracking-[-.04em]">{isVerifyingRegistration ? 'Xác thực email' : isRegister ? 'Tạo tài khoản' : 'Chào mừng trở lại'}</h2>
-            <p className="mt-2 text-sm text-slate-500">
+            <h2 className="text-3xl font-semibold tracking-[-.03em]">{isVerifyingRegistration ? 'Xác thực email' : isRegister ? 'Tạo tài khoản' : 'Đăng nhập vào Postiva'}</h2>
+            <p className="mt-2 text-sm text-slate-600">
               {isVerifyingRegistration
                 ? `Nếu email đủ điều kiện đăng ký, mã 6 số sẽ được gửi tới ${verificationEmail}.`
                 : isRegister
-                  ? 'Tạo tài khoản bằng tên người dùng, email và mật khẩu.'
-                  : ''}
+                  ? 'Chỉ cần tên, email và mật khẩu. Sau khi xác thực email, bạn sẽ được dẫn qua 3 bước để đăng bài đầu tiên.'
+                  : 'Tiếp tục quản lý bài đăng, lịch đăng và báo cáo của bạn.'}
             </p>
           </div>
 
-          {notice && <p role="status" className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">{notice}</p>}
+          {notice && !isRegister && !isVerifyingRegistration && <p role="status" className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">{notice}</p>}
           <form onSubmit={(event) => void submitAuth(event)} className="space-y-4">
             {isVerifyingRegistration ? (
               <label className="block text-sm font-bold">
@@ -220,6 +235,7 @@ export function AuthPage({ onAuthenticated, notice }: { onAuthenticated: (sessio
                       placeholder="Tối thiểu 8 ký tự"
                       autoComplete={isRegister ? 'new-password' : 'current-password'}
                       minLength={8}
+                      aria-describedby={isRegister ? 'password-hint' : undefined}
                       required
                     />
                     <button type="button" aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'} aria-pressed={showPassword} onClick={() => setShowPassword((value) => !value)} className="absolute inset-y-0 right-0 flex w-12 items-center justify-center text-slate-500 hover:text-[#5369b8]">
@@ -227,6 +243,7 @@ export function AuthPage({ onAuthenticated, notice }: { onAuthenticated: (sessio
                     </button>
                   </span>
                 </label>
+                {isRegister && <p id="password-hint" className="-mt-2 text-xs text-slate-600">Dùng ít nhất 8 ký tự; nên kết hợp chữ, số và ký hiệu.</p>}
                 {!isRegister && <Link className="block text-right text-sm font-semibold text-[#6673b9] hover:text-[#475475]" to="/forgot-password">Quên mật khẩu?</Link>}
               </>
             )}

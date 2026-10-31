@@ -94,7 +94,6 @@ public class SocialAccountService {
     public SocialAccountResponse connectManual(ManualFacebookConnectRequest request) {
         UUID userId = currentUserService.requireCurrentUserId();
         String pageId = request.pageId().trim();
-        String pageName = request.pageName().trim();
         String accessToken = request.pageAccessToken().trim();
         FacebookGraphClient.FacebookPage profile = facebookGraphClient.getPage(pageId, accessToken);
         if (!pageId.equals(trimToNull(profile.id()))) {
@@ -104,7 +103,7 @@ public class SocialAccountService {
         return response(saveFacebookPage(
                 userId,
                 pageId,
-                pageName,
+                firstNonBlank(profile.name(), request.pageName()),
                 accessToken,
                 expiresAt(request.expiresInSeconds())
         ));
@@ -114,7 +113,6 @@ public class SocialAccountService {
     public SocialAccountResponse connectInstagramManual(ManualSocialConnectRequest request) {
         UUID userId = currentUserService.requireCurrentUserId();
         String accountId = request.accountId().trim();
-        String accountName = request.accountName().trim();
         String accessToken = request.accessToken().trim();
         LocalDateTime expiresAt = expiresAt(request.expiresInSeconds());
         InstagramGraphClient.InstagramProfile profile = instagramGraphClient.getProfile(accountId, accessToken);
@@ -124,14 +122,14 @@ public class SocialAccountService {
         }
 
         return response(saveInstagramAccount(
-                userId, accountId, accountName, profile.accountType(), profile.apiMode(), accessToken, expiresAt));
+                userId, accountId, displayName(firstNonBlank(profile.username(), request.accountName()), "Instagram"),
+                profile.accountType(), profile.apiMode(), accessToken, expiresAt));
     }
 
     @Transactional
     public SocialAccountResponse connectThreadsManual(ManualSocialConnectRequest request) {
         UUID userId = currentUserService.requireCurrentUserId();
         String accountId = request.accountId().trim();
-        String accountName = request.accountName().trim();
         String accessToken = request.accessToken().trim();
         LocalDateTime expiresAt = expiresAt(request.expiresInSeconds());
         ThreadsGraphClient.ThreadsProfile profile = threadsGraphClient.getMe(accessToken);
@@ -139,7 +137,8 @@ public class SocialAccountService {
             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
                     "Threads ID không khớp với tài khoản của access token.");
         }
-        return response(saveThreadsAccount(userId, accountId, accountName, accessToken, expiresAt));
+        return response(saveThreadsAccount(userId, accountId,
+                displayName(firstNonBlank(profile.username(), request.accountName()), "Threads"), accessToken, expiresAt));
     }
 
     @Transactional
@@ -320,10 +319,10 @@ public class SocialAccountService {
         GeneratedPost post = generatedPostRepository.findById(schedule.getPostId()).orElse(null);
         if (post == null) return null;
 
-        boolean importedFacebookPost = account.getProvider() == Platform.FACEBOOK
-                && productBriefRepository != null
+        // Posts imported by channel sync are marked "<PLATFORM>_IMPORT" (see ChannelSyncService).
+        boolean importedFacebookPost = productBriefRepository != null
                 && productBriefRepository.findById(post.getBriefId())
-                .map(brief -> "FACEBOOK_IMPORT".equalsIgnoreCase(brief.getIndustryCode()))
+                .map(brief -> (account.getProvider().name() + "_IMPORT").equalsIgnoreCase(brief.getIndustryCode()))
                 .orElse(false);
         boolean sharedWithAnotherAccount = scheduledPostRepository.findByPostId(post.getId()).stream()
                 .anyMatch(other -> other.getSocialAccountId() != null
@@ -426,10 +425,10 @@ public class SocialAccountService {
 
     void ensureTokenUsable(SocialAccount account) {
         if (account.getTokenExpiresAt() != null && account.getTokenExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, providerLabel(account) + " token đã hết hạn, hãy kết nối lại tài khoản");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Kết nối " + providerLabel(account) + " đã hết hạn. Vào Kết nối kênh để kết nối lại.");
         }
         if (account.getAccessTokenEncrypted() == null || account.getAccessTokenEncrypted().isBlank()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, providerLabel(account) + " chưa có access token");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Kết nối " + providerLabel(account) + " đã hết hạn. Vào Kết nối kênh để kết nối lại.");
         }
     }
 
@@ -564,6 +563,10 @@ public class SocialAccountService {
     private String displayName(String username, String fallback) {
         String value = blankToDefault(username, fallback);
         return value.startsWith("@") ? value : "@" + value;
+    }
+
+    private String firstNonBlank(String preferred, String fallback) {
+        return trimToNull(preferred) != null ? trimToNull(preferred) : trimToNull(fallback);
     }
 
     private String blankToDefault(String value, String fallback) {

@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import { startDemo } from '../lib/demo'
 
 const features = [
   {
@@ -87,17 +88,22 @@ export function HomePage() {
             <a href="#workflow" className="hover:text-black">Quy trình</a>
             <a href="#contact" className="hover:text-black">Liên hệ</a>
           </div>
-          <Link
-            to="/app/reports"
-            className="inline-flex h-10 items-center gap-2 rounded-full bg-[#6672d8] px-5 text-sm font-bold text-white hover:-translate-y-0.5 hover:bg-[#505db8]"
-          >
-            Mở báo cáo <ArrowRight size={15} />
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link to="/app" className="hidden min-h-11 items-center px-3 text-sm font-semibold text-black/70 hover:text-black sm:inline-flex">
+              Đăng nhập
+            </Link>
+            <Link
+              to="/app?mode=register"
+              className="inline-flex min-h-11 items-center gap-2 rounded-full bg-[#505db8] px-5 text-sm font-bold text-white hover:-translate-y-0.5 hover:bg-[#434fa0]"
+            >
+              Tạo tài khoản <ArrowRight size={15} aria-hidden="true" />
+            </Link>
+          </div>
         </nav>
       </header>
 
       <main>
-        <section className="rescale-grid rescale-glow relative isolate px-5 pb-20 pt-36 sm:pt-44">
+        <section className="rescale-glow relative isolate px-5 pb-20 pt-36 sm:pt-44">
           <div className="rescale-animated-background" aria-hidden="true">
             <span className="rescale-orb rescale-orb-cyan" />
             <span className="rescale-orb rescale-orb-lavender" />
@@ -105,26 +111,23 @@ export function HomePage() {
             <span className="rescale-orb rescale-orb-peach" />
           </div>
           <div className="mx-auto max-w-7xl text-center">
-            <div data-reveal className="reveal-up mx-auto inline-flex items-center gap-2 rounded-full border border-[#d4d7fd] bg-white/65 px-4 py-2 text-xs font-bold uppercase tracking-[.16em] text-[#6673b9] backdrop-blur">
-              <span className="h-2 w-2 rounded-full bg-[#84d2f4]" />
-              Social operations, simplified
-            </div>
-            <h1 data-reveal className="reveal-up rescale-text-reveal mx-auto mt-8 max-w-5xl text-[clamp(3.4rem,8vw,7.6rem)] font-medium leading-[.88] tracking-[-.075em]">
-              Nội dung chạy đều.
-              <span className="rescale-gradient-text block">Tăng trưởng rõ ràng.</span>
+            <h1 data-reveal className="reveal-up rescale-text-reveal mx-auto max-w-5xl text-balance text-[clamp(2.5rem,6vw,5.5rem)] font-medium leading-[1] tracking-[-.03em]">
+              Đăng bài đều đặn,
+              <span className="block text-[#505db8]">không cần ngồi canh giờ.</span>
             </h1>
-            <p data-reveal className="reveal-up mx-auto mt-8 max-w-2xl text-base leading-7 text-[#6673b9] sm:text-lg">
-              Một workspace tinh gọn để tạo nội dung, lên lịch Facebook và theo dõi trạng thái đăng
-              mà không phải chuyển qua nhiều công cụ.
+            <p data-reveal className="reveal-up mx-auto mt-8 max-w-2xl text-base leading-7 text-[#4a56a0] sm:text-lg">
+              Soạn nội dung với gợi ý từ AI, lên lịch đăng lên Facebook Page và xem bài nào đã đăng, bài nào cần xử lý.
+              Instagram và Threads đang thử nghiệm.
             </p>
             <div data-reveal className="reveal-up mt-9 flex flex-wrap justify-center gap-3">
-              <Link to="/app/reports" className="inline-flex h-13 items-center gap-2 rounded-full bg-[#6672d8] px-7 text-sm font-bold text-white hover:-translate-y-1 hover:bg-[#505db8]">
-                Bắt đầu vận hành <ArrowRight size={16} />
+              <Link to="/app/reports" onClick={startDemo} className="inline-flex min-h-12 items-center gap-2 rounded-full bg-[#505db8] px-7 text-sm font-bold text-white hover:-translate-y-1 hover:bg-[#434fa0]">
+                Dùng thử ngay <ArrowRight size={16} aria-hidden="true" />
               </Link>
-              <a href="#platform" className="inline-flex h-13 items-center rounded-full border border-[#d4d7fd] bg-white/60 px-7 text-sm font-bold hover:bg-white">
-                Xem cách hoạt động
-              </a>
+              <Link to="/app?mode=register" className="inline-flex min-h-12 items-center rounded-full border border-[#b9bfee] bg-white/60 px-7 text-sm font-bold hover:bg-white">
+                Tạo tài khoản
+              </Link>
             </div>
+            <p data-reveal className="reveal-up mt-3 text-sm text-black/60">Không cần đăng ký, xem ngay với dữ liệu mẫu.</p>
 
             <ReportsPreview />
           </div>
@@ -133,19 +136,18 @@ export function HomePage() {
         <section className="border-y border-[#e4e3fd] bg-[#f9fbfc] py-8">
           <div className="mx-auto grid max-w-7xl grid-cols-2 gap-6 px-5 text-center md:grid-cols-4">
             {['Tạo nội dung', 'Lịch đăng', 'Trạng thái bài', 'Facebook Page'].map((label) => (
-              <p key={label} className="text-sm font-bold uppercase tracking-[.12em] text-[#6673b9]">{label}</p>
+              <p key={label} className="text-sm font-bold text-[#4a56a0]">{label}</p>
             ))}
           </div>
         </section>
 
-        <section id="platform" className="bg-[#5369b8] px-5 py-24 text-white sm:py-32">
+        <section id="platform" className="bg-[#47599f] px-5 py-24 text-white sm:py-32">
           <div className="mx-auto max-w-7xl">
-            <p data-reveal className="reveal-up text-xs font-bold uppercase tracking-[.2em] text-[#89cefa]">Một nền tảng, trọn quy trình</p>
-            <div className="mt-5 grid gap-8 lg:grid-cols-[1fr_420px] lg:items-end">
-              <h2 data-reveal className="reveal-up max-w-4xl text-4xl font-medium leading-[.98] tracking-[-.055em] sm:text-6xl">
+            <div className="grid gap-8 lg:grid-cols-[1fr_420px] lg:items-end">
+              <h2 data-reveal className="reveal-up max-w-4xl text-balance text-4xl font-medium leading-[1] tracking-[-.03em] sm:text-6xl">
                 Từ ý tưởng đến bài đăng được quản lý.
               </h2>
-              <p data-reveal className="reveal-up leading-7 text-white/70">
+              <p data-reveal className="reveal-up leading-7 text-white">
                 Postiva quản lý nội dung, lịch đăng và kết quả đăng trong cùng một hệ thống. Lượt xem, tương tác và bình luận chưa được đồng bộ.
               </p>
             </div>
@@ -155,12 +157,9 @@ export function HomePage() {
                 const Icon = feature.icon
                 return (
                   <article data-reveal key={feature.title} className="reveal-up rescale-bento-card group rounded-[30px] border border-white/20 bg-white/[.10] p-7 hover:-translate-y-1 hover:border-[#d4d7fd] hover:bg-white/[.15]">
-                    <div className="flex items-center justify-between">
-                      <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[#67caef] text-[#344260]"><Icon size={21} /></span>
-                      <span className="text-sm font-bold text-white/28">{feature.number}</span>
-                    </div>
-                    <h3 className="mt-20 text-2xl font-semibold tracking-[-.03em]">{feature.title}</h3>
-                    <p className="mt-3 leading-7 text-white/70">{feature.text}</p>
+                    <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[#67caef] text-[#344260]"><Icon size={21} aria-hidden="true" /></span>
+                    <h3 className="mt-20 text-2xl font-semibold tracking-[-.02em]">{feature.title}</h3>
+                    <p className="mt-3 leading-7 text-white">{feature.text}</p>
                   </article>
                 )
               })}
@@ -171,14 +170,14 @@ export function HomePage() {
         <section id="workflow" className="bg-[#f8f9fc] px-5 py-24 sm:py-32">
           <div className="mx-auto grid max-w-7xl gap-14 lg:grid-cols-[.9fr_1.1fr] lg:items-start">
             <div className="lg:sticky lg:top-28">
-              <p data-reveal className="reveal-up text-xs font-bold uppercase tracking-[.2em] text-[#8a8fbb]">Đơn giản từ ngày đầu</p>
-              <h2 data-reveal className="reveal-up mt-5 text-5xl font-medium leading-[.96] tracking-[-.06em] sm:text-7xl">
+              <h2 data-reveal className="reveal-up text-balance text-5xl font-medium leading-[1] tracking-[-.03em] sm:text-7xl">
                 Ít thao tác.<br />Nhiều kết quả.
               </h2>
-              <p data-reveal className="reveal-up mt-7 max-w-lg leading-7 text-[#6673b9]">
+              <p data-reveal className="reveal-up mt-7 max-w-lg leading-7 text-[#4a56a0]">
                 Giao diện được thiết kế quanh công việc thực tế: kết nối Page, tạo bài, chọn lịch và theo dõi trạng thái đăng.
               </p>
               <div data-reveal className="reveal-up mt-8 space-y-3">
+                <CheckLine text="Gợi ý nội dung bằng AI cho từng nền tảng" />
                 <CheckLine text="Quản lý nhiều Facebook Page" />
                 <CheckLine text="Theo dõi trạng thái và lịch sử đăng" />
                 <CheckLine text="Báo cáo lịch đăng, không gồm số liệu tương tác" />
@@ -188,19 +187,18 @@ export function HomePage() {
               <div className="absolute -right-8 -top-8 h-28 w-28 rounded-full bg-[#84d2f4]/70 blur-2xl" />
               <div className="relative rounded-[26px] bg-white p-5 shadow-[0_30px_90px_rgba(32,40,17,.18)]">
                 <div className="flex items-center justify-between border-b border-black/8 pb-4">
-                  <div><p className="text-xs font-bold text-black/38">Bản minh họa · không phải lịch tài khoản</p><p className="mt-1 font-bold">Bài viết mẫu</p></div>
+                  <div><p className="text-xs font-bold text-black/65">Bản minh họa · không phải lịch tài khoản</p><p className="mt-1 font-bold">Bài viết mẫu</p></div>
                   <span className="rounded-full bg-[#e4e3fd] px-3 py-1 text-xs font-bold text-[#475475]">Bản xem trước</span>
                 </div>
                 <div className="mt-5 rounded-2xl bg-[#f3f0fd] p-5">
-                  <div className="h-44 rounded-xl bg-[linear-gradient(135deg,#6b7dc9,#8594ea_55%,#84d2f4)] p-5 text-white">
-                    <p className="text-xs uppercase tracking-[.2em] text-white/55">Summer edit</p>
-                    <p className="mt-16 text-3xl font-semibold tracking-[-.04em]">Nhẹ nhàng.<br />Đúng chất bạn.</p>
+                  <div className="h-44 rounded-xl bg-[linear-gradient(135deg,#3f55a6,#4c62b3_55%,#3f86b5)] p-5 text-white">
+                    <p className="mt-16 text-3xl font-semibold tracking-[-.02em]">Nhẹ nhàng.<br />Đúng chất bạn.</p>
                   </div>
-                  <p className="mt-4 text-sm leading-6 text-black/55">Đây là nội dung minh họa giao diện, không phải bài của người dùng.</p>
+                  <p className="mt-4 text-sm leading-6 text-black/70">Đây là nội dung minh họa giao diện, không phải bài của người dùng.</p>
                 </div>
                 <div className="mt-4 flex items-center justify-between">
-                  <span className="flex items-center gap-2 text-xs font-bold text-black/48"><Radio size={16} /> Facebook Business</span>
-                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#757bd4] text-white"><Send size={16} /></span>
+                  <span className="flex items-center gap-2 text-xs font-bold text-black/65"><Radio size={16} /> Facebook Business</span>
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#4c58b8] text-white"><Send size={16} /></span>
                 </div>
               </div>
             </div>
@@ -211,8 +209,7 @@ export function HomePage() {
           <div className="mx-auto max-w-7xl">
             <div data-reveal className="reveal-up flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[.2em] text-[#8a8fbb]">Phạm vi hiện tại</p>
-                <h2 className="mt-4 max-w-3xl text-4xl font-medium leading-[1] tracking-[-.05em] sm:text-6xl">Thông tin rõ ràng trước khi bạn kết nối.</h2>
+                <h2 className="max-w-3xl text-balance text-4xl font-medium leading-[1] tracking-[-.03em] sm:text-6xl">Thông tin rõ ràng trước khi bạn kết nối.</h2>
               </div>
             </div>
             <div data-reveal className="reveal-scale mt-14 grid gap-4 md:grid-cols-3">
@@ -226,9 +223,8 @@ export function HomePage() {
         <section id="faq" className="bg-[#f8f9fc] px-5 py-24 sm:py-32">
           <div className="mx-auto grid max-w-7xl gap-12 lg:grid-cols-[.75fr_1.25fr]">
             <div data-reveal className="reveal-up lg:sticky lg:top-28 lg:self-start">
-              <p className="text-xs font-bold uppercase tracking-[.2em] text-[#8a8fbb]">FAQ</p>
-              <h2 className="mt-4 text-5xl font-medium tracking-[-.055em]">Câu hỏi thường gặp.</h2>
-              <p className="mt-5 max-w-sm leading-7 text-[#6673b9]">Thông tin ngắn gọn để bạn hiểu cách Postiva vận hành trước khi bắt đầu.</p>
+              <h2 className="text-5xl font-medium tracking-[-.03em]">Câu hỏi thường gặp.</h2>
+              <p className="mt-5 max-w-sm leading-7 text-[#4a56a0]">Thông tin ngắn gọn để bạn hiểu cách Postiva vận hành trước khi bắt đầu.</p>
             </div>
             <div data-reveal className="reveal-up divide-y divide-[#d4d7fd] border-y border-[#d4d7fd]">
               {faqs.map(([question, answer], index) => {
@@ -237,10 +233,10 @@ export function HomePage() {
                   <div key={question}>
                     <button type="button" onClick={() => setActiveFaq(isOpen ? null : index)} className="flex w-full items-center justify-between gap-6 py-6 text-left text-lg font-semibold text-[#344260]">
                       {question}
-                      <ChevronDown size={20} className={`shrink-0 text-[#6673b9] transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} />
+                      <ChevronDown size={20} className={`shrink-0 text-[#4a56a0] transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} />
                     </button>
                     <div className={`rescale-accordion-grid ${isOpen ? 'is-open' : ''}`}>
-                      <div><p className="max-w-2xl pb-6 leading-7 text-[#6673b9]">{answer}</p></div>
+                      <div><p className="max-w-2xl pb-6 leading-7 text-[#4a56a0]">{answer}</p></div>
                     </div>
                   </div>
                 )
@@ -250,36 +246,35 @@ export function HomePage() {
         </section>
 
         <section id="contact" className="px-5 pb-5">
-          <div data-reveal className="reveal-scale mx-auto max-w-7xl overflow-hidden rounded-[36px] bg-[linear-gradient(120deg,#63c8ef,#7180df_55%,#aeb9ef)] px-6 py-20 text-center sm:px-12 sm:py-28">
-            <p className="text-xs font-bold uppercase tracking-[.2em] text-[#4f5b7c]">Sẵn sàng bắt đầu?</p>
-            <h2 className="mx-auto mt-5 max-w-4xl text-5xl font-medium leading-[.95] tracking-[-.065em] text-white sm:text-7xl">
-              Biến nội dung thành một hệ thống tăng trưởng.
+          <div data-reveal className="reveal-scale mx-auto max-w-7xl overflow-hidden rounded-[36px] bg-[linear-gradient(120deg,#3f55a6,#4c62b3_55%,#5a6fc0)] px-6 py-20 text-center sm:px-12 sm:py-28">
+            <h2 className="mx-auto max-w-4xl text-balance text-5xl font-medium leading-[1] tracking-[-.03em] text-white sm:text-7xl">
+              Đăng bài đầu tiên trong vài phút.
             </h2>
-            <Link to="/app" className="mt-9 inline-flex h-13 items-center gap-2 rounded-full bg-[#5662c0] px-7 text-sm font-bold text-white hover:-translate-y-1 hover:bg-[#414da7]">
-              Truy cập Postiva <ArrowRight size={16} />
+            <p className="mx-auto mt-5 max-w-xl text-lg text-white">Tạo tài khoản, kết nối một Facebook Page và để Postiva lo phần lên lịch.</p>
+            <Link to="/app?mode=register" className="mt-9 inline-flex min-h-12 items-center gap-2 rounded-full bg-white px-7 text-sm font-bold text-[#344260] hover:-translate-y-1 hover:bg-[#f3f0fd]">
+              Tạo tài khoản <ArrowRight size={16} aria-hidden="true" />
             </Link>
           </div>
-          <footer className="relative mt-5 overflow-hidden rounded-t-[36px] bg-[#5369b8] px-6 pb-8 pt-16 text-white sm:px-10 lg:px-16 lg:pt-24">
-            <div className="pointer-events-none absolute -bottom-40 -left-24 h-[430px] w-[430px] rounded-[42%_58%_65%_35%] bg-[linear-gradient(145deg,rgba(132,210,244,.58),rgba(216,221,251,.2))] blur-sm" />
+          <footer className="relative mt-5 overflow-hidden rounded-t-[36px] bg-[#47599f] px-6 pb-8 pt-16 text-white sm:px-10 lg:px-16 lg:pt-24">
             <div className="relative mx-auto grid max-w-7xl gap-14 lg:grid-cols-[1.15fr_1fr_.75fr_.75fr]">
               <div>
                 <p className="text-5xl font-semibold tracking-[-.065em] sm:text-7xl">postiva<sup className="ml-1 align-top text-sm">®</sup></p>
-                <p className="mt-5 max-w-xs text-lg leading-8 text-white/78">Tạo nội dung, lên lịch và theo dõi trạng thái đăng trong một workspace.</p>
+                <p className="mt-5 max-w-xs text-lg leading-8 text-white">Tạo nội dung, lên lịch và theo dõi trạng thái đăng trong một workspace.</p>
               </div>
 
               <div>
-                <h3 className="text-3xl font-medium tracking-[-.04em]">Liên hệ Postiva</h3>
-                <p className="mt-3 max-w-sm leading-7 text-white/70">Đăng ký nhận bản tin và các kênh mạng xã hội sẽ được bổ sung khi sẵn sàng.</p>
-                <a href="#contact" className="mt-6 inline-flex items-center gap-2 font-semibold text-white hover:underline">Xem thông tin bắt đầu <ArrowRight size={16} /></a>
+                <h3 className="text-3xl font-medium tracking-[-.02em]">Bắt đầu với Postiva</h3>
+                <p className="mt-3 max-w-sm leading-7 text-white">Postiva đang trong giai đoạn thử nghiệm giới hạn. Tạo tài khoản để dùng ngay.</p>
+                <Link to="/app?mode=register" className="mt-6 inline-flex min-h-11 items-center gap-2 font-semibold text-white hover:underline">Tạo tài khoản <ArrowRight size={16} aria-hidden="true" /></Link>
               </div>
 
               <FooterLinks title="Sản phẩm" links={[["Trang chủ", "#"], ["Tính năng", "#platform"], ["Cách hoạt động", "#workflow"], ["Phạm vi hiện tại", "#insights"], ["FAQ", "#faq"]]} />
-              <FooterLinks title="Postiva" links={[["Về Postiva", "#platform"], ["Phạm vi hỗ trợ", "#insights"], ["Mở báo cáo", "/app/reports"], ["Liên hệ", "#contact"]]} />
+              <FooterLinks title="Postiva" links={[["Về Postiva", "#platform"], ["Phạm vi hỗ trợ", "#insights"], ["Đăng nhập", "/app"], ["Chính sách riêng tư", "/privacy-policy"]]} />
             </div>
-            <div className="relative mx-auto mt-16 flex max-w-7xl flex-col gap-3 border-t border-white/18 pt-6 text-sm text-white/68 sm:flex-row sm:items-center sm:justify-between">
+            <div className="relative mx-auto mt-16 flex max-w-7xl flex-col gap-3 border-t border-white/18 pt-6 text-sm text-white sm:flex-row sm:items-center sm:justify-between">
               <span>Copyright © Postiva 2026</span>
               <span>Nội dung · Lịch đăng · Trạng thái đăng</span>
-              <span>Made for social teams</span>
+              <span>Dành cho chủ shop và người làm nội dung</span>
             </div>
           </footer>
         </section>
@@ -292,20 +287,20 @@ function ReportsPreview() {
   return (
     <div className="rescale-float relative mx-auto mt-16 max-w-5xl rounded-[30px] border border-black/10 bg-white/75 p-3 text-left shadow-[0_35px_120px_rgba(25,30,20,.16)] backdrop-blur sm:p-5">
       <div className="grid overflow-hidden rounded-[22px] border border-[#d4d7fd] bg-[#f9fbfc] md:grid-cols-[190px_1fr]">
-        <div className="hidden border-r border-white/20 bg-[#6b7dc9] p-5 text-white md:block">
+        <div className="hidden border-r border-white/20 bg-[#455ab0] p-5 text-white md:block">
             <p className="font-bold">Postiva</p>
-            <p className="mt-1 text-[10px] text-white/70">Bản xem trước</p>
-            <div className="mt-10 space-y-2 text-xs font-semibold text-white/46">
+            <p className="mt-1 text-xs text-white">Bản xem trước</p>
+            <div className="mt-10 space-y-2 text-xs font-semibold text-white">
               <PreviewNav icon={<MousePointer2 size={14} />} text="Tạo bài" />
               <PreviewNav icon={<CalendarClock size={14} />} text="Lịch đăng" />
               <PreviewNav active icon={<BarChart3 size={14} />} text="Báo cáo" />
           </div>
         </div>
         <div className="p-5 sm:p-7">
-          <div className="flex items-center justify-between"><div><p className="text-xs font-bold text-[#8a8fbb]">BẢN XEM TRƯỚC · KHÔNG CÓ DỮ LIỆU TÀI KHOẢN</p><p className="mt-1 text-xl font-bold">Lịch sử bài đăng</p></div><span className="rounded-full bg-[#757bd4] px-4 py-2 text-xs font-bold text-white">+ Tạo bài</span></div>
+          <div className="flex items-center justify-between"><div><p className="text-xs font-bold text-[#5d6490]">BẢN XEM TRƯỚC · KHÔNG CÓ DỮ LIỆU TÀI KHOẢN</p><p className="mt-1 text-xl font-bold">Lịch sử bài đăng</p></div><span className="rounded-full bg-[#4c58b8] px-4 py-2 text-xs font-bold text-white">+ Tạo bài</span></div>
           <div className="mt-3 grid gap-3 lg:grid-cols-[1.5fr_1fr]">
             <div className="rounded-2xl border border-[#e4e3fd] bg-white p-4"><p className="text-sm font-bold">Trạng thái trong báo cáo</p><div className="mt-4 space-y-3"><PreviewStatus label="Đã lên lịch" tone="blue" /><PreviewStatus label="Đã đăng" tone="green" /><PreviewStatus label="Cần kiểm tra" tone="amber" /></div></div>
-            <div className="rounded-2xl bg-[#6b7dc9] p-4 text-white"><p className="text-sm font-bold">Thông tin được theo dõi</p><div className="mt-4 space-y-3 text-xs leading-5 text-white/80"><p>Lịch đăng và trạng thái bài</p><p>Lỗi gần nhất và số lần thử</p><p>Lượt xem, tương tác, bình luận: chưa đồng bộ</p></div></div>
+            <div className="rounded-2xl bg-[#455ab0] p-4 text-white"><p className="text-sm font-bold">Thông tin được theo dõi</p><div className="mt-4 space-y-3 text-xs leading-5 text-white"><p>Lịch đăng và trạng thái bài</p><p>Lỗi gần nhất và số lần thử</p><p>Lượt xem, tương tác, bình luận: chưa đồng bộ</p></div></div>
           </div>
         </div>
       </div>
@@ -318,7 +313,7 @@ function PreviewNav({ icon, text, active = false }: { icon: ReactNode; text: str
 }
 
 function ScopeCard({ title, text }: { title: string; text: string }) {
-  return <article className="rounded-[28px] border border-[#d4d7fd] bg-[#f9fbfc] p-7 shadow-[0_24px_80px_rgba(102,115,185,.08)]"><Sparkles className="text-[#6672d8]" size={24} /><h3 className="mt-6 text-xl font-bold">{title}</h3><p className="mt-3 leading-7 text-[#6673b9]">{text}</p></article>
+  return <article className="rounded-[28px] border border-[#d4d7fd] bg-[#f9fbfc] p-7 shadow-[0_24px_80px_rgba(102,115,185,.08)]"><Sparkles className="text-[#6672d8]" size={24} /><h3 className="mt-6 text-xl font-bold">{title}</h3><p className="mt-3 leading-7 text-[#4a56a0]">{text}</p></article>
 }
 
 function PreviewStatus({ label, tone }: { label: string; tone: 'blue' | 'green' | 'amber' }) {
@@ -333,7 +328,7 @@ function CheckLine({ text }: { text: string }) {
 function FooterLinks({ title, links }: { title: string; links: Array<[string, string]> }) {
   return (
     <div>
-      <p className="text-xs font-bold uppercase tracking-[.18em] text-white/48">{title}</p>
+      <p className="text-xs font-bold uppercase tracking-[.18em] text-white">{title}</p>
       <nav className="mt-6 flex flex-col gap-4">
         {links.map(([label, href]) => <a key={label} href={href} className="w-fit text-base text-white/82 hover:translate-x-1 hover:text-white">{label}</a>)}
       </nav>

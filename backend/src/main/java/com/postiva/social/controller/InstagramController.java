@@ -7,6 +7,7 @@ import com.postiva.social.dto.SocialAccountResponse;
 import com.postiva.social.service.MetaSignedRequestService;
 import com.postiva.social.service.MetaDeletionStatusUrlFactory;
 import com.postiva.social.service.SocialAccountService;
+import com.postiva.social.sync.ChannelSyncService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -22,20 +23,26 @@ public class InstagramController {
     private final SocialAccountService accountService;
     private final MetaSignedRequestService signedRequestService;
     private final MetaDeletionStatusUrlFactory deletionStatusUrls;
+    private final ChannelSyncService channelSync;
 
     public InstagramController(SocialAccountService accountService,
                                MetaSignedRequestService signedRequestService,
-                               MetaDeletionStatusUrlFactory deletionStatusUrls) {
+                               MetaDeletionStatusUrlFactory deletionStatusUrls,
+                               ChannelSyncService channelSync) {
         this.accountService = accountService;
         this.signedRequestService = signedRequestService;
         this.deletionStatusUrls = deletionStatusUrls;
+        this.channelSync = channelSync;
     }
 
     @PostMapping("/manual")
     public ApiResponse<SocialAccountResponse> connectManual(
             @Valid @RequestBody ManualSocialConnectRequest request
     ) {
-        return ApiResponse.ok(accountService.connectInstagramManual(request));
+        SocialAccountResponse connected = accountService.connectInstagramManual(request);
+        // Bring existing posts and their engagement in without making the shop wait.
+        if (connected != null) channelSync.syncInBackground(connected.id());
+        return ApiResponse.ok(connected);
     }
 
     @PostMapping("/deauthorize")

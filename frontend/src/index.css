@@ -91,13 +91,6 @@ button { cursor: pointer; }
   box-shadow: 0 0 0 3px rgb(133 148 234 / .18);
 }
 
-.rescale-grid {
-  background-image:
-    linear-gradient(rgb(102 115 185 / .07) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(102 115 185 / .07) 1px, transparent 1px);
-  background-size: 72px 72px;
-}
-
 .rescale-glow {
   background:
     radial-gradient(circle at 12% 14%, rgb(132 210 244 / .42), transparent 30%),
@@ -230,12 +223,7 @@ button { cursor: pointer; }
 }
 
 .rescale-gradient-text {
-  color: transparent;
-  background: linear-gradient(100deg, #6673b9 5%, #8594ea 42%, #7bbbe1 75%, #89cefa 100%);
-  background-size: 180% 100%;
-  background-clip: text;
-  -webkit-background-clip: text;
-  animation: rescale-gradient-shift 7s ease-in-out infinite alternate;
+  color: #6673b9;
 }
 
 .reveal-up,
@@ -356,36 +344,6 @@ button { cursor: pointer; }
   *, *::before, *::after { scroll-behavior: auto !important; animation: none !important; transition: none !important; }
 }
 
-@media (max-width: 900px) {
-  .app-shell::before { left: 84px; }
-  .app-shell > aside { width: 84px; }
-  .app-shell > aside h1,
-  .app-shell > aside p,
-  .app-shell > aside nav span,
-  .app-shell > aside nav span + span,
-  .app-shell > aside > div:last-child a { font-size: 0; }
-  .app-shell > aside nav a { justify-content: center; padding-inline: 0; }
-  .app-shell > main { padding-left: 84px; }
-  .app-shell > main > div { padding: 24px; }
-}
-
-@media (max-width: 640px) {
+@media (max-width: 1023px) {
   .app-shell::before { inset: 0 0 72px 0; }
-  .app-shell > aside {
-    inset: auto 0 0 0;
-    width: auto;
-    height: 72px;
-    flex-direction: row;
-    border-right: 0;
-    border-top: 1px solid var(--app-border);
-  }
-  .app-shell > aside > div:first-child,
-  .app-shell > aside > div:last-child { display: none; }
-  .app-shell > aside nav { display: grid; grid-template-columns: repeat(4, 1fr); padding: 8px; width: 100%; }
-  .app-shell > aside nav a { height: 52px; flex-direction: column; gap: 3px; font-size: 10px; }
-  .app-shell > aside nav span { display: inline; font-size: 10px; }
-  .app-shell > main { padding-left: 0; padding-bottom: 76px; }
-  .app-shell > main > div { padding: 16px; }
-  .app-shell > main > div > div:first-child { align-items: flex-start; gap: 12px; }
-  .app-shell > main > div > div:first-child > div:last-child > div:not(:last-child) { display: none; }
 }

@@ -35,7 +35,7 @@ public class BillingGrantService {
             jdbc.update("UPDATE payment_orders SET grant_status = 'NOT_APPLICABLE' WHERE id = ?", orderId);
             return;
         }
-        String source = "PAYOS:" + order.get("order_code");
+        String source = ("BANK_TRANSFER".equals(order.get("provider")) ? "BANK:" : "PAYOS:") + order.get("order_code");
         var existing = jdbc.query("SELECT id FROM subscription_periods WHERE source_reference = ?",
                 (rs, row) -> rs.getObject("id", UUID.class), source);
         UUID periodId;

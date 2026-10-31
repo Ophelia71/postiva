@@ -6,7 +6,8 @@ import { clearAuthSession } from '../lib/auth'
 import { getErrorMessage } from '../lib/errors'
 
 export function ResetPasswordPage() {
-  const [token, setToken] = useState('')
+  // Read during render: React StrictMode runs effects twice in dev, and the first run strips the hash.
+  const [token, setToken] = useState(() => new URLSearchParams(window.location.hash.slice(1)).get('token') ?? '')
   const [newPassword, setNewPassword] = useState('')
   const [confirmation, setConfirmation] = useState('')
   const [showNewPassword, setShowNewPassword] = useState(false)
@@ -16,8 +17,6 @@ export function ResetPasswordPage() {
   const [pending, setPending] = useState(false)
 
   useEffect(() => {
-    const parsedToken = new URLSearchParams(window.location.hash.slice(1)).get('token') ?? ''
-    setToken(parsedToken)
     // Keep the one-time secret out of the address bar and browser history after reading it.
     if (window.location.hash) window.history.replaceState(window.history.state, '', window.location.pathname + window.location.search)
   }, [])
@@ -55,7 +54,7 @@ export function ResetPasswordPage() {
         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#e8ebff] text-[#5369b8]"><LockKeyhole size={21} /></div>
         <h1 className="mt-6 text-3xl font-semibold tracking-[-.04em]">Đặt mật khẩu mới</h1>
         {complete ? (
-          <div role="status" className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm leading-6 text-emerald-900">Mật khẩu đã được cập nhật. Tất cả phiên đăng nhập cũ đã bị thu hồi; hãy đăng nhập lại.</div>
+          <div role="status" className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm leading-6 text-emerald-900">Mật khẩu đã được cập nhật. Bạn đăng nhập lại bằng mật khẩu mới.</div>
         ) : (
           <form onSubmit={(event) => void submit(event)} className="mt-5 space-y-4">
             {!token && <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">Không tìm thấy mã khôi phục trong liên kết. Hãy yêu cầu email mới.</p>}
@@ -75,7 +74,7 @@ export function ResetPasswordPage() {
                 </button>
               </span>
             </label>
-            <p className="text-xs leading-5 text-slate-500">Mật khẩu cần ít nhất 8 ký tự và tối đa 72 byte UTF-8.</p>
+            <p className="text-xs leading-5 text-slate-500">Mật khẩu cần ít nhất 8 ký tự.</p>
             {error && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</p>}
             <button type="submit" disabled={pending || !token} className="h-12 w-full rounded-full bg-[#6672d8] text-sm font-bold text-white hover:bg-[#505db8] disabled:opacity-60">{pending ? 'Đang cập nhật...' : 'Cập nhật mật khẩu'}</button>
           </form>

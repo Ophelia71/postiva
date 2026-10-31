@@ -1,5 +1,7 @@
 export const AUTH_STORAGE_KEY = 'postiva.auth'
 export const AUTH_EXPIRED_EVENT = 'postiva:auth-expired'
+/** Fired just before an expired session is cleared, while it still says whose drafts are open. */
+export const AUTH_ENDING_EVENT = 'postiva:auth-ending'
 
 export type UserRole = 'USER' | 'ADMIN'
 

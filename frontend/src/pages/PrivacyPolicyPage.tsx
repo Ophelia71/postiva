@@ -2,7 +2,7 @@ import { useEffect, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 
 // Temporary privacy contact; replace here when a dedicated address is available.
-const PRIVACY_EMAIL = 'hauoadzso1@gmail.com'
+const PRIVACY_EMAIL = 'postiva84@gmail.com'
 const contactLink = <a href={`mailto:${PRIVACY_EMAIL}`}>{PRIVACY_EMAIL}</a>
 
 const sections: { id: string; title: string; content: ReactNode }[] = [

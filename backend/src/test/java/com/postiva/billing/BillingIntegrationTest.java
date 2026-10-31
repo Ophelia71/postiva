@@ -6,6 +6,8 @@ import com.postiva.scheduler.PublishingScheduler;
 import com.postiva.usage.AiUsageService;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -47,6 +49,11 @@ class BillingIntegrationTest {
     @MockBean EmailService email;
     @MockBean PublishingScheduler scheduler;
     @MockBean PayOsGateway payos;
+    @Autowired BillingService billing;
+    @Autowired BillingProperties properties;
+    @Autowired SePayService sepay;
+    @org.springframework.boot.test.mock.mockito.MockBean SePayClient sepayClient;
+    @Autowired com.fasterxml.jackson.databind.ObjectMapper json;
 
     @DynamicPropertySource static void database(DynamicPropertyRegistry registry) {
         if (URL == null || !URL.matches("jdbc:postgresql://(localhost|127\\.0\\.0\\.1):[0-9]+/postiva_migration_test(\\?.*)?"))
@@ -127,6 +134,193 @@ class BillingIntegrationTest {
         assertEquals("NOT_APPLICABLE", store.require(first.id(), user).grantStatus());
         assertEquals("GRANTED", store.require(second.id(), user).grantStatus());
         assertEquals("FREE", usage.summary(user).plan());
+    }
+
+    @Test void buyingAgainAfterCancellingOnThePayOsPageStartsAFreshOrder() {
+        openSales();
+        UUID user = user();
+        BillingStore.Order first = draft(user);
+        org.mockito.Mockito.when(payos.lookup(first.orderCode())).thenReturn(status(first, "CANCELLED", 0, ""));
+        org.mockito.Mockito.when(payos.create(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyLong())).thenAnswer(call -> {
+            long code = call.getArgument(0);
+            return new PayOsGateway.Link(code, call.getArgument(1), "link" + code, "https://pay.payos.vn/web/link" + code, "12345678");
+        });
+        BillingStore.Order second = billing.create(user, UUID.randomUUID());
+        assertNotEquals(first.id(), second.id());
+        assertEquals("PENDING", second.status());
+        assertEquals("CANCELLED", store.require(first.id(), user).status());
+    }
+
+    @Test void anOrderStillWaitingOnPayOsIsReusedNotDuplicated() {
+        openSales();
+        UUID user = user();
+        BillingStore.Order first = draft(user);
+        org.mockito.Mockito.when(payos.lookup(first.orderCode())).thenReturn(status(first, "PENDING", 0, ""));
+        assertEquals(first.id(), billing.create(user, UUID.randomUUID()).id());
+        org.mockito.Mockito.verify(payos, org.mockito.Mockito.never()).create(org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyLong());
+    }
+
+    @Test void cancellingALinkPayOsAlreadyClosedOnlyRecordsIt() {
+        UUID user = user();
+        BillingStore.Order order = draft(user);
+        org.mockito.Mockito.when(payos.lookup(order.orderCode())).thenReturn(status(order, "CANCELLED", 0, ""));
+        assertEquals("CANCELLED", billing.cancel(user, order.id()).status());
+        org.mockito.Mockito.verify(payos, org.mockito.Mockito.never()).cancel(order.orderCode());
+    }
+
+    @Test void checkingOnReturnTurnsProOnWithoutWaitingForTheWebhook() {
+        UUID user = user();
+        BillingStore.Order order = draft(user);
+        org.mockito.Mockito.when(payos.lookup(order.orderCode())).thenReturn(status(order, "PAID", order.amountVnd(), "FT-RETURN-1"));
+        BillingStore.Order after = billing.refresh(user, order.id());
+        assertEquals("PAID", after.status());
+        assertEquals("GRANTED", after.grantStatus());
+        assertEquals("PRO", usage.summary(user).plan());
+    }
+
+    @Test void bankTransferSellsWithoutPayOsAndAnAdminTurnsProOn() {
+        openBankTransfer();
+        assertEquals("BANK_TRANSFER", billing.offer().method());
+        assertEquals("12345678901", billing.offer().bank().accountNo());
+        UUID user = user();
+        UUID admin = admin();
+        BillingStore.Order order = billing.create(user, UUID.randomUUID());
+        assertEquals("BANK_TRANSFER", order.provider());
+        assertEquals("PENDING", order.status());
+        assertTrue(order.expiresAt().isAfter(java.time.Instant.now().plus(java.time.Duration.ofDays(2))));
+        assertEquals(order.id(), billing.create(user, UUID.randomUUID()).id(), "one open transfer per buyer");
+        // Never talks to payOS, not even in the background reconciliation.
+        assertTrue(store.reconcileCandidates().stream().noneMatch(candidate -> candidate.id().equals(order.id())));
+        assertEquals(HttpStatus.CONFLICT, assertThrows(ResponseStatusException.class, () -> billing.adminReconcile(order.id())).getStatusCode());
+
+        assertTrue(store.bankTransferQueue().stream().anyMatch(item -> item.id().equals(order.id())));
+        assertEquals("POSTIVA" + order.orderCode(), store.bankTransferQueue().stream()
+                .filter(item -> item.id().equals(order.id())).findFirst().orElseThrow().transferContent());
+
+        BillingStore.Order paid = billing.confirmBankTransfer(admin, order.id(), "FT26303123456");
+        assertEquals("PAID", paid.status());
+        assertEquals("GRANTED", paid.grantStatus());
+        assertEquals("PRO", usage.summary(user).plan());
+        assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM subscription_periods WHERE source_reference = ?",
+                Integer.class, "BANK:" + order.orderCode()));
+        assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM payment_admin_audit WHERE order_id = ? AND action = 'CONFIRM_BANK_TRANSFER'",
+                Integer.class, order.id()));
+        // Confirming twice with the same bank reference changes nothing; reusing it for another order is refused.
+        assertEquals("PAID", billing.confirmBankTransfer(admin, order.id(), "FT26303123456").status());
+        BillingStore.Order other = billing.create(user(), UUID.randomUUID());
+        assertEquals(HttpStatus.CONFLICT, assertThrows(ResponseStatusException.class,
+                () -> billing.confirmBankTransfer(admin, other.id(), "FT26303123456")).getStatusCode());
+        org.mockito.Mockito.verifyNoInteractions(payos);
+    }
+
+    @Test void bankTransferCanBeCancelledByTheBuyerOrRejectedByTheAdmin() {
+        openBankTransfer();
+        UUID user = user();
+        UUID admin = admin();
+        BillingStore.Order first = billing.create(user, UUID.randomUUID());
+        assertEquals("CANCELLED", billing.cancel(user, first.id()).status());
+        BillingStore.Order second = billing.create(user, UUID.randomUUID());
+        assertNotEquals(first.id(), second.id());
+        assertEquals(HttpStatus.BAD_REQUEST, assertThrows(ResponseStatusException.class,
+                () -> billing.rejectBankTransfer(admin, second.id(), "")).getStatusCode());
+        assertEquals("CANCELLED", billing.rejectBankTransfer(admin, second.id(), "Không thấy tiền sau 3 ngày").status());
+        // Money that arrives after all is still honoured.
+        assertEquals("GRANTED", billing.confirmBankTransfer(admin, second.id(), "FT-LATE-0001").grantStatus());
+        assertEquals("PRO", usage.summary(user).plan());
+    }
+
+    @Test void aTransferReportedBySePayPaysTheOrderWithoutAnyone() throws Exception {
+        openBankTransfer();
+        properties.setSepayApiKey("sepay-test-key");
+        assertTrue(billing.offer().autoConfirm());
+        UUID user = user();
+        BillingStore.Order order = billing.create(user, UUID.randomUUID());
+        String body = """
+                {"id": 90001, "gateway": "TPBank", "accountNumber": "12345678901", "transferType": "in",
+                 "transferAmount": %d, "content": "NGUYEN VAN A chuyen tien postiva %d", "referenceCode": "FT26303999"}
+                """.formatted(order.amountVnd(), order.orderCode());
+        assertEquals(HttpStatus.UNAUTHORIZED, assertThrows(ResponseStatusException.class,
+                () -> sepay.handle("Apikey wrong", json.readTree(body))).getStatusCode());
+        assertEquals("PAID", sepay.handle("Apikey sepay-test-key", json.readTree(body)));
+        BillingStore.Order after = store.require(order.id(), user);
+        assertEquals("PAID", after.status());
+        assertEquals("GRANTED", after.grantStatus());
+        assertEquals("BANK:FT26303999", after.providerReference());
+        assertEquals("PRO", usage.summary(user).plan());
+        assertEquals("DUPLICATE", sepay.handle("Apikey sepay-test-key", json.readTree(body)));
+
+        // Money going out, another account, or no order code: nothing happens.
+        assertEquals("IGNORED", sepay.handle("Apikey sepay-test-key", json.readTree(body.replace("\"in\"", "\"out\""))));
+        assertEquals("OTHER_ACCOUNT", sepay.handle("Apikey sepay-test-key", json.readTree(body.replace("12345678901", "999"))));
+        assertEquals("NO_ORDER_CODE", sepay.handle("Apikey sepay-test-key",
+                json.readTree(body.replace("postiva " + order.orderCode(), "tien hang"))));
+    }
+
+    @Test void aSePayTransferWithTheWrongAmountWaitsForTheAdmin() throws Exception {
+        openBankTransfer();
+        properties.setSepayApiKey("sepay-test-key");
+        UUID user = user();
+        BillingStore.Order order = billing.create(user, UUID.randomUUID());
+        String body = """
+                {"id": 90002, "accountNumber": "12345678901", "transferType": "in", "transferAmount": 1000,
+                 "content": "POSTIVA%d", "referenceCode": "FT26303888"}
+                """.formatted(order.orderCode());
+        assertEquals("REVIEW", sepay.handle("Apikey sepay-test-key", json.readTree(body)));
+        assertEquals("REVIEW", store.require(order.id(), user).status());
+        assertEquals("FREE", usage.summary(user).plan());
+        assertEquals(order.id(), store.bankTransferQueue().getFirst().id());
+        assertEquals("GRANTED", billing.confirmBankTransfer(admin(), order.id(), "FT26303888").grantStatus());
+    }
+
+    @Test void whileTheBuyerWaitsPostivaFindsTheTransferInSePayItself() {
+        openBankTransfer();
+        properties.setSepayApiToken("sepay-user-token");
+        assertTrue(billing.offer().autoConfirm());
+        UUID user = user();
+        BillingStore.Order order = billing.create(user, UUID.randomUUID());
+        org.mockito.Mockito.when(sepayClient.incomingSince(org.mockito.ArgumentMatchers.any())).thenReturn(java.util.List.of(
+                new SePayService.Transfer("77001", "12345678901", 50_000, "tien nha", "FT-OTHER-1"),
+                new SePayService.Transfer("77002", "12345678901", order.amountVnd(), "VUONG THU HUYEN chuyen tien POSTIVA" + order.orderCode(), "FT26304123")));
+        sepay.checkFor(store.require(order.id(), user));
+        BillingStore.Order after = store.require(order.id(), user);
+        assertEquals("PAID", after.status());
+        assertEquals("GRANTED", after.grantStatus());
+        assertEquals("PRO", usage.summary(user).plan());
+        // Seen again on the next check: nothing changes, nothing is granted twice.
+        org.springframework.test.util.ReflectionTestUtils.setField(sepay, "lastCheckAt", 0L);
+        sepay.checkNow();
+        assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM subscription_periods WHERE source_reference = ?",
+                Integer.class, "BANK:" + order.orderCode()));
+        properties.setSepayApiToken("");
+    }
+
+    private void openBankTransfer() {
+        properties.setEnabled(false);
+        properties.setSepayApiKey("");
+        properties.setSepayApiToken("");
+        org.springframework.test.util.ReflectionTestUtils.setField(sepay, "lastCheckAt", 0L);
+        properties.setProPriceVnd(149_000);
+        properties.setRefundPolicyUrl("http://localhost:5173/refund-policy");
+        properties.setBankCode("TPB");
+        properties.setBankAccountNo("12345678901");
+        properties.setBankAccountName("NGUYEN VAN A");
+        org.mockito.Mockito.reset(payos);
+    }
+
+    private void openSales() {
+        properties.setEnabled(true);
+        properties.setProPriceVnd(2_000);
+        properties.setClientId("client"); properties.setApiKey("api");
+        properties.setChecksumKey("12345678901234567890123456789012");
+        properties.setReturnUrl("http://localhost:5173/app/billing");
+        properties.setCancelUrl("http://localhost:5173/app/billing");
+        properties.setRefundPolicyUrl("http://localhost:5173/refund-policy");
+    }
+
+    private PayOsGateway.Status status(BillingStore.Order order, String state, long paid, String reference) {
+        return new PayOsGateway.Status(order.orderCode(), order.amountVnd(), paid, state, order.linkId(), "12345678", reference);
     }
 
     private BillingStore.Order draft(UUID user) {

@@ -10,6 +10,10 @@ import com.postiva.social.dto.SocialAccountResponse;
 import com.postiva.social.service.MetaSignedRequestService;
 import com.postiva.social.service.SocialAccountService;
 import com.postiva.social.service.FacebookPostSyncService;
+import com.postiva.social.sync.ChannelDeletionService;
+import com.postiva.social.sync.ChannelSyncService;
+import com.postiva.social.sync.DeletionImpact;
+import com.postiva.social.sync.SyncResult;
 import com.postiva.social.service.MetaDeletionStatusUrlFactory;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -22,6 +26,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -31,17 +36,23 @@ public class MetaController {
     private final FacebookPostSyncService facebookPostSyncService;
     private final MetaSignedRequestService signedRequestService;
     private final MetaDeletionStatusUrlFactory deletionStatusUrls;
+    private final ChannelSyncService channelSync;
+    private final ChannelDeletionService channelDeletion;
 
     public MetaController(
             SocialAccountService accountService,
             FacebookPostSyncService facebookPostSyncService,
             MetaSignedRequestService signedRequestService,
-            MetaDeletionStatusUrlFactory deletionStatusUrls
+            MetaDeletionStatusUrlFactory deletionStatusUrls,
+            ChannelSyncService channelSync,
+            ChannelDeletionService channelDeletion
     ) {
         this.accountService = accountService;
         this.facebookPostSyncService = facebookPostSyncService;
         this.signedRequestService = signedRequestService;
         this.deletionStatusUrls = deletionStatusUrls;
+        this.channelSync = channelSync;
+        this.channelDeletion = channelDeletion;
     }
 
     @GetMapping("/accounts")
@@ -53,7 +64,10 @@ public class MetaController {
     public ApiResponse<SocialAccountResponse> connectManual(
             @Valid @RequestBody ManualFacebookConnectRequest request
     ) {
-        return ApiResponse.ok(accountService.connectManual(request));
+        SocialAccountResponse connected = accountService.connectManual(request);
+        // Bring the Page's existing posts and their engagement in without making the shop wait.
+        if (connected != null) channelSync.syncInBackground(connected.id());
+        return ApiResponse.ok(connected);
     }
 
     @PostMapping("/facebook/test-post")
@@ -78,9 +92,26 @@ public class MetaController {
         return ApiResponse.ok(accountService.refreshCurrentAccount(accountId));
     }
 
+    /** Called each time the shop opens Postiva; returns how many channels started refreshing in the background. */
+    @PostMapping("/accounts/refresh-on-open")
+    public ApiResponse<Map<String, Integer>> refreshOnOpen() {
+        return ApiResponse.ok(Map.of("started", channelSync.refreshCurrentUserChannelsOnOpen()));
+    }
+
+    @PostMapping("/accounts/{accountId}/sync")
+    public ApiResponse<SyncResult> syncAccount(@PathVariable UUID accountId) {
+        return ApiResponse.ok(channelSync.syncCurrentUserAccount(accountId));
+    }
+
+    @GetMapping("/accounts/{accountId}/deletion-impact")
+    public ApiResponse<DeletionImpact> deletionImpact(@PathVariable UUID accountId) {
+        return ApiResponse.ok(channelDeletion.impact(accountId));
+    }
+
+    /** Removes the channel and its history in Postiva; posts on the platform itself are not touched. */
     @DeleteMapping("/accounts/{accountId}")
     public ApiResponse<Void> disconnect(@PathVariable UUID accountId) {
-        accountService.disconnect(accountId);
+        channelDeletion.delete(accountId);
         return ApiResponse.ok(null);
     }
 

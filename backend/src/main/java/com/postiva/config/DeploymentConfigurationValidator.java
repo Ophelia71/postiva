@@ -27,6 +27,7 @@ public class DeploymentConfigurationValidator implements ApplicationRunner {
     private final String publicBaseUrl;
     private final String metaPublicBaseUrl;
     private final boolean mailEnabled;
+    private final boolean mailLogCodes;
     private final String mailUsername;
     private final String mailPassword;
     private final String mailFrom;
@@ -55,6 +56,7 @@ public class DeploymentConfigurationValidator implements ApplicationRunner {
             @Value("${spring.mail.username:}") String mailUsername,
             @Value("${spring.mail.password:}") String mailPassword,
             @Value("${postiva.mail.from}") String mailFrom,
+            @Value("${postiva.mail.log-codes:false}") boolean mailLogCodes,
             @Value("${postiva.ai.cost.enabled:true}") boolean aiEnabled,
             @Value("${postiva.openai.api-key:}") String openAiKey,
             @Value("${postiva.billing.enabled:false}") boolean billingEnabled,
@@ -76,6 +78,7 @@ public class DeploymentConfigurationValidator implements ApplicationRunner {
         this.publicBaseUrl = publicBaseUrl;
         this.metaPublicBaseUrl = metaPublicBaseUrl;
         this.mailEnabled = mailEnabled;
+        this.mailLogCodes = mailLogCodes;
         this.mailUsername = mailUsername;
         this.mailPassword = mailPassword;
         this.mailFrom = mailFrom;
@@ -120,6 +123,9 @@ public class DeploymentConfigurationValidator implements ApplicationRunner {
         if (mailEnabled && (!StringUtils.hasText(mailUsername)
                 || !StringUtils.hasText(mailPassword) || !StringUtils.hasText(mailFrom))) {
             errors.add("MAIL_USERNAME, MAIL_PASSWORD and MAIL_FROM are required when POSTIVA_MAIL_ENABLED=true");
+        }
+        if (mailLogCodes) {
+            errors.add("POSTIVA_MAIL_LOG_CODES writes sign-up codes to the log and is for local development only");
         }
         if (aiEnabled && !StringUtils.hasText(openAiKey)) {
             errors.add("OPENAI_API_KEY is required while POSTIVA_AI_ENABLED=true");

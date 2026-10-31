@@ -15,6 +15,8 @@ import com.postiva.social.publishing.PublishPreparationException;
 import com.postiva.social.service.SocialAccountService;
 import com.postiva.user.entity.User;
 import com.postiva.user.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClientRequestException;
@@ -33,6 +35,7 @@ import java.util.regex.Pattern;
 
 @Service
 public class ScheduledPostProcessingService {
+    private static final Logger log = LoggerFactory.getLogger(ScheduledPostProcessingService.class);
     private static final Pattern ACCESS_TOKEN_QUERY = Pattern.compile(
             "(?i)(access_token(?:%3D|=))[^&\\s]+"
     );
@@ -81,7 +84,7 @@ public class ScheduledPostProcessingService {
 
         GeneratedPost post = posts.findById(scheduled.getPostId()).orElse(null);
         if (post == null) {
-            states.retryOrFail(claim, "Bài viết không còn tồn tại", false, maxAttempts, null);
+            states.retryOrFail(claim, "Bài viết này đã bị xóa nên không đăng được.", false, maxAttempts, null);
             return;
         }
         if (post.getUserId() == null || !users.findById(post.getUserId()).map(User::isActive).orElse(false)) {
@@ -94,7 +97,7 @@ public class ScheduledPostProcessingService {
         String accessToken;
         PlatformPublisher publisher = publishers.get(scheduled.getPlatform());
         if (publisher == null) {
-            states.retryOrFail(claim, "Nền tảng chưa có bộ publish", false, maxAttempts, null);
+            states.retryOrFail(claim, "Postiva chưa hỗ trợ đăng lên " + platformLabel(scheduled) + ".", false, maxAttempts, null);
             return;
         }
         try {
@@ -104,7 +107,7 @@ public class ScheduledPostProcessingService {
             mediaFiles = files.allMediaForPost(post.getId());
         } catch (RuntimeException exception) {
             boolean retryable = isSafeToRetry(exception);
-            states.retryOrFail(claim, errorMessage(exception), retryable, maxAttempts,
+            states.retryOrFail(claim, userMessage(scheduled, exception), retryable, maxAttempts,
                     retryable ? nextAttemptAt(scheduled.getAttemptCount()) : null);
             return;
         }
@@ -114,7 +117,7 @@ public class ScheduledPostProcessingService {
             externalPostId = publisher.publish(post, account, accessToken, mediaFiles);
         } catch (PublishPreparationException exception) {
             boolean retryable = isSafeToRetry(exception);
-            states.retryOrFail(claim, errorMessage(exception.getCause()), retryable, maxAttempts,
+            states.retryOrFail(claim, userMessage(scheduled, exception.getCause()), retryable, maxAttempts,
                     retryable ? nextAttemptAt(scheduled.getAttemptCount()) : null);
             return;
         } catch (RuntimeException exception) {
@@ -123,8 +126,7 @@ public class ScheduledPostProcessingService {
         }
 
         if (externalPostId == null || externalPostId.isBlank()) {
-            states.markUnknown(claim,
-                    "Nền tảng không trả về mã bài đăng. Hãy kiểm tra tài khoản trên nền tảng trước khi thử lại.");
+            states.markUnknown(claim, PublishErrorMessages.outcomeUnknown(platformLabel(scheduled)));
             return;
         }
         // If this DB transaction fails, the lease will expire into UNKNOWN; never publish again blindly.
@@ -134,17 +136,17 @@ public class ScheduledPostProcessingService {
     private void handleProviderFailure(Claim claim, ScheduledPost scheduled, RuntimeException exception) {
         Integer status = providerStatus(exception);
         if (status != null && status == 429) {
-            states.retryOrFail(claim, errorMessage(exception), true, maxAttempts,
+            states.retryOrFail(claim, userMessage(scheduled, exception), true, maxAttempts,
                     nextAttemptAt(scheduled.getAttemptCount()));
             return;
         }
         if (status != null && status >= 400 && status < 500 && status != 408) {
-            states.retryOrFail(claim, errorMessage(exception), false, maxAttempts, null);
+            states.retryOrFail(claim, userMessage(scheduled, exception), false, maxAttempts, null);
             return;
         }
-        states.markUnknown(claim,
-                "Kết quả gửi tới nền tảng chưa xác định. Hãy kiểm tra Page/tài khoản đích; nếu bài đã xuất hiện thì xác nhận đã đăng, nếu chưa thì xác nhận chưa đăng trước khi thử lại. Chi tiết: "
-                        + truncate(errorMessage(exception)));
+        log.warn("Publishing {} {} has an unknown outcome: {}", scheduled.getPlatform(), scheduled.getId(),
+                truncate(errorMessage(exception)));
+        states.markUnknown(claim, PublishErrorMessages.outcomeUnknown(platformLabel(scheduled)));
     }
 
     private boolean isSafeToRetry(RuntimeException exception) {
@@ -173,7 +175,7 @@ public class ScheduledPostProcessingService {
 
     private boolean containsTokenOrPermissionFailure(Throwable exception) {
         String message = errorMessage(exception).toLowerCase();
-        return message.contains("access token") || message.contains("token đã hết hạn")
+        return message.contains("access token") || message.contains("token đã hết hạn") || message.contains("kết nối lại")
                 || message.contains("permission") || message.contains("quyền")
                 || message.contains("invalid oauth") || message.contains("session has expired");
     }
@@ -196,6 +198,13 @@ public class ScheduledPostProcessingService {
         if (account.getAccessTokenEncrypted() == null || account.getAccessTokenEncrypted().isBlank()) {
             throw new IllegalStateException(platformLabel(scheduled) + " chưa có access token");
         }
+    }
+
+    /** What the shop sees; the provider's own wording, minus any token, stays in the server log. */
+    private String userMessage(ScheduledPost scheduled, Throwable exception) {
+        String raw = errorMessage(exception);
+        log.warn("Publishing {} {} failed: {}", scheduled.getPlatform(), scheduled.getId(), truncate(raw));
+        return PublishErrorMessages.forUser(platformLabel(scheduled), raw);
     }
 
     private String errorMessage(Throwable exception) {

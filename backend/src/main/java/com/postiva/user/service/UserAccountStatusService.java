@@ -57,6 +57,9 @@ public class UserAccountStatusService {
         if (target.getStatus() == nextStatus) {
             return target;
         }
+        if (target.isDeletedByOwner()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Tài khoản này đã được chủ tài khoản xóa");
+        }
 
         User.Status previousStatus = target.getStatus();
         String normalizedReason = reason.trim();

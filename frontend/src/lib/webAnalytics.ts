@@ -80,6 +80,25 @@ function send(event: Event) {
   })).catch(() => { /* Analytics must never block the user journey. */ })
 }
 
+/**
+ * Records an onboarding milestone as a page view under /virtual/onboarding/. The backend stores it but keeps it out of
+ * session page views, bounce rate and scroll totals. Each milestone is sent once per browser.
+ */
+export function trackOnboardingStep(step: string) {
+  // Off until the backend keeps /virtual/ paths out of sessions and totals; older backends count them as real views.
+  if (import.meta.env.VITE_ONBOARDING_ANALYTICS !== 'true') return
+  const safeStep = step.replace(/[^a-z0-9/_-]/gi, '').slice(0, 80)
+  if (!safeStep) return
+  const sentKey = `postiva.onboarding.sent.${safeStep}`
+  try {
+    if (localStorage.getItem(sentKey)) return
+  } catch { /* Storage unavailable: send anyway, once per page load at worst. */ }
+  const current = ids()
+  if (!current) return
+  try { localStorage.setItem(sentKey, '1') } catch { /* Best effort. */ }
+  send({ type: 'PAGE_VIEW', ...current, viewId: crypto.randomUUID(), path: `/virtual/onboarding/${safeStep}`, source: source() })
+}
+
 export function identifyWebAnalyticsUser() {
   if (getAuthSession()?.role === 'ADMIN') {
     try {

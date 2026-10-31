@@ -83,9 +83,11 @@ public class ThreadsPublisher implements PlatformPublisher {
                     mediaUrls.get(index),
                     true
             );
-            threadsClient.awaitContainerReady(childId, accessToken);
             childIds.add(childId);
         }
+        // Threads processes the children side by side, so waiting after creating them all takes as long as
+        // the slowest one instead of the sum of every wait.
+        childIds.forEach(childId -> threadsClient.awaitContainerReady(childId, accessToken));
         String containerId = threadsClient.createCarouselContainer(accessToken, text, childIds);
         threadsClient.awaitContainerReady(containerId, accessToken);
         return containerId;

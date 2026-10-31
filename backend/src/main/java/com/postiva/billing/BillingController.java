@@ -22,9 +22,10 @@ public class BillingController {
     private final BillingService billing;
     private final RefundService refunds;
     private final CurrentUserService current;
+    private final SePayService sepay;
 
-    public BillingController(BillingService billing, RefundService refunds, CurrentUserService current) {
-        this.billing = billing; this.refunds = refunds; this.current = current;
+    public BillingController(BillingService billing, RefundService refunds, CurrentUserService current, SePayService sepay) {
+        this.billing = billing; this.refunds = refunds; this.current = current; this.sepay = sepay;
     }
 
     @GetMapping("/offer")
@@ -42,9 +43,17 @@ public class BillingController {
         return noStore(billing.history(current.requireCurrentUserId()));
     }
 
+    /** The buyer's page asks this every few seconds while a transfer waits; each ask may check SePay. */
     @GetMapping("/orders/{id}")
     public ResponseEntity<ApiResponse<BillingStore.Order>> order(@PathVariable UUID id) {
-        return noStore(billing.order(current.requireCurrentUserId(), id));
+        UUID user = current.requireCurrentUserId();
+        sepay.checkFor(billing.order(user, id));
+        return noStore(billing.order(user, id));
+    }
+
+    @PostMapping("/orders/{id}/refresh")
+    public ResponseEntity<ApiResponse<BillingStore.Order>> refresh(@PathVariable UUID id) {
+        return noStore(billing.refresh(current.requireCurrentUserId(), id));
     }
 
     @PostMapping("/orders/{id}/cancel")
@@ -61,6 +70,13 @@ public class BillingController {
     @GetMapping("/orders/{id}/refund-requests")
     public ResponseEntity<ApiResponse<List<RefundService.Refund>>> refunds(@PathVariable UUID id) {
         return noStore(refunds.userRefunds(current.requireCurrentUserId(), id));
+    }
+
+    /** SePay's report of a transfer into the shop's bank account; checked against the shared API key. */
+    @PostMapping("/sepay/webhook")
+    public ResponseEntity<ApiResponse<String>> sepayWebhook(@RequestHeader(value = "Authorization", required = false) String authorization,
+                                                            @RequestBody JsonNode body) {
+        return noStore(sepay.handle(authorization, body));
     }
 
     /** Only this signed server-to-server notification or a signed provider query can record payment. */

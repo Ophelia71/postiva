@@ -52,7 +52,7 @@ class ScheduledPostProcessingServiceTest {
 
         assertEquals(ScheduledPostStatus.UNKNOWN, fixture.schedule().getStatus());
         assertNull(fixture.schedule().getNextAttemptAt());
-        assertTrue(fixture.schedule().getLastError().contains("Kết quả gửi tới nền tảng chưa xác định"));
+        assertTrue(fixture.schedule().getLastError().startsWith("Chưa rõ bài đã lên Facebook hay chưa"));
         verify(logs).save(argThat(log -> "UNKNOWN".equals(log.getStatus())));
         verify(publisher, times(1)).publish(any(), any(), anyString(), anyList());
     }
@@ -98,13 +98,15 @@ class ScheduledPostProcessingServiceTest {
         fixture.processor().process(fixture.claim());
 
         assertEquals(ScheduledPostStatus.FAILED, fixture.schedule().getStatus());
+        assertEquals("Kết nối Facebook đã hết hạn. Vào Kết nối kênh để kết nối lại rồi đăng lại bài.",
+                fixture.schedule().getLastError());
         assertNull(fixture.schedule().getNextAttemptAt());
         verify(publisher, never()).publish(any(), any(), anyString(), anyList());
         verify(logs).save(argThat(log -> "FAILED".equals(log.getStatus())));
     }
 
     @Test
-    void missingMediaConfigurationFailsWithActionableErrorInsteadOfUnknown() {
+    void missingMediaConfigurationFailsWithPlainErrorInsteadOfUnknown() {
         Fixture fixture = fixture();
         String reason = "Cần cấu hình POSTIVA_MEDIA_SIGNING_SECRET có ít nhất 32 byte để Meta tải media an toàn.";
         doThrow(new PublishPreparationException(new IllegalStateException(reason)))
@@ -113,7 +115,9 @@ class ScheduledPostProcessingServiceTest {
         fixture.processor().process(fixture.claim());
 
         assertEquals(ScheduledPostStatus.FAILED, fixture.schedule().getStatus());
-        assertEquals(reason, fixture.schedule().getLastError());
+        // The shop sees what to do; the setting's name stays in the server log.
+        assertEquals("Facebook chưa nhận được ảnh hoặc video của bài. Bạn thử đăng lại sau ít phút.",
+                fixture.schedule().getLastError());
         assertNull(fixture.schedule().getNextAttemptAt());
         verify(logs).save(argThat(log -> "FAILED".equals(log.getStatus())));
     }

@@ -2,6 +2,8 @@ package com.postiva.social.client;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.postiva.common.Platform;
+import com.postiva.social.insights.PostMetrics;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.http.MediaType;
@@ -16,6 +18,10 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
@@ -99,9 +105,7 @@ public class FacebookGraphClient {
     }
 
     public String publishPhotos(String pageId, String accessToken, String message, List<Resource> images) {
-        List<String> photoIds = images.stream()
-                .map(image -> uploadUnpublishedPhoto(pageId, accessToken, image))
-                .toList();
+        List<String> photoIds = uploadPhotosInParallel(pageId, accessToken, images);
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
         form.add("message", message);
         form.add("access_token", accessToken);
@@ -115,6 +119,30 @@ public class FacebookGraphClient {
                 .retrieve()
                 .bodyToMono(String.class)
                 .block());
+    }
+
+    /** Uploads the photos side by side (a few at a time) so a post with many photos waits for the slowest, not the sum. */
+    private List<String> uploadPhotosInParallel(String pageId, String accessToken, List<Resource> images) {
+        if (images.size() == 1) {
+            return List.of(uploadUnpublishedPhoto(pageId, accessToken, images.get(0)));
+        }
+        ExecutorService pool = Executors.newFixedThreadPool(Math.min(4, images.size()));
+        try {
+            List<CompletableFuture<String>> uploads = images.stream()
+                    .map(image -> CompletableFuture.supplyAsync(() -> uploadUnpublishedPhoto(pageId, accessToken, image), pool))
+                    .toList();
+            List<String> photoIds = new ArrayList<>();
+            for (CompletableFuture<String> upload : uploads) {
+                try {
+                    photoIds.add(upload.join());
+                } catch (CompletionException failure) {
+                    throw failure.getCause() instanceof RuntimeException cause ? cause : failure;
+                }
+            }
+            return photoIds;
+        } finally {
+            pool.shutdown();
+        }
     }
 
     private String uploadUnpublishedPhoto(String pageId, String accessToken, Resource image) {
@@ -226,6 +254,58 @@ public class FacebookGraphClient {
         } catch (Exception exception) {
             throw new IllegalStateException("Meta trả về dữ liệu bài đăng không hợp lệ", exception);
         }
+    }
+
+    /**
+     * Recent Page posts with reaction, comment and share counts. Needs pages_read_engagement; views are not
+     * requested because they need read_insights, which most manually connected tokens do not have.
+     */
+    public List<PostMetrics> getPagePostMetrics(String pageId, String accessToken, int limit) {
+        String body = webClient.get()
+                .uri(uri -> uri.path("/{pageId}/posts")
+                        // The braces in attachments{media_type} are Graph field expansion, not URI template
+                        // variables, so the list goes in as a value rather than as part of the template.
+                        .queryParam("fields", "{fields}")
+                        .queryParam("limit", limit)
+                        .queryParam("access_token", accessToken)
+                        .build(pageId, "id,message,created_time,permalink_url,shares,attachments{media_type},"
+                                + "reactions.summary(total_count).limit(0),comments.summary(total_count).limit(0)"))
+                .retrieve()
+                .onStatus(HttpStatusCode::isError, response -> response.bodyToMono(String.class)
+                        .map(responseBody -> new MetaApiException(response.statusCode().value(),
+                                metaErrorMessage("đọc tương tác bài đăng Facebook", responseBody))))
+                .bodyToMono(String.class)
+                .block();
+        try {
+            List<PostMetrics> posts = new ArrayList<>();
+            for (JsonNode node : objectMapper.readTree(body).path("data")) {
+                String id = node.path("id").asText();
+                if (id.isBlank()) {
+                    continue;
+                }
+                JsonNode attachment = node.path("attachments").path("data").path(0);
+                posts.add(new PostMetrics(
+                        id,
+                        Platform.FACEBOOK,
+                        parseDate(node.path("created_time").asText()),
+                        node.path("message").asText(""),
+                        attachment.isMissingNode() ? "TEXT" : attachment.path("media_type").asText("TEXT").toUpperCase(),
+                        countOrNull(node.path("reactions").path("summary").path("total_count")),
+                        countOrNull(node.path("comments").path("summary").path("total_count")),
+                        // Meta omits "shares" entirely when a post has never been shared.
+                        node.path("shares").path("count").canConvertToInt() ? node.path("shares").path("count").asInt() : 0,
+                        null,
+                        node.path("permalink_url").asText(null)
+                ));
+            }
+            return posts;
+        } catch (Exception exception) {
+            throw new IllegalStateException("Meta trả về dữ liệu tương tác không hợp lệ", exception);
+        }
+    }
+
+    private static Integer countOrNull(JsonNode node) {
+        return node.canConvertToInt() ? node.asInt() : null;
     }
 
     private String extractObjectId(String body) {

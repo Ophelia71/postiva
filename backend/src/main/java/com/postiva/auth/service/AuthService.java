@@ -89,7 +89,7 @@ public class AuthService {
         String email = normalizeEmail(request.email());
         guard.registration(email);
         if (request.password().getBytes(StandardCharsets.UTF_8).length > 72) {
-            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Mật khẩu không được vượt quá 72 byte UTF-8");
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Mật khẩu quá dài. Bạn chọn mật khẩu ngắn hơn.");
         }
         RegistrationDelivery delivery = transactions.execute(status -> prepareRegistration(request, email));
         if (delivery != null && delivery.code() != null) {
