@@ -174,6 +174,13 @@ function CreatePostForm({ onNewPost }: { onNewPost: () => void }) {
       setProductDescription((current) => current || 'Cà phê phin đậm vị, phủ lớp kem muối béo mặn đánh mới mỗi sáng. Ly 500ml, có ít đá hoặc không đá.')
     }
   }, [shopProfile.data])
+  const [useShopTemplate, setUseShopTemplate] = useState(true)
+  const profileTemplate: ShopTemplate = {
+    signature: shopProfile.data?.signature ?? '',
+    brandHashtags: shopProfile.data?.brandHashtags ?? '',
+  }
+  const hasShopTemplate = Boolean(profileTemplate.signature.trim() || profileTemplate.brandHashtags.trim())
+  const shopTemplate: ShopTemplate = useShopTemplate ? profileTemplate : { signature: '', brandHashtags: '' }
   const [selectedPlatforms, setSelectedPlatforms] = useState<Platform[]>([])
   const [sourceContent, setSourceContent] = useState(restored?.sourceContent ?? '')
   const [platformCaptions, setPlatformCaptions] = useState<Partial<Record<Platform, string>>>(restored?.platformCaptions ?? {})
@@ -285,7 +292,10 @@ function CreatePostForm({ onNewPost }: { onNewPost: () => void }) {
     }).format(date)
   }, [publishMode, scheduledTime, t])
 
-  const previewMessage = composeMessage(activeCaption, activeCta, activeHashtags, activePreviewPlatform)
+  const previewMessage = composeMessage(activeCaption, activeCta, activeHashtags, activePreviewPlatform, shopTemplate)
+  const templateSignature = shopTemplate.signature.trim()
+  const signatureDropped = activePreviewPlatform === 'THREADS' && Boolean(templateSignature)
+    && !activeCaption.includes(templateSignature) && !previewMessage.includes(templateSignature)
 
   if (channelsState.loading) {
     return <PageState title={t('Đang tải dữ liệu...', 'Loading...')} />
@@ -403,6 +413,7 @@ function CreatePostForm({ onNewPost }: { onNewPost: () => void }) {
         platformCtas[platform] ?? '',
         platformHashtags[platform] ?? '',
         platform,
+        shopTemplate,
       )
       const limit = getPlatformTextLimit(platform)
       if (finalContent.length > limit) {
@@ -915,6 +926,43 @@ function CreatePostForm({ onNewPost }: { onNewPost: () => void }) {
                   {previewMessage.length.toLocaleString('vi-VN')}/{activePlatformLimit.toLocaleString('vi-VN')}
                 </span>
               </label>
+              <label className="mt-3 block text-sm font-bold">
+                {t('Hashtag của bài', 'Post hashtags')}
+                <input
+                  value={activeHashtags}
+                  onChange={(event) => setPlatformHashtags((current) => ({
+                    ...current,
+                    [activePreviewPlatform]: event.target.value,
+                  }))}
+                  disabled={!selectedPlatforms.includes(activePreviewPlatform)}
+                  className="mt-2 h-10 w-full rounded-[6px] border border-slate-300 bg-white px-3 text-sm font-normal outline-none focus:border-blue-500"
+                  placeholder={t('Ví dụ: #cafemuoi #khuyenmai', 'Example: #coffee #sale')}
+                />
+                <span className="mt-1 block text-xs font-normal text-slate-500">
+                  {t(
+                    `Tối đa ${getPlatformHashtagLimit(activePreviewPlatform)} hashtag cho ${PLATFORM_LABELS[activePreviewPlatform]}.`,
+                    `Up to ${getPlatformHashtagLimit(activePreviewPlatform)} hashtags on ${PLATFORM_LABELS[activePreviewPlatform]}.`,
+                  )}
+                </span>
+              </label>
+              {hasShopTemplate && (
+                <div className="mt-3 rounded-[6px] border border-slate-200 bg-slate-50 px-3 py-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-bold">{t('Thêm chữ ký và hashtag của shop', 'Add the shop signature and hashtags')}</span>
+                    <Toggle checked={useShopTemplate} onChange={setUseShopTemplate} />
+                  </div>
+                  <p className="mt-1 text-xs text-slate-600">
+                    {useShopTemplate
+                      ? t('Lấy từ Hồ sơ shop, tự thêm vào cuối bài khi đăng. Hashtag thương hiệu đứng trước hashtag của bài.', 'Taken from the shop profile and added at the end of the post. Brand hashtags come before the post hashtags.')
+                      : t('Bài này sẽ đăng đúng như bạn viết, không thêm chữ ký hay hashtag của shop.', 'This post is published exactly as written, without the shop signature or hashtags.')}
+                  </p>
+                  {signatureDropped && (
+                    <p role="status" className="mt-1 text-xs font-semibold text-slate-800">
+                      {t('Chữ ký không được thêm vào bản Threads vì bài sẽ vượt 500 ký tự.', 'The signature is left out of the Threads version because the post would exceed 500 characters.')}
+                    </p>
+                  )}
+                </div>
+              )}
             </ComposerSection>
             </>
             )}
@@ -1386,19 +1434,33 @@ function isMetaVideo(media: UploadedMedia) {
   return media.mimeType === 'video/mp4' || media.mimeType === 'video/quicktime'
 }
 
-function composeMessage(caption: string, cta: string, hashtagsText: string, platform: Platform) {
+/** The shop's saved signature and brand hashtags, added to every post unless the text already has them. */
+type ShopTemplate = { signature: string; brandHashtags: string }
+
+function composeMessage(caption: string, cta: string, hashtagsText: string, platform: Platform, shop?: ShopTemplate) {
   const base = caption.trim()
   const callToAction = platform === 'THREADS' ? '' : cta.trim()
   const hashtagLimit = platform === 'INSTAGRAM' ? 10 : platform === 'FACEBOOK' ? 3 : 1
-  const hashtags = parseHashtags(hashtagsText).slice(0, hashtagLimit)
+  // Brand hashtags come first, then the post's own, without repeats.
+  const hashtags = uniqueHashtags([...parseHashtags(shop?.brandHashtags ?? ''), ...parseHashtags(hashtagsText)])
+    .slice(0, hashtagLimit)
+  const signature = shop?.signature.trim() ?? ''
   const parts = [base]
   if (callToAction && !base.includes(callToAction)) {
     parts.push(callToAction)
   }
+  if (signature && !base.includes(signature)) {
+    parts.push(signature)
+  }
   if (hashtags.length > 0 && !hashtags.every((hashtag) => base.includes(hashtag))) {
     parts.push(hashtags.join(' '))
   }
-  return parts.filter(Boolean).join('\n\n')
+  const message = parts.filter(Boolean).join('\n\n')
+  // Threads rejects posts over 500 characters, so there the signature gives way to the writing.
+  if (platform === 'THREADS' && signature && message.length > getPlatformTextLimit(platform)) {
+    return composeMessage(caption, cta, hashtagsText, platform, { signature: '', brandHashtags: shop?.brandHashtags ?? '' })
+  }
+  return message
 }
 
 function parseHashtags(value: string) {
@@ -1410,7 +1472,13 @@ function parseHashtags(value: string) {
 }
 
 function uniqueHashtags(values: string[]) {
-  return Array.from(new Set(values))
+  const seen = new Set<string>()
+  return values.filter((value) => {
+    const key = value.toLowerCase()
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }
 
 function getChannelPlatform(channel: AppChannel): Platform | null {
