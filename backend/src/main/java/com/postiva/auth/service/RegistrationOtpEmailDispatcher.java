@@ -26,7 +26,10 @@ public class RegistrationOtpEmailDispatcher {
         } catch (Exception exception) {
             try {
                 registrations.deleteByEmailIgnoreCaseAndOtpHash(recipient, otpHash);
-                log.warn("Registration OTP email delivery failed; pending credentials were invalidated");
+                // Exception types only: provider messages can echo the address or credentials.
+                log.warn("Registration OTP email delivery failed ({}{}); pending credentials were invalidated",
+                        exception.getClass().getSimpleName(),
+                        exception.getCause() == null ? "" : " <- " + exception.getCause().getClass().getSimpleName());
             } catch (Exception cleanupFailure) {
                 // Do not log email, OTP, password hashes, or mail-provider exception details.
                 log.warn("Registration OTP email delivery failed and pending credentials could not be invalidated");
