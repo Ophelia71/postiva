@@ -67,6 +67,7 @@ pipeline {
                 sh '''
                     docker build \
                     --build-arg VITE_API_BASE_URL=/api \
+                    --build-arg VITE_DAILY_API=true \
                     -t $DOCKER_FRONTEND_IMAGE:$BUILD_NUMBER \
                     -t $DOCKER_FRONTEND_IMAGE:latest \
                     ./frontend
