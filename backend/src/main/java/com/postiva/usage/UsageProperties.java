@@ -14,7 +14,9 @@ public class UsageProperties {
     @Min(0) private int proAiLimit = 300;
     @Min(1) @Max(366) private int periodDays = 30;
     @Min(0) private int globalDailyAttempts = 100;
-    @Min(1) private int userDailyAttempts = 20;
+    /** AI requests one person may make per UTC day (07:00 in Vietnam), by plan. Failed calls do not count. */
+    @Min(1) private int freeDailyAttempts = 10;
+    @Min(1) private int proDailyAttempts = 60;
     public int getFreeAiLimit() { return freeAiLimit; }
     public void setFreeAiLimit(int value) { freeAiLimit = value; }
     public int getProAiLimit() { return proAiLimit; }
@@ -23,6 +25,12 @@ public class UsageProperties {
     public void setPeriodDays(int value) { periodDays = value; }
     public int getGlobalDailyAttempts() { return globalDailyAttempts; }
     public void setGlobalDailyAttempts(int value) { globalDailyAttempts = value; }
-    public int getUserDailyAttempts() { return userDailyAttempts; }
-    public void setUserDailyAttempts(int value) { userDailyAttempts = value; }
+    public int getFreeDailyAttempts() { return freeDailyAttempts; }
+    public void setFreeDailyAttempts(int value) { freeDailyAttempts = value; }
+    public int getProDailyAttempts() { return proDailyAttempts; }
+    public void setProDailyAttempts(int value) { proDailyAttempts = value; }
+
+    public int dailyAttemptsFor(String planCode) {
+        return "PRO".equals(planCode) ? proDailyAttempts : freeDailyAttempts;
+    }
 }

@@ -115,7 +115,8 @@ class WeeklyPlanIntegrationTest {
         jdbc.update("DELETE FROM ai_daily_budgets");
         limits.setFreeAiLimit(30);
         limits.setGlobalDailyAttempts(100);
-        limits.setUserDailyAttempts(20);
+        limits.setFreeDailyAttempts(20);
+        limits.setProDailyAttempts(20);
         when(facebook.getPagePostMetrics(anyString(), anyString(), anyInt())).thenReturn(pastPosts());
         when(ai.generateWeeklyIdeas(any(), any())).thenAnswer(invocation -> {
             WeeklyPlanPromptInput input = invocation.getArgument(0);

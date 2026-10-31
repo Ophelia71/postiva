@@ -74,7 +74,8 @@ Trang tạo bài hiển thị quota, ngày hết kỳ và lịch sử có phân 
 | --- | --- | --- |
 | POSTIVA_FREE_AI_LIMIT | 5 | Áp dụng khi tạo kỳ Free mới |
 | POSTIVA_PRO_AI_LIMIT | 300 | Lượt AI mỗi kỳ 30 ngày của gói Pro (mua qua payOS hoặc admin cấp) |
-| POSTIVA_AI_USER_DAILY_ATTEMPTS | 20 | Trần số lần yêu cầu mỗi ngày UTC |
+| POSTIVA_AI_FREE_DAILY_ATTEMPTS | 10 | Trần số yêu cầu AI mỗi người mỗi ngày UTC (07:00 giờ Việt Nam) của gói Free; lần lỗi chắc chắn không tính |
+| POSTIVA_AI_PRO_DAILY_ATTEMPTS | 60 | Như trên, cho gói Pro |
 | POSTIVA_AI_GLOBAL_DAILY_ATTEMPTS | 100 | Đặt 0 để tạm dừng yêu cầu AI mới |
 | POSTIVA_LOGIN_ATTEMPTS_PER_15_MINUTES | 10 | Tổng số lần gửi login theo email trong cửa sổ |
 | POSTIVA_TRUSTED_PROXY_ADDRESSES | Trống | Danh sách IP/CIDR proxy được tin, phân cách dấu phẩy |

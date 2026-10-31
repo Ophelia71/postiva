@@ -63,10 +63,13 @@ public class AiUsageService {
         LocalDate day = now.atOffset(ZoneOffset.UTC).toLocalDate();
         Instant midnight = day.atStartOfDay(ZoneOffset.UTC).toInstant();
         long untilTomorrow = Duration.between(now, midnight.plusSeconds(86400)).toSeconds();
-        Integer attempts = jdbc.queryForObject("SELECT count(*) FROM ai_usage_requests WHERE user_id = ? AND created_at >= ?",
+        // A call that failed for certain gave the shop nothing, so it does not use up the day; unfinished and unclear ones do.
+        Integer attempts = jdbc.queryForObject("SELECT count(*) FROM ai_usage_requests WHERE user_id = ? AND created_at >= ? AND status <> 'FAILED'",
                 Integer.class, userId, Timestamp.from(midnight));
-        if (attempts != null && attempts >= properties.getUserDailyAttempts()) {
-            throw new RateLimitException("Bạn đã đạt giới hạn yêu cầu AI trong ngày. Vui lòng thử lại vào ngày mai.", untilTomorrow);
+        int dailyLimit = properties.dailyAttemptsFor(period.plan());
+        if (attempts != null && attempts >= dailyLimit) {
+            throw new RateLimitException("Hôm nay bạn đã dùng hết " + dailyLimit + " yêu cầu AI của gói "
+                    + ("PRO".equals(period.plan()) ? "Pro" : "Free") + ". Lượt AI mở lại lúc 7:00 sáng mai.", untilTomorrow);
         }
         if (properties.getGlobalDailyAttempts() == 0) throw error(HttpStatus.SERVICE_UNAVAILABLE, "Tạo nội dung AI đang tạm dừng.");
         List<Integer> budget = jdbc.queryForList("""
