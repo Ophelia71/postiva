@@ -6,7 +6,8 @@ import { clearAuthSession } from '../lib/auth'
 import { getErrorMessage } from '../lib/errors'
 
 export function ResetPasswordPage() {
-  const [token, setToken] = useState('')
+  // Read during render: React StrictMode runs effects twice in dev, and the first run strips the hash.
+  const [token, setToken] = useState(() => new URLSearchParams(window.location.hash.slice(1)).get('token') ?? '')
   const [newPassword, setNewPassword] = useState('')
   const [confirmation, setConfirmation] = useState('')
   const [showNewPassword, setShowNewPassword] = useState(false)
@@ -16,8 +17,6 @@ export function ResetPasswordPage() {
   const [pending, setPending] = useState(false)
 
   useEffect(() => {
-    const parsedToken = new URLSearchParams(window.location.hash.slice(1)).get('token') ?? ''
-    setToken(parsedToken)
     // Keep the one-time secret out of the address bar and browser history after reading it.
     if (window.location.hash) window.history.replaceState(window.history.state, '', window.location.pathname + window.location.search)
   }, [])
