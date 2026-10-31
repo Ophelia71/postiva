@@ -500,7 +500,6 @@ function AppShell({ session, onLogout, onPasswordChanged, demo }: ShellProps) {
               </NavLink>
             )
           })}
-          <NotificationBell channels={channels} placement="nav" collapsed={collapsed} />
         </nav>
 
         <div className="space-y-1 border-t border-[var(--app-border)] pt-3">
@@ -516,14 +515,18 @@ function AppShell({ session, onLogout, onPasswordChanged, demo }: ShellProps) {
           Postiva
         </Link>
         <div className="flex items-center gap-1">
-          <NotificationBell channels={channels} placement="below" />
+          <NotificationBell channels={channels} />
           <AccountMenu session={session} onLogout={onLogout} placement="below" demo={demo} />
         </div>
       </header>
 
       <main className={`pb-24 transition-[padding] duration-200 lg:pb-0 ${collapsed ? 'lg:pl-[76px]' : 'lg:pl-[272px]'}`}>
+        {/* Phones have the bell in their own header; from lg it sits at the top right of the page. */}
+        <div className="sticky top-0 z-20 hidden h-14 items-center justify-end px-10 lg:flex">
+          <NotificationBell channels={channels} />
+        </div>
         {/* Wide enough to use the room freed by collapsing the sidebar, capped only on very large screens. */}
-        <div className="mx-auto min-h-svh max-w-[1920px] px-4 py-5 sm:px-6 lg:px-10 lg:py-8">
+        <div className="mx-auto min-h-svh max-w-[1920px] px-4 py-5 sm:px-6 lg:px-10 lg:pb-8 lg:pt-2">
           {demo && <DemoBanner onSignUp={demo.onSignUp} onExit={demo.onExit} />}
           {!isOnboardingPage && <ShopProfileReminder />}
           {!isOnboardingPage && <TokenExpiryNotice channels={channels} />}
