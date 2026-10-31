@@ -38,7 +38,12 @@ public record WeeklyPlanResponse(
             String error,
             UUID scheduledPostId,
             /** The draft, once written. Null while generating or when drafting failed. */
-            GeneratePostResponse post
+            GeneratePostResponse post,
+            /** Every image or video attached to the draft, in order. Empty when the post is text only. */
+            List<Media> media
     ) {
+    }
+
+    public record Media(UUID id, String url, String mimeType, String fileName) {
     }
 }

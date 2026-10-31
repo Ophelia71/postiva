@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { EmptyState } from '../components/EmptyState'
 import { PageState } from '../components/PageUi'
-import { ProtectedMediaImage } from '../components/ProtectedMedia'
+import { ProtectedMediaImage, ProtectedMediaVideo } from '../components/ProtectedMedia'
 import { api } from '../lib/api'
 import { type AppChannel, useAppDataResource } from '../lib/appDataApi'
 import {
@@ -15,6 +15,7 @@ import {
   ITEM_STATUS_LABELS,
   type PerformanceSummary,
   type PlanItemStatus,
+  type PlanMedia,
   type WeeklyPlan,
   type WeeklyPlanItem,
   WEEKDAY_LABELS,
@@ -895,6 +896,71 @@ function DayDetail({ plan, item, onChanged, onNotice, onPrev, onNext }: {
     }
   }
 
+  const media = item.media ?? []
+  const mediaLimit = platform === 'THREADS' ? 20 : 10
+
+  /** Sends the whole list of files; the post endpoint replaces the draft's media with it. */
+  async function saveMedia(next: PlanMedia[], success: string) {
+    if (!item.post) return
+    setBusy(true)
+    onNotice(null)
+    try {
+      await api.put(`/posts/${item.post.postId}`, {
+        title: item.post.title ?? undefined,
+        hashtags: item.post.hashtags,
+        cta: item.post.cta ?? undefined,
+        mediaIds: next.map((file) => file.id),
+      })
+      onChanged({
+        ...plan,
+        items: plan.items.map((entry) => entry.id !== item.id || !entry.post ? entry : {
+          ...entry,
+          media: next,
+          post: { ...entry.post, imageUrl: next[0]?.url ?? null },
+        }),
+      })
+      onNotice({ tone: 'ok', text: success })
+    } catch (error) {
+      onNotice({ tone: 'error', text: getErrorMessage(error, 'Không lưu được ảnh của bài.') })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function addMedia(files: FileList | null) {
+    if (!files || files.length === 0) return
+    if (media.length + files.length > mediaLimit) {
+      onNotice({ tone: 'error', text: `${PLATFORM_NAMES[platform]} nhận tối đa ${mediaLimit} ảnh hoặc video cho một bài.` })
+      return
+    }
+    setBusy(true)
+    onNotice(null)
+    let added: PlanMedia[]
+    try {
+      added = await Promise.all(Array.from(files).map(async (file) => {
+        const data = new FormData()
+        data.append('file', file)
+        const uploaded = (await api.post<{ id: string; fileName: string; fileUrl: string; mimeType: string }>('/files/upload', data, { headers: { 'Content-Type': 'multipart/form-data' } })).data
+        return { id: uploaded.id, url: `/api/files/${uploaded.id}`, mimeType: uploaded.mimeType, fileName: uploaded.fileName }
+      }))
+    } catch (error) {
+      onNotice({ tone: 'error', text: getErrorMessage(error, 'Không tải được ảnh hoặc video.') })
+      setBusy(false)
+      return
+    }
+    setBusy(false)
+    await saveMedia([...media, ...added], 'Đã thêm ảnh cho bài.')
+  }
+
+  async function removeMedia(id: string) {
+    const next = media.filter((file) => file.id !== id)
+    if (platform === 'INSTAGRAM' && next.length === 0) {
+      onNotice({ tone: 'error', text: 'Instagram cần ít nhất một ảnh hoặc video. Hãy thêm ảnh khác trước khi bỏ ảnh này.' })
+      return
+    }
+    await saveMedia(next, 'Đã bỏ ảnh khỏi bài.')
+  }
+
   async function saveContent() {
     if (!item.post) return
     setBusy(true)
@@ -965,7 +1031,20 @@ function DayDetail({ plan, item, onChanged, onNotice, onPrev, onNext }: {
             <p className="mt-3 whitespace-pre-wrap px-4 text-sm leading-relaxed">{original}</p>
           )}
           {item.post.hashtags.length > 0 && <p className="px-4 pt-2 text-sm text-[#1877F2]">{item.post.hashtags.join(' ')}</p>}
-          {item.post.imageUrl ? (
+          {media.length > 0 ? (
+            <ul className={`mt-3 grid gap-1 ${media.length === 1 ? 'grid-cols-1' : 'grid-cols-2 sm:grid-cols-3'}`}>
+              {media.map((file, index) => (
+                <li key={file.id} className="relative min-w-0 bg-slate-100">
+                  {file.mimeType?.startsWith('video/')
+                    ? <ProtectedMediaVideo src={file.url} className={`w-full object-cover ${media.length === 1 ? 'max-h-80' : 'h-32'}`} />
+                    : <ProtectedMediaImage src={file.url} alt={file.fileName ?? `Ảnh ${index + 1}`} className={`w-full object-cover ${media.length === 1 ? 'max-h-80' : 'h-32'}`} />}
+                  {editable && !skipped && (
+                    <button type="button" disabled={busy} onClick={() => void removeMedia(file.id)} aria-label={`Bỏ ${file.fileName ?? `ảnh ${index + 1}`}`} className="absolute right-1 top-1 min-h-8 rounded-full bg-white/90 px-3 text-xs font-bold text-slate-900 shadow hover:bg-white disabled:opacity-60">Bỏ</button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : item.post.imageUrl ? (
             <ProtectedMediaImage src={item.post.imageUrl} alt="" className="mt-3 max-h-80 w-full object-cover" />
           ) : (
             item.post.imageSuggestion && <p className="mx-4 mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">Gợi ý ảnh: {item.post.imageSuggestion}</p>
@@ -983,6 +1062,12 @@ function DayDetail({ plan, item, onChanged, onNotice, onPrev, onNext }: {
         <div className="flex flex-wrap items-center gap-2">
           {!skipped && content.trim() !== original.trim() && (
             <button type="button" disabled={busy || !content.trim()} onClick={() => void saveContent()} className={PRIMARY}>Lưu nội dung</button>
+          )}
+          {!skipped && item.post && (
+            <label className={`${SECONDARY} cursor-pointer ${busy || media.length >= mediaLimit ? 'pointer-events-none opacity-50' : ''}`}>
+              Thêm ảnh
+              <input type="file" multiple accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm" disabled={busy || media.length >= mediaLimit} className="sr-only" onChange={(event) => { void addMedia(event.target.files); event.target.value = '' }} />
+            </label>
           )}
           {!skipped && (editingTime ? (
             <span className="flex flex-wrap items-center gap-2">

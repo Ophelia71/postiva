@@ -286,7 +286,11 @@ public class WeeklyPlanService {
                     item.getPostType(), item.getTopic(), item.getReason(), itemStatus(item, schedule),
                     schedule != null && schedule.getLastError() != null ? schedule.getLastError() : item.getError(),
                     item.getScheduledPostId(),
-                    item.getGeneratedPostId() == null ? null : drafts.get(item.getGeneratedPostId()));
+                    item.getGeneratedPostId() == null ? null : drafts.get(item.getGeneratedPostId()),
+                    item.getGeneratedPostId() == null ? List.of() : files.allMediaForPost(item.getGeneratedPostId()).stream()
+                            .map(file -> new WeeklyPlanResponse.Media(file.getId(), "/api/files/" + file.getId(),
+                                    file.getMimeType(), file.getFileName()))
+                            .toList());
         }).toList();
 
         return new WeeklyPlanResponse(plan.getId(), plan.getStatus().name(), plan.getSocialAccountId(),

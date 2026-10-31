@@ -139,8 +139,9 @@ function simulateDrafting(planId: string, request: CreateWeeklyPlanRequest) {
             hashtags: hashtagFor(request.productName ?? ''),
             cta: 'Nhắn shop để đặt ngay',
             imageSuggestion: 'Ảnh sản phẩm chụp gần, ánh sáng tự nhiên',
-            imageUrl: null,
+            imageUrl: request.imageIds[0] ? `/api/files/${request.imageIds[0]}` : null,
           },
+          media: request.imageIds.map((id) => ({ id, url: `/api/files/${id}`, mimeType: null, fileName: null })),
         }),
       }))
       if (index === plan.items.length - 1) updatePlan(planId, (current) => ({ ...current, status: 'READY' }))
@@ -167,12 +168,15 @@ export async function handleDailyMock(api: AxiosInstance, method: string, url: s
   const [path] = url.split('?')
   if (path.startsWith('/posts/mock-') && method === 'put') {
     const postId = path.slice('/posts/'.length)
-    const update = body as { platformContents?: Record<string, Record<string, string>> }
+    const update = body as { platformContents?: Record<string, Record<string, string>>; mediaIds?: string[] }
     plans = plans.map((plan) => ({
       ...plan,
       items: plan.items.map((item) => item.post?.postId !== postId ? item : {
         ...item,
         post: { ...item.post, platformContents: { ...item.post.platformContents, ...(update.platformContents ?? {}) } },
+        media: update.mediaIds
+          ? update.mediaIds.map((id) => item.media.find((media) => media.id === id) ?? { id, url: `/api/files/${id}`, mimeType: null, fileName: null })
+          : item.media,
       }),
     }))
     return null
@@ -202,6 +206,7 @@ export async function handleDailyMock(api: AxiosInstance, method: string, url: s
         error: null,
         scheduledPostId: null,
         post: null,
+        media: [],
       }))
       const end = new Date(`${request.startDate}T00:00:00`)
       end.setDate(end.getDate() + 6)
