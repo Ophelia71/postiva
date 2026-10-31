@@ -238,6 +238,12 @@ function DailyHome() {
           <button type="button" onClick={() => setView({ kind: 'plan', planId: current.id })} className="min-h-11 text-sm font-semibold text-[#505db8] underline underline-offset-4">
             {current.status === 'READY' ? 'Xem và duyệt tuần này →' : 'Xem chi tiết tuần này →'}
           </button>
+          {current.strategy && (
+            <div className="rounded-2xl border border-[var(--app-border)] bg-[var(--panel-bg)] p-4 text-sm">
+              <p><span className="font-bold">Chiến lược tuần: </span>{current.strategy}</p>
+            </div>
+          )}
+          <InsightTiles summary={current.performance} platform={PLATFORM_NAMES[current.platform ?? '']} />
         </div>
       )}
 
