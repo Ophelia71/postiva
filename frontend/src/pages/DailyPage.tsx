@@ -1119,12 +1119,12 @@ function DayDetail({ plan, item, onChanged, onNotice, onPrev, onNext }: {
           {media.length > 0 ? (
             <ul className={`mt-3 grid shrink-0 gap-1 ${media.length === 1 ? 'grid-cols-1' : media.length === 2 ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-3'}`}>
               {media.map((file, index) => (
-                <li key={file.id} className="relative min-w-0 bg-slate-100">
+                <li key={file.id} className={`relative min-w-0 ${media.length === 1 ? 'px-4 pb-4' : 'bg-slate-100'}`}>
                   {file.mimeType?.startsWith('video/')
-                    ? <ProtectedMediaVideo src={file.url} className={`w-full bg-slate-100 object-contain ${media.length === 1 ? 'max-h-96' : 'aspect-square'}`} />
-                    : <ProtectedMediaImage src={file.url} alt={file.fileName ?? `Ảnh ${index + 1}`} className={`w-full bg-slate-100 object-contain ${media.length === 1 ? 'max-h-96' : 'aspect-square'}`} />}
+                    ? <ProtectedMediaVideo src={file.url} className={media.length === 1 ? 'mx-auto block max-h-[28rem] w-auto max-w-full rounded-lg' : 'aspect-square w-full bg-slate-100 object-contain'} />
+                    : <ProtectedMediaImage src={file.url} alt={file.fileName ?? `Ảnh ${index + 1}`} className={media.length === 1 ? 'mx-auto block max-h-[28rem] w-auto max-w-full rounded-lg' : 'aspect-square w-full bg-slate-100 object-contain'} />}
                   {editable && !skipped && (
-                    <button type="button" disabled={busy} onClick={() => void removeMedia(file.id)} aria-label={`Bỏ ${file.fileName ?? `ảnh ${index + 1}`}`} className="absolute right-1 top-1 min-h-8 rounded-full bg-white/90 px-3 text-xs font-bold text-slate-900 shadow hover:bg-white disabled:opacity-60">Bỏ</button>
+                    <button type="button" disabled={busy} onClick={() => void removeMedia(file.id)} aria-label={`Bỏ ${file.fileName ?? `ảnh ${index + 1}`}`} className={`absolute top-1 min-h-8 ${media.length === 1 ? 'right-5' : 'right-1'} rounded-full bg-white/90 px-3 text-xs font-bold text-slate-900 shadow hover:bg-white disabled:opacity-60`}>Bỏ</button>
                   )}
                 </li>
               ))}
