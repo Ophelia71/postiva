@@ -51,6 +51,18 @@ export function SchedulePage() {
   const [deleteCandidate, setDeleteCandidate] = useState<AppPost | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [pendingAction, setPendingAction] = useState<PendingScheduleAction | null>(null)
+  const noticeRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (publishNotice) noticeRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [publishNotice])
+  useEffect(() => {
+    if (!pendingAction) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setPendingAction(null)
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [pendingAction])
   const [deleteError, setDeleteError] = useState('')
 
   useEffect(() => {
@@ -129,6 +141,7 @@ export function SchedulePage() {
 
       {publishNotice && (
         <div
+          ref={noticeRef}
           role="status"
           aria-live="polite"
           className={`flex items-start justify-between gap-4 rounded-lg border px-4 py-3 text-sm ${
@@ -136,7 +149,7 @@ export function SchedulePage() {
               ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
               : publishNotice.tone === 'error'
                 ? 'border-rose-200 bg-rose-50 text-rose-900'
-                : 'border-amber-200 bg-amber-50 text-amber-900'
+                : 'border-[var(--app-border)] bg-[var(--panel-bg)] text-[var(--app-text)]'
           }`}
         >
           <span>{publishNotice.message}</span>
@@ -145,11 +158,19 @@ export function SchedulePage() {
       )}
 
       {pendingAction && (
-        <div role="alertdialog" aria-label="Xác nhận" className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between">
-          <p>{confirmMessage(pendingAction)}</p>
-          <div className="flex shrink-0 gap-2">
-            <button type="button" onClick={() => setPendingAction(null)} className="min-h-11 rounded-lg border border-amber-300 px-4 font-semibold hover:bg-amber-100">Hủy</button>
-            <button type="button" onClick={() => void runPendingAction()} className="min-h-11 rounded-lg bg-amber-700 px-4 font-bold text-white hover:bg-amber-800">Xác nhận</button>
+        // A dialog over the page, so it shows wherever the shop has scrolled to.
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/40 px-4" role="alertdialog" aria-modal="true" aria-labelledby="schedule-confirm-title">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 text-sm text-slate-800 shadow-2xl">
+            <h2 id="schedule-confirm-title" className="text-lg font-bold">
+              {pendingAction.kind === 'resolvePublished' ? 'Đánh dấu đã đăng?' : `Thử đăng lại bài ${pendingAction.post.platform}?`}
+            </h2>
+            <p className="mt-2 leading-6 text-slate-600">{confirmMessage(pendingAction)}</p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={() => setPendingAction(null)} className="min-h-11 rounded-lg border border-slate-300 px-4 font-semibold hover:bg-slate-50">Hủy</button>
+              <button type="button" autoFocus onClick={() => void runPendingAction()} className="min-h-11 rounded-lg bg-[#505db8] px-4 font-bold text-white hover:bg-[#434fa0]">
+                {pendingAction.kind === 'resolvePublished' ? 'Xác nhận' : 'Thử đăng lại'}
+              </button>
+            </div>
           </div>
         </div>
       )}
