@@ -3,6 +3,7 @@ package com.postiva.calendar.service;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.postiva.auth.service.CurrentUserService;
+import com.postiva.calendar.dto.AddWeeklyPlanItemRequest;
 import com.postiva.calendar.dto.CreateWeeklyPlanRequest;
 import com.postiva.calendar.dto.UpdateWeeklyPlanItemRequest;
 import com.postiva.calendar.dto.WeeklyPlanResponse;
@@ -37,6 +38,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
@@ -181,6 +183,40 @@ public class WeeklyPlanService {
         return response(plan, userId);
     }
 
+    /** Adds a post on a day of the week that has none, written now with one AI unit. */
+    public WeeklyPlanResponse addItem(UUID planId, AddWeeklyPlanItemRequest request) {
+        UUID userId = currentUser.requireCurrentUserId();
+        ContentCalendar plan = requireReady(planId, userId);
+        ZoneId zone = ZoneId.of(plan.getTimezone());
+        LocalDate day = request.plannedDate();
+        if (day.isBefore(plan.getStartDate()) || day.isAfter(plan.getEndDate())) {
+            throw error(HttpStatus.BAD_REQUEST, "Ngày này nằm ngoài tuần của kế hoạch");
+        }
+        List<CalendarItem> existing = items.findByCalendarIdOrderByPlannedDateAsc(plan.getId());
+        if (existing.stream().anyMatch(item -> day.equals(item.getPlannedDate()))) {
+            throw error(HttpStatus.CONFLICT, "Ngày này đã có bài trong kế hoạch");
+        }
+        CreateWeeklyPlanRequest brief = json.convertValue(plan.getBrief(), CreateWeeklyPlanRequest.class);
+        LocalTime time = brief.postTime() != null ? LocalTime.parse(brief.postTime())
+                : plan.getPerformance() != null && plan.getPerformance().get("bestHour") instanceof Number hour
+                ? LocalTime.of(hour.intValue(), 0) : WeeklySchedule.DEFAULT_TIME;
+        Instant slot = day.atTime(time).atZone(zone).toInstant();
+        if (!slot.isAfter(Instant.now().plus(WeeklySchedule.MIN_LEAD))) {
+            throw error(HttpStatus.BAD_REQUEST, "Giờ đăng của ngày này đã qua hoặc còn dưới 30 phút. Hãy chọn ngày khác.");
+        }
+        if (!aiProperties.enabled()) {
+            throw error(HttpStatus.SERVICE_UNAVAILABLE, "Dịch vụ AI chưa sẵn sàng");
+        }
+        if (usage.summary(userId).remaining() < 1) {
+            throw error(HttpStatus.CONFLICT, "Bạn đã hết lượt AI. Hãy nâng cấp gói hoặc chờ lượt mới.");
+        }
+        SocialAccount account = accounts.requireCurrentUserAccount(plan.getSocialAccountId());
+        generator.addDay(plan, day, slot, account.getProvider(), existing);
+        plan.touch();
+        plans.save(plan);
+        return response(plan, userId);
+    }
+
     /** Hands every reviewed draft to the existing scheduler. Days already in the past are skipped, not posted late. */
     public WeeklyPlanResponse approve(UUID planId) {
         UUID userId = currentUser.requireCurrentUserId();
@@ -286,7 +322,11 @@ public class WeeklyPlanService {
                     item.getPostType(), item.getTopic(), item.getReason(), itemStatus(item, schedule),
                     schedule != null && schedule.getLastError() != null ? schedule.getLastError() : item.getError(),
                     item.getScheduledPostId(),
-                    item.getGeneratedPostId() == null ? null : drafts.get(item.getGeneratedPostId()));
+                    item.getGeneratedPostId() == null ? null : drafts.get(item.getGeneratedPostId()),
+                    item.getGeneratedPostId() == null ? List.of() : files.allMediaForPost(item.getGeneratedPostId()).stream()
+                            .map(file -> new WeeklyPlanResponse.Media(file.getId(), "/api/files/" + file.getId(),
+                                    file.getMimeType(), file.getFileName()))
+                            .toList());
         }).toList();
 
         return new WeeklyPlanResponse(plan.getId(), plan.getStatus().name(), plan.getSocialAccountId(),

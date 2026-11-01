@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { EmptyState } from '../components/EmptyState'
 import { PageState } from '../components/PageUi'
-import { ProtectedMediaImage } from '../components/ProtectedMedia'
+import { ProtectedMediaImage, ProtectedMediaVideo } from '../components/ProtectedMedia'
 import { api } from '../lib/api'
 import { type AppChannel, useAppDataResource } from '../lib/appDataApi'
 import {
@@ -15,6 +15,7 @@ import {
   ITEM_STATUS_LABELS,
   type PerformanceSummary,
   type PlanItemStatus,
+  type PlanMedia,
   type WeeklyPlan,
   type WeeklyPlanItem,
   WEEKDAY_LABELS,
@@ -147,6 +148,9 @@ function DailyHome() {
   const plansState = useAppDataResource<WeeklyPlan[]>('/weekly-plans')
   const [view, setView] = useState<View>({ kind: 'home' })
   const [showPast, setShowPast] = useState(false)
+  const [addingDay, setAddingDay] = useState<string | null>(null)
+  const [addError, setAddError] = useState('')
+  useSessionWork({ busy: addingDay !== null })
 
   if (channelsState.loading || plansState.loading) return <PageState title="Đang tải kế hoạch tuần..." />
   if (channelsState.error || plansState.error || !channelsState.data || !plansState.data) {
@@ -188,6 +192,21 @@ function DailyHome() {
   }
 
   const [current, ...past] = plans
+
+  async function addDay(day: string) {
+    if (!current) return
+    setAddingDay(day)
+    setAddError('')
+    try {
+      const next = await addDayToPlan(current.id, day)
+      plansState.reload()
+      setView({ kind: 'plan', planId: next.id, itemId: next.items.find((item) => item.plannedDate === day)?.id })
+    } catch (error) {
+      setAddError(getErrorMessage(error, 'Không thêm được bài vào ngày này.'))
+    } finally {
+      setAddingDay(null)
+    }
+  }
   const createButton = channels.length > 0 && (
     <button type="button" onClick={() => setView({ kind: 'create' })} className={PRIMARY}>
       {current ? 'Lên kế hoạch tuần tới' : 'Lên kế hoạch tuần đầu tiên'}
@@ -214,7 +233,8 @@ function DailyHome() {
             <h2 className="text-base font-bold">Tuần {weekRange(current)} · {PLATFORM_NAMES[current.platform ?? ''] ?? 'Kênh'} · {current.accountName ?? 'Kênh đã chọn'}</h2>
             <PlanStatusBadge status={current.status} />
           </div>
-          <WeekBoard plan={current} onSelect={(itemId) => setView({ kind: 'plan', planId: current.id, itemId })} />
+          {addError && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800">{addError}</p>}
+          <WeekBoard plan={current} onSelect={(itemId) => setView({ kind: 'plan', planId: current.id, itemId })} onAddDay={(day) => void addDay(day)} addingDay={addingDay} />
           <button type="button" onClick={() => setView({ kind: 'plan', planId: current.id })} className="min-h-11 text-sm font-semibold text-[#505db8] underline underline-offset-4">
             {current.status === 'READY' ? 'Xem và duyệt tuần này →' : 'Xem chi tiết tuần này →'}
           </button>
@@ -268,7 +288,23 @@ function ItemStatusBadge({ status }: { status: PlanItemStatus }) {
 }
 
 /** Seven day columns; days without a post stay visible so the rhythm of the week is clear. */
-function WeekBoard({ plan, selectedId, onSelect }: { plan: WeeklyPlan; selectedId?: string; onSelect: (itemId: string) => void }) {
+/** A rest day can take a new post while the week is waiting for review and the day has not passed. */
+function canAddDay(plan: WeeklyPlan, day: string) {
+  return plan.status === 'READY' && day >= isoDay(new Date())
+}
+
+/** Writes a post for a rest day and returns the updated week; the caller decides what to show next. */
+async function addDayToPlan(planId: string, day: string) {
+  return (await api.post<WeeklyPlan>(`/weekly-plans/${planId}/items`, { plannedDate: day })).data
+}
+
+function WeekBoard({ plan, selectedId, onSelect, onAddDay, addingDay }: {
+  plan: WeeklyPlan
+  selectedId?: string
+  onSelect: (itemId: string) => void
+  onAddDay?: (day: string) => void
+  addingDay?: string | null
+}) {
   const byDay = new Map(plan.items.map((item) => [item.plannedDate, item]))
   const generating = plan.status === 'GENERATING'
   return (
@@ -305,7 +341,19 @@ function WeekBoard({ plan, selectedId, onSelect }: { plan: WeeklyPlan; selectedI
             ) : (
               <div className="flex h-full min-h-[3rem] flex-col justify-between rounded-2xl border border-dashed border-[var(--app-border)] p-3 text-xs text-[var(--muted-text)] sm:min-h-[11rem]">
                 <span className="font-bold">{WEEKDAY_LABELS[weekday(day)]} · {shortDate(day)}</span>
-                <span>Nghỉ</span>
+                {onAddDay && canAddDay(plan, day) ? (
+                  <button
+                    type="button"
+                    disabled={Boolean(addingDay)}
+                    onClick={() => onAddDay(day)}
+                    aria-label={`Thêm bài vào ${WEEKDAY_NAMES[weekday(day)]} ${shortDate(day)}`}
+                    className="inline-flex min-h-11 items-center gap-1 self-start rounded-full border border-[#b9bfee] px-3 font-semibold text-[#505db8] hover:bg-[#eef0fd] disabled:opacity-60"
+                  >
+                    <Plus size={14} aria-hidden="true" />{addingDay === day ? 'Đang soạn...' : 'Thêm bài'}
+                  </button>
+                ) : (
+                  <span>Nghỉ</span>
+                )}
               </div>
             )}
           </li>
@@ -402,6 +450,7 @@ function PlanCreator({ channels, onCancel, onCreated }: { channels: AppChannel[]
   const [postsChosen, setPostsChosen] = useState(false)
   const [days, setDays] = useState<number[]>([])
   const [fixedTime, setFixedTime] = useState('')
+  const [imageMode, setImageMode] = useState<'ALL' | 'EACH'>('EACH')
   const [brief, setBrief] = useState<Brief | null>(null)
   const [showMore, setShowMore] = useState(false)
   const [insights, setInsights] = useState<{ accountId: string; summary: PerformanceSummary | null; error: string } | null>(null)
@@ -487,6 +536,7 @@ function PlanCreator({ channels, onCancel, onCreated }: { channels: AppChannel[]
       goal: weekGoal.slice(0, 255),
       tone: currentBrief.tone,
       imageIds: currentBrief.mediaIds,
+      imageMode: currentBrief.mediaIds.length > 1 ? imageMode : undefined,
     }
     try {
       onCreated((await api.post<WeeklyPlan>('/weekly-plans', request)).data)
@@ -539,7 +589,7 @@ function PlanCreator({ channels, onCancel, onCreated }: { channels: AppChannel[]
           )}
         </fieldset>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.3fr)_auto_minmax(0,1fr)]">
           <label className="block text-sm font-bold">Kênh
             <select value={channelId} onChange={(event) => setChannelId(event.target.value)} className={INPUT}>
               {channels.map((channel) => <option key={channel.id} value={channel.id}>{channel.name} ({channel.badge})</option>)}
@@ -562,23 +612,16 @@ function PlanCreator({ channels, onCancel, onCreated }: { channels: AppChannel[]
               <button type="button" aria-label="Thêm một bài" disabled={posts >= MAX_POSTS} onClick={() => choosePosts(posts + 1)} className={`${SECONDARY} h-11 w-11 px-0`}><Plus size={16} aria-hidden="true" /></button>
             </div>
             <p className="mt-1 text-xs font-normal text-[var(--muted-text)]">
-              {suggestion
-                ? `Gợi ý ${suggestion} bài: kênh đang đăng khoảng ${currentInsights?.summary?.postsPerWeek} bài/tuần.`
-                : `Từ ${MIN_POSTS} đến ${MAX_POSTS} bài, tối đa một bài mỗi ngày.`}
+              {suggestion ? `Gợi ý ${suggestion} bài` : `Từ ${MIN_POSTS} đến ${MAX_POSTS} bài`}
             </p>
           </div>
-        </div>
-
-        <div role="group" aria-labelledby="week-label" className="text-sm font-bold">
-          <span id="week-label">Tuần đăng</span>
-          <div className="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {weeks.map((week, index) => (
-              <button key={week} type="button" aria-pressed={startDate === week} onClick={() => setStartDate(week)} className={`${chipClass(startDate === week)} flex flex-col items-center justify-center !rounded-2xl px-2 py-1.5 leading-tight`}>
-                <span className="whitespace-nowrap">{shortDate(week)} – {shortDate(weekDates(week)[6])}</span>
-                <span className="text-xs font-normal opacity-80">{index === 0 ? 'Tuần tới' : `${index + 1} tuần nữa`}</span>
-              </button>
-            ))}
-          </div>
+          <label className="block text-sm font-bold">Tuần đăng
+            <select value={startDate} onChange={(event) => setStartDate(event.target.value)} className={INPUT}>
+              {weeks.map((week, index) => (
+                <option key={week} value={week}>{shortDate(week)} – {shortDate(weekDates(week)[6])}{index === 0 ? ' · Tuần tới' : ''}</option>
+              ))}
+            </select>
+          </label>
         </div>
 
         <div className="space-y-6 xl:hidden">{insightsPanel(false)}</div>
@@ -591,7 +634,7 @@ function PlanCreator({ channels, onCancel, onCreated }: { channels: AppChannel[]
 
         {profileComplete && (
           <button type="button" aria-expanded={showMore} onClick={() => setShowMore((value) => !value)} className="min-h-11 text-sm font-semibold underline underline-offset-4">
-            {showMore ? 'Ẩn tuỳ chỉnh' : 'Tuỳ chỉnh thêm (ngày, giờ, sản phẩm riêng cho tuần này, ảnh)'}
+            {showMore ? 'Ẩn tuỳ chỉnh' : 'Tuỳ chỉnh thêm'}
           </button>
         )}
 
@@ -629,11 +672,17 @@ function PlanCreator({ channels, onCancel, onCreated }: { channels: AppChannel[]
             )}
             <div className="space-y-2 rounded-xl border border-[var(--app-border)] p-3 text-sm">
               <p className="font-bold">Ảnh hoặc video cho các bài {needsMedia ? '*' : '(tùy chọn)'}</p>
-              <p className="text-[var(--muted-text)]">{needsMedia ? 'Instagram không đăng được bài chỉ có chữ, và chỉ nhận ảnh JPG.' : 'Gắn vào mọi bài của tuần. Bỏ trống để đăng bài chỉ có chữ.'}</p>
+              <p className="text-[var(--muted-text)]">{needsMedia ? 'Bắt buộc với Instagram, chỉ nhận ảnh JPG.' : 'Gắn vào mọi bài của tuần.'}</p>
               <label className="inline-flex min-h-11 cursor-pointer items-center rounded-full border border-[var(--app-border)] px-4 font-bold hover:bg-[var(--soft-bg)]">
                 {uploading ? 'Đang tải lên...' : 'Chọn tệp'}
                 <input type="file" multiple accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm" disabled={uploading} className="sr-only" onChange={(event) => { void upload(event.target.files); event.target.value = '' }} />
               </label>
+              {currentBrief.mediaIds.length > 1 && (
+                <div role="radiogroup" aria-label="Cách dùng ảnh" className="flex flex-wrap gap-2 pt-1">
+                  <button type="button" role="radio" aria-checked={imageMode === 'EACH'} onClick={() => setImageMode('EACH')} className={chipClass(imageMode === 'EACH')}>Mỗi bài một ảnh</button>
+                  <button type="button" role="radio" aria-checked={imageMode === 'ALL'} onClick={() => setImageMode('ALL')} className={chipClass(imageMode === 'ALL')}>Mọi bài dùng cả {currentBrief.mediaIds.length} ảnh</button>
+                </div>
+              )}
               {currentBrief.mediaIds.length > 0 && (
                 <ul className="space-y-1">
                   {currentBrief.mediaIds.map((id) => (
@@ -696,6 +745,8 @@ function PlanView({ planId, initialItemId, onBack, onCreateNew }: { planId: stri
   const selected = items.find((item) => item.id === selectedId) ?? items.find((item) => item.status === 'DRAFT') ?? items[0]
   const selectedIndex = selected ? items.indexOf(selected) : -1
   const drafted = items.filter((item) => item.post).length
+  const taken = new Set(items.map((item) => item.plannedDate))
+  const restDays = weekDates(plan.startDate).filter((day) => !taken.has(day) && canAddDay(plan, day))
   const toSchedule = items.filter((item) => item.status === 'DRAFT').length
   const firstTime = items.filter((item) => item.status === 'DRAFT' && item.scheduledTime).map((item) => item.scheduledTime as string).sort()[0]
 
@@ -707,6 +758,21 @@ function PlanView({ planId, initialItemId, onBack, onCreateNew }: { planId: stri
       setNotice({ tone: 'ok', text: 'Đã duyệt tuần. Các bài đã được lên lịch và sẽ tự đăng đúng giờ.' })
     } catch (error) {
       setNotice({ tone: 'error', text: getErrorMessage(error, 'Không duyệt được kế hoạch.') })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function addDay(day: string) {
+    setBusy(true)
+    setNotice(null)
+    try {
+      const next = await addDayToPlan(planId, day)
+      replace(next)
+      setSelectedId(next.items.find((item) => item.plannedDate === day)?.id)
+      setNotice({ tone: 'ok', text: 'Đã soạn bài cho ngày vừa thêm. Bạn xem lại rồi duyệt như các ngày khác.' })
+    } catch (error) {
+      setNotice({ tone: 'error', text: getErrorMessage(error, 'Không thêm được bài vào ngày này.') })
     } finally {
       setBusy(false)
     }
@@ -785,6 +851,27 @@ function PlanView({ planId, initialItemId, onBack, onCreateNew }: { planId: stri
                 </li>
               ))}
             </ol>
+            {restDays.length > 0 && (
+              <div className="rounded-xl border border-dashed border-[var(--app-border)] p-3">
+                <p className="text-xs font-bold">Ngày chưa có bài</p>
+                <ul className="mt-2 flex flex-wrap gap-2">
+                  {restDays.map((day) => (
+                    <li key={day}>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void addDay(day)}
+                        aria-label={`Thêm bài vào ${WEEKDAY_NAMES[weekday(day)]} ${shortDate(day)}`}
+                        className="inline-flex min-h-11 items-center gap-1 rounded-full border border-[#b9bfee] px-3 text-sm font-semibold text-[#505db8] hover:bg-[#eef0fd] disabled:opacity-60"
+                      >
+                        <Plus size={14} aria-hidden="true" />{WEEKDAY_LABELS[weekday(day)]} {shortDate(day)}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-2 text-xs text-[var(--muted-text)]">Mỗi bài thêm dùng 1 lượt AI.</p>
+              </div>
+            )}
             <div className="hidden lg:block"><InsightTiles summary={plan.performance} stacked /></div>
           </aside>
 
@@ -895,6 +982,71 @@ function DayDetail({ plan, item, onChanged, onNotice, onPrev, onNext }: {
     }
   }
 
+  const media = item.media ?? []
+  const mediaLimit = platform === 'THREADS' ? 20 : 10
+
+  /** Sends the whole list of files; the post endpoint replaces the draft's media with it. */
+  async function saveMedia(next: PlanMedia[], success: string) {
+    if (!item.post) return
+    setBusy(true)
+    onNotice(null)
+    try {
+      await api.put(`/posts/${item.post.postId}`, {
+        title: item.post.title ?? undefined,
+        hashtags: item.post.hashtags,
+        cta: item.post.cta ?? undefined,
+        mediaIds: next.map((file) => file.id),
+      })
+      onChanged({
+        ...plan,
+        items: plan.items.map((entry) => entry.id !== item.id || !entry.post ? entry : {
+          ...entry,
+          media: next,
+          post: { ...entry.post, imageUrl: next[0]?.url ?? null },
+        }),
+      })
+      onNotice({ tone: 'ok', text: success })
+    } catch (error) {
+      onNotice({ tone: 'error', text: getErrorMessage(error, 'Không lưu được ảnh của bài.') })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function addMedia(files: FileList | null) {
+    if (!files || files.length === 0) return
+    if (media.length + files.length > mediaLimit) {
+      onNotice({ tone: 'error', text: `${PLATFORM_NAMES[platform]} nhận tối đa ${mediaLimit} ảnh hoặc video cho một bài.` })
+      return
+    }
+    setBusy(true)
+    onNotice(null)
+    let added: PlanMedia[]
+    try {
+      added = await Promise.all(Array.from(files).map(async (file) => {
+        const data = new FormData()
+        data.append('file', file)
+        const uploaded = (await api.post<{ id: string; fileName: string; fileUrl: string; mimeType: string }>('/files/upload', data, { headers: { 'Content-Type': 'multipart/form-data' } })).data
+        return { id: uploaded.id, url: `/api/files/${uploaded.id}`, mimeType: uploaded.mimeType, fileName: uploaded.fileName }
+      }))
+    } catch (error) {
+      onNotice({ tone: 'error', text: getErrorMessage(error, 'Không tải được ảnh hoặc video.') })
+      setBusy(false)
+      return
+    }
+    setBusy(false)
+    await saveMedia([...media, ...added], 'Đã thêm ảnh cho bài.')
+  }
+
+  async function removeMedia(id: string) {
+    const next = media.filter((file) => file.id !== id)
+    if (platform === 'INSTAGRAM' && next.length === 0) {
+      onNotice({ tone: 'error', text: 'Instagram cần ít nhất một ảnh hoặc video. Hãy thêm ảnh khác trước khi bỏ ảnh này.' })
+      return
+    }
+    await saveMedia(next, 'Đã bỏ ảnh khỏi bài.')
+  }
+
   async function saveContent() {
     if (!item.post) return
     setBusy(true)
@@ -965,7 +1117,20 @@ function DayDetail({ plan, item, onChanged, onNotice, onPrev, onNext }: {
             <p className="mt-3 whitespace-pre-wrap px-4 text-sm leading-relaxed">{original}</p>
           )}
           {item.post.hashtags.length > 0 && <p className="px-4 pt-2 text-sm text-[#1877F2]">{item.post.hashtags.join(' ')}</p>}
-          {item.post.imageUrl ? (
+          {media.length > 0 ? (
+            <ul className={`mt-3 grid shrink-0 gap-1 ${media.length === 1 ? 'grid-cols-1' : media.length === 2 ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-3'}`}>
+              {media.map((file, index) => (
+                <li key={file.id} className={`relative min-w-0 ${media.length === 1 ? 'px-4 pb-4' : 'bg-slate-100'}`}>
+                  {file.mimeType?.startsWith('video/')
+                    ? <ProtectedMediaVideo src={file.url} className={media.length === 1 ? 'mx-auto block max-h-[28rem] w-auto max-w-full rounded-lg' : 'aspect-square w-full bg-slate-100 object-contain'} />
+                    : <ProtectedMediaImage src={file.url} alt={file.fileName ?? `Ảnh ${index + 1}`} className={media.length === 1 ? 'mx-auto block max-h-[28rem] w-auto max-w-full rounded-lg' : 'aspect-square w-full bg-slate-100 object-contain'} />}
+                  {editable && !skipped && (
+                    <button type="button" disabled={busy} onClick={() => void removeMedia(file.id)} aria-label={`Bỏ ${file.fileName ?? `ảnh ${index + 1}`}`} className={`absolute top-1 min-h-8 ${media.length === 1 ? 'right-5' : 'right-1'} rounded-full bg-white/90 px-3 text-xs font-bold text-slate-900 shadow hover:bg-white disabled:opacity-60`}>Bỏ</button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : item.post.imageUrl ? (
             <ProtectedMediaImage src={item.post.imageUrl} alt="" className="mt-3 max-h-80 w-full object-cover" />
           ) : (
             item.post.imageSuggestion && <p className="mx-4 mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">Gợi ý ảnh: {item.post.imageSuggestion}</p>
@@ -983,6 +1148,12 @@ function DayDetail({ plan, item, onChanged, onNotice, onPrev, onNext }: {
         <div className="flex flex-wrap items-center gap-2">
           {!skipped && content.trim() !== original.trim() && (
             <button type="button" disabled={busy || !content.trim()} onClick={() => void saveContent()} className={PRIMARY}>Lưu nội dung</button>
+          )}
+          {!skipped && item.post && (
+            <label className={`${SECONDARY} cursor-pointer ${busy || media.length >= mediaLimit ? 'pointer-events-none opacity-50' : ''}`}>
+              Thêm ảnh
+              <input type="file" multiple accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm" disabled={busy || media.length >= mediaLimit} className="sr-only" onChange={(event) => { void addMedia(event.target.files); event.target.value = '' }} />
+            </label>
           )}
           {!skipped && (editingTime ? (
             <span className="flex flex-wrap items-center gap-2">

@@ -45,6 +45,8 @@ export type PlanPost = {
   imageUrl: string | null
 }
 
+export type PlanMedia = { id: string; url: string; mimeType: string | null; fileName: string | null }
+
 export type WeeklyPlanItem = {
   id: string
   plannedDate: string
@@ -56,6 +58,8 @@ export type WeeklyPlanItem = {
   error: string | null
   scheduledPostId: string | null
   post: PlanPost | null
+  /** Every image or video attached to the draft. */
+  media: PlanMedia[]
 }
 
 export type WeeklyPlan = {
@@ -91,6 +95,8 @@ export type CreateWeeklyPlanRequest = {
   goal: string
   tone?: string
   imageIds: string[]
+  /** EACH gives each post one image in turn; ALL (the default) puts every image on every post. */
+  imageMode?: 'ALL' | 'EACH'
 }
 
 /** One AI unit for the week's ideas plus one per draft; keep in sync with WeeklyPlanService.aiUnitsFor. */

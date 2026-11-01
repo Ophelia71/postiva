@@ -30,6 +30,8 @@ public record CreateWeeklyPlanRequest(
         @NotBlank @Size(max = 255) String goal,
         @Size(max = 500) String tone,
         /** Images or videos attached to every post of the week; Instagram needs at least one. */
-        @Size(max = 20) List<@NotNull UUID> imageIds
+        @Size(max = 20) List<@NotNull UUID> imageIds,
+        /** ALL (default) puts every image on every post; EACH gives each post one image, taking them in turn. */
+        @Pattern(regexp = "^(ALL|EACH)$", message = "Cách dùng ảnh phải là ALL hoặc EACH") String imageMode
 ) {
 }
