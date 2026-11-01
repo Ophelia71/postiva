@@ -198,6 +198,10 @@ public class PostService {
 
     /** Same media rules as publishing: Instagram needs at least one file, Facebook and Instagram take up to ten. */
     private void replaceMedia(GeneratedPost post, Map<String, Object> contents, List<UUID> mediaIds) {
+        // Once a post is scheduled or published its files belong to the scheduler; those are changed from the schedule page.
+        if (post.getStatus() != PostStatus.DRAFT) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Chỉ đổi được ảnh của bài còn là bản nháp");
+        }
         List<UUID> distinct = mediaIds.stream().distinct().toList();
         boolean instagram = contents.containsKey("INSTAGRAM");
         if (instagram && distinct.isEmpty()) {

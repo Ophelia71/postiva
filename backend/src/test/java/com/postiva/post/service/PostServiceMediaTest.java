@@ -104,6 +104,17 @@ class PostServiceMediaTest {
     }
 
     @Test
+    void aScheduledPostKeepsItsFiles() {
+        draftFor("FACEBOOK");
+        posts.findByIdAndUserId(postId, userId).get().setStatus(PostStatus.SCHEDULED);
+
+        var failure = assertThrows(ResponseStatusException.class, () -> service.update(postId, withMedia(List.of(UUID.randomUUID()))));
+
+        assertEquals(409, failure.getStatusCode().value());
+        verify(files, never()).replacePostMedia(any(), any(), any(), any());
+    }
+
+    @Test
     void leavingMediaOutOfTheRequestKeepsTheCurrentFiles() {
         draftFor("FACEBOOK");
 
