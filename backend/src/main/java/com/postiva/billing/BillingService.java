@@ -47,9 +47,9 @@ public class BillingService {
         return List.of(
                 // Free is a one-time trial, so it has no period (0 days).
                 new Plan("FREE", "Free", "Dùng thử miễn phí", "Đủ để thử tạo và đăng bài cho shop, không cần thanh toán.", 0,
-                        usage.getFreeAiLimit(), 0, shared, false),
+                        usage.getFreeAiLimit(), usage.getFreeDailyAttempts(), 0, shared, false),
                 new Plan("PRO", "Pro", "Đăng bài đều mỗi ngày", "Lượt AI mới mỗi tháng cho shop bán hàng thường xuyên.",
-                        properties.getProPriceVnd(), usage.getProAiLimit(), usage.getPeriodDays(), shared, onSale));
+                        properties.getProPriceVnd(), usage.getProAiLimit(), usage.getProDailyAttempts(), usage.getPeriodDays(), shared, onSale));
     }
 
     /** payOS when its keys are set (automatic); otherwise a plain transfer to the shop's account, if one is set. */
@@ -189,7 +189,7 @@ public class BillingService {
     public record Offer(boolean available, long amountVnd, int aiLimit, int freeAiLimit, int periodDays, String refundPolicyUrl,
                         String method, BankAccount bank, boolean autoConfirm, List<Plan> plans) { }
     public record Plan(String code, String name, String headline, String description, long priceVnd, int aiLimit,
-                       int periodDays, List<Feature> features, boolean purchasable) { }
+                       int dailyLimit, int periodDays, List<Feature> features, boolean purchasable) { }
     public record Feature(String icon, String text) { }
     public record BankAccount(String bankCode, String accountNo, String accountName) { }
 }

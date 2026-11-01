@@ -106,7 +106,8 @@ postiva:
     pro-ai-limit: ${POSTIVA_PRO_AI_LIMIT:300}
     period-days: 30
     global-daily-attempts: ${POSTIVA_AI_GLOBAL_DAILY_ATTEMPTS:100}
-    user-daily-attempts: ${POSTIVA_AI_USER_DAILY_ATTEMPTS:20}
+    free-daily-attempts: ${POSTIVA_AI_FREE_DAILY_ATTEMPTS:10}
+    pro-daily-attempts: ${POSTIVA_AI_PRO_DAILY_ATTEMPTS:60}
   admin:
     bootstrap:
       enabled: ${POSTIVA_ADMIN_BOOTSTRAP_ENABLED:false}

@@ -103,7 +103,8 @@ class CustomerSafetyIntegrationTest {
         jdbc.update("DELETE FROM ai_daily_budgets");
         limits.setFreeAiLimit(2);
         limits.setGlobalDailyAttempts(100);
-        limits.setUserDailyAttempts(20);
+        limits.setFreeDailyAttempts(20);
+        limits.setProDailyAttempts(20);
         doAnswer(invocation -> {
             assertFalse(TransactionSynchronizationManager.isActualTransactionActive(), "SMTP must not hold a DB transaction");
             return null;
@@ -350,9 +351,9 @@ class CustomerSafetyIntegrationTest {
                 end, "verified-payment-" + UUID.randomUUID()));
     }
 
-    @Test void dailyAttemptLimitCountsFailedCallsAndInvalidInputDoesNotCallProvider() {
+    @Test void dailyAttemptLimitIgnoresFailedCallsAndInvalidInputDoesNotCallProvider() {
         User user = user(); String token = jwt.generateToken(user);
-        limits.setUserDailyAttempts(1);
+        limits.setFreeDailyAttempts(1);
         assertEquals(422, call("POST", "/api/posts/generate", token, UUID.randomUUID(), input("x".repeat(201))).status());
         Map<String, Object> foreignMedia = new java.util.HashMap<>(input("Invalid media"));
         foreignMedia.put("imageIds", List.of(UUID.randomUUID()));
@@ -363,8 +364,9 @@ class CustomerSafetyIntegrationTest {
         assertEquals(422, call("POST", "/api/posts/generate", token, UUID.randomUUID(), input("Refused")).status());
         assertEquals(2, usage.summary(user.getId()).remaining());
         assertEquals("FAILED", usage.history(user.getId(), 0, 10).items().getFirst().status());
-        assertEquals(429, call("POST", "/api/posts/generate", token, UUID.randomUUID(), input("Another")).status());
-        verify(ai, times(1)).generatePost(any(), any(), any(), any());
+        // The refused call gave the shop nothing, so it did not use up the day and the next one reaches the provider.
+        assertEquals(422, call("POST", "/api/posts/generate", token, UUID.randomUUID(), input("Another")).status());
+        verify(ai, times(2)).generatePost(any(), any(), any(), any());
     }
 
     @Test void ipLimitCoversInvalidPayloadsBeforeValidationAndIgnoresSpoofedHeaders() {

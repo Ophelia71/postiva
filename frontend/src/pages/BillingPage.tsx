@@ -9,7 +9,7 @@ import { usePreferences } from '../lib/preferences'
 const CARD = 'rounded-2xl border border-[var(--app-border)] bg-[var(--panel-bg)] shadow-sm'
 
 type Feature = { icon: string; text: string }
-type Plan = { code: string; name: string; headline: string; description: string; priceVnd: number; aiLimit: number; periodDays: number; features: Feature[]; purchasable: boolean }
+type Plan = { code: string; name: string; headline: string; description: string; priceVnd: number; aiLimit: number; dailyLimit: number; periodDays: number; features: Feature[]; purchasable: boolean }
 type Offer = { available: boolean; amountVnd: number; periodDays: number; refundPolicyUrl: string | null; method: 'PAYOS' | 'BANK_TRANSFER' | null; bank: BankAccount | null; autoConfirm: boolean; plans: Plan[] }
 type Order = { id: string; orderCode: number; amountVnd: number; aiLimit: number; periodDays: number; status: string; grantStatus: string; checkoutUrl: string | null; expiresAt: string; createdAt: string; paidAt: string | null; provider: 'PAYOS' | 'BANK_TRANSFER' }
 type Usage = { plan: string; endsAt: string; limit: number; remaining: number }
@@ -252,7 +252,8 @@ function PlanCard({ plan, usage, busy, blocked, onBuy, t }: { plan: Plan; usage:
   const trial = plan.periodDays === 0
   const features: Feature[] = [{ icon: 'ai', text: trial
     ? t(`${plan.aiLimit} lượt tạo bài bằng AI để dùng thử`, `${plan.aiLimit} AI generations to try it out`)
-    : t(`${plan.aiLimit} lượt tạo bài bằng AI mỗi ${plan.periodDays} ngày`, `${plan.aiLimit} AI generations every ${plan.periodDays} days`) }, ...plan.features]
+    : t(`${plan.aiLimit} lượt tạo bài bằng AI mỗi ${plan.periodDays} ngày`, `${plan.aiLimit} AI generations every ${plan.periodDays} days`) },
+  { icon: 'ai', text: t(`Tối đa ${plan.dailyLimit} yêu cầu AI mỗi ngày`, `Up to ${plan.dailyLimit} AI requests a day`) }, ...plan.features]
   const button = 'flex min-h-12 w-full items-center justify-center gap-2 rounded-full px-5 text-sm font-semibold'
 
   let action
