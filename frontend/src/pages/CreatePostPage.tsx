@@ -902,10 +902,16 @@ function CreatePostForm({ onNewPost }: { onNewPost: () => void }) {
                   disabled={isGeneratingContent}
                   className="inline-flex h-10 items-center justify-center gap-2 rounded-[6px] bg-violet-600 px-4 text-sm font-bold text-white hover:bg-violet-700 disabled:bg-slate-300"
                 >
-                  <Sparkles size={16} />
+                  <Sparkles size={16} className={isGeneratingContent ? 'animate-pulse' : undefined} />
                   {isGeneratingContent ? t('Đang gen...', 'Generating...') : t('Tự gen bài', 'Generate')}
                 </button>
               </div>
+              {isGeneratingContent && (
+                <GeneratingProgress
+                  platforms={selectedPlatforms.map((platform) => PLATFORM_LABELS[platform]).join(', ')}
+                  label={(platforms) => t(`Đang soạn bài cho ${platforms}`, `Writing posts for ${platforms}`)}
+                />
+              )}
               <div className="my-3 border-t border-slate-100" />
               <label className="block text-sm font-bold">
                 {t(`Bản ${PLATFORM_LABELS[activePreviewPlatform]}`, `${PLATFORM_LABELS[activePreviewPlatform]} version`)}
@@ -915,8 +921,8 @@ function CreatePostForm({ onNewPost }: { onNewPost: () => void }) {
                     ...current,
                     [activePreviewPlatform]: event.target.value,
                   }))}
-                  disabled={!selectedPlatforms.includes(activePreviewPlatform)}
-                  className="mt-2 h-24 w-full resize-none rounded-[6px] border border-slate-300 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-blue-500 lg:h-20"
+                  disabled={!selectedPlatforms.includes(activePreviewPlatform) || isGeneratingContent}
+                  className="mt-2 h-24 w-full resize-none rounded-[6px] border border-slate-300 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-blue-500 disabled:bg-slate-50 lg:h-20"
                   placeholder={getPlatformPlaceholder(activePreviewPlatform, t)}
                 />
                 <span className={cn(
@@ -1120,6 +1126,31 @@ function TextField({
         className="mt-1.5 h-10 w-full rounded-[6px] border border-slate-300 bg-white px-3 text-sm font-normal outline-none focus:border-blue-500"
       />
     </label>
+  )
+}
+
+/** Shown while the AI writes: moving dots, the platforms being written, and how long it has taken so far. */
+function GeneratingProgress({ platforms, label }: { platforms: string; label: (platforms: string) => string }) {
+  const [seconds, setSeconds] = useState(0)
+  useEffect(() => {
+    const timer = window.setInterval(() => setSeconds((value) => value + 1), 1000)
+    return () => window.clearInterval(timer)
+  }, [])
+  return (
+    <div role="status" className="mt-3 rounded-[6px] border border-violet-200 bg-violet-50 px-3 py-3 text-sm text-violet-900">
+      <p className="flex items-center gap-2 font-bold">
+        <span className="flex gap-1" aria-hidden="true">
+          {[0, 150, 300].map((delay) => (
+            <span key={delay} className="h-2 w-2 animate-bounce rounded-full bg-violet-600" style={{ animationDelay: `${delay}ms` }} />
+          ))}
+        </span>
+        {label(platforms)}
+        <span className="ml-auto text-xs font-semibold tabular-nums text-violet-700">{seconds}s</span>
+      </p>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-violet-100" aria-hidden="true">
+        <span className="block h-full w-full animate-pulse rounded-full bg-violet-400" />
+      </div>
+    </div>
   )
 }
 
