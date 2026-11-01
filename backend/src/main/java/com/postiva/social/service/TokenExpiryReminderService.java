@@ -12,7 +12,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -57,8 +56,10 @@ public class TokenExpiryReminderService {
         }
     }
 
-    /** Sends the reminders that are due at {@code now} and returns how many emails went out. */
-    @Transactional
+    /**
+     * Sends the reminders that are due at {@code now} and returns how many emails went out. Not one transaction: a slow
+     * mail server must not hold a database connection, so each account is saved on its own after its email.
+     */
     public int remindDue(LocalDateTime now) {
         int sent = 0;
         for (SocialAccount account : accounts.findByDisconnectedAtIsNullAndTokenExpiresAtBetween(now, now.plusDays(WARN_DAYS))) {
